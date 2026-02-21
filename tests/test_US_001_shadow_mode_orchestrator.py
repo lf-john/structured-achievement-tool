@@ -114,7 +114,7 @@ class TestShadowDirectoryCreation:
 
             # Simulate write operation that should create _shadow directory
             # This will be done by the implementation's _get_output_dir or similar method
-            output_dir = orchestrator._get_output_dir(task_dir) if hasattr(orchestrator, '_get_output_dir') else task_dir
+            output_dir = orchestrator._get_output_dir(task_dir)
 
             # The _shadow directory should be created (either during init or first write)
             # For now, we'll trigger a write to test this
@@ -152,14 +152,12 @@ class TestShadowDirectoryCreation:
             )
 
             # Create directory first time
-            if hasattr(orchestrator, '_ensure_shadow_dir'):
-                orchestrator._ensure_shadow_dir(task_dir)
+            orchestrator._ensure_shadow_dir(task_dir)
 
             assert os.path.exists(shadow_dir)
 
             # Try creating again - should not cause error
-            if hasattr(orchestrator, '_ensure_shadow_dir'):
-                orchestrator._ensure_shadow_dir(task_dir)
+            orchestrator._ensure_shadow_dir(task_dir)
 
             # Should still exist and be valid
             assert os.path.exists(shadow_dir)
@@ -246,7 +244,7 @@ class TestResponseFilesWrittenToShadowDirectory:
             except Exception as e:
                 # If write fails, we can still check directory logic
                 shadow_dir = os.path.join(task_dir, "_shadow")
-                output_dir = orchestrator._get_output_dir(task_dir) if hasattr(orchestrator, '_get_output_dir') else task_dir
+                output_dir = orchestrator._get_output_dir(task_dir)
                 assert output_dir == shadow_dir or "_shadow" in output_dir
 
     @patch('src.core.phase_runner.PhaseRunner.execute_cli')
@@ -288,16 +286,14 @@ class TestResponseFilesWrittenToShadowDirectory:
 
                 # Files should be in main directory (implementation dependent)
                 # At minimum, verify output dir logic is correct
-                if hasattr(orchestrator, '_get_output_dir'):
-                    output_dir = orchestrator._get_output_dir(task_dir)
-                    assert output_dir == task_dir, \
-                        "Output directory should be task_dir when shadow_mode=False"
+                output_dir = orchestrator._get_output_dir(task_dir)
+                assert output_dir == task_dir, \
+                    "Output directory should be task_dir when shadow_mode=False"
 
             except Exception:
                 # If write fails, check directory logic
-                if hasattr(orchestrator, '_get_output_dir'):
-                    output_dir = orchestrator._get_output_dir(task_dir)
-                    assert output_dir == task_dir
+                output_dir = orchestrator._get_output_dir(task_dir)
+                assert output_dir == task_dir
 
 
 class TestGetOutputDirMethod:
@@ -324,10 +320,10 @@ class TestGetOutputDirMethod:
         task_dir = "/tmp/test_task"
         expected_shadow_dir = os.path.join(task_dir, "_shadow")
 
-        if hasattr(orchestrator, '_get_output_dir'):
-            output_dir = orchestrator._get_output_dir(task_dir)
-            assert output_dir == expected_shadow_dir, \
-                f"_get_output_dir should return {expected_shadow_dir} when shadow_mode=True, got {output_dir}"
+        # This test should FAIL until _get_output_dir method is implemented
+        output_dir = orchestrator._get_output_dir(task_dir)
+        assert output_dir == expected_shadow_dir, \
+            f"_get_output_dir should return {expected_shadow_dir} when shadow_mode=True, got {output_dir}"
 
     def test_get_output_dir_returns_main_path_when_shadow_mode_false(self):
         """Test that _get_output_dir returns main task_dir when shadow_mode=False."""
@@ -339,10 +335,10 @@ class TestGetOutputDirMethod:
 
         task_dir = "/tmp/test_task"
 
-        if hasattr(orchestrator, '_get_output_dir'):
-            output_dir = orchestrator._get_output_dir(task_dir)
-            assert output_dir == task_dir, \
-                f"_get_output_dir should return {task_dir} when shadow_mode=False, got {output_dir}"
+        # This test should FAIL until _get_output_dir method is implemented
+        output_dir = orchestrator._get_output_dir(task_dir)
+        assert output_dir == task_dir, \
+            f"_get_output_dir should return {task_dir} when shadow_mode=False, got {output_dir}"
 
     def test_get_output_dir_returns_main_path_when_shadow_mode_not_set(self):
         """Test that _get_output_dir returns main task_dir when shadow_mode uses default (False)."""
@@ -354,10 +350,11 @@ class TestGetOutputDirMethod:
 
         task_dir = "/tmp/test_task"
 
-        if hasattr(orchestrator, '_get_output_dir'):
-            output_dir = orchestrator._get_output_dir(task_dir)
-            assert output_dir == task_dir, \
-                f"_get_output_dir should return {task_dir} when shadow_mode is not set (defaults to False), got {output_dir}"
+        # This test should FAIL until _get_output_dir method is implemented
+        # The hasattr check is removed to ensure the test properly fails
+        output_dir = orchestrator._get_output_dir(task_dir)
+        assert output_dir == task_dir, \
+            f"_get_output_dir should return {task_dir} when shadow_mode is not set (defaults to False), got {output_dir}"
 
 
 class TestMultipleOrchestratorInstances:
@@ -421,11 +418,10 @@ class TestEdgeCases:
             shadow_mode=True
         )
 
-        # Handle empty task_dir gracefully
-        if hasattr(orchestrator, '_get_output_dir'):
-            output_dir = orchestrator._get_output_dir("")
-            # Should handle gracefully - either return empty with _shadow or empty string
-            assert output_dir == "_shadow" or output_dir == ""
+        # This test should FAIL until _get_output_dir method is implemented
+        output_dir = orchestrator._get_output_dir("")
+        # Should handle gracefully - either return empty with _shadow or empty string
+        assert output_dir == "_shadow" or output_dir == ""
 
     def test_task_dir_with_trailing_slash(self):
         """Test handling of task_dir with trailing slash."""
@@ -437,10 +433,10 @@ class TestEdgeCases:
 
         task_dir = "/tmp/test_task/"
 
-        if hasattr(orchestrator, '_get_output_dir'):
-            output_dir = orchestrator._get_output_dir(task_dir)
-            # Should normalize path and add _shadow
-            assert "_shadow" in output_dir
+        # This test should FAIL until _get_output_dir method is implemented
+        output_dir = orchestrator._get_output_dir(task_dir)
+        # Should normalize path and add _shadow
+        assert "_shadow" in output_dir
 
     def test_shadow_mode_with_absolute_paths(self):
         """Test shadow_mode with absolute paths."""
@@ -452,10 +448,10 @@ class TestEdgeCases:
 
         task_dir = "/absolute/path/to/task"
 
-        if hasattr(orchestrator, '_get_output_dir'):
-            output_dir = orchestrator._get_output_dir(task_dir)
-            expected = "/absolute/path/to/task/_shadow"
-            assert output_dir == expected
+        # This test should FAIL until _get_output_dir method is implemented
+        output_dir = orchestrator._get_output_dir(task_dir)
+        expected = "/absolute/path/to/task/_shadow"
+        assert output_dir == expected
 
     def test_shadow_mode_with_relative_paths(self):
         """Test shadow_mode with relative paths."""
@@ -467,10 +463,10 @@ class TestEdgeCases:
 
         task_dir = "relative/path/to/task"
 
-        if hasattr(orchestrator, '_get_output_dir'):
-            output_dir = orchestrator._get_output_dir(task_dir)
-            expected = "relative/path/to/task/_shadow"
-            assert output_dir == expected
+        # This test should FAIL until _get_output_dir method is implemented
+        output_dir = orchestrator._get_output_dir(task_dir)
+        expected = "relative/path/to/task/_shadow"
+        assert output_dir == expected
 
     @patch('src.core.phase_runner.PhaseRunner.execute_cli')
     def test_shadow_mode_with_cli_failure(self, mock_execute_cli):
@@ -506,9 +502,8 @@ class TestEdgeCases:
                 # Directory may or may not exist depending on implementation
             except Exception:
                 # Even on failure, shadow mode should be respected
-                if hasattr(orchestrator, '_get_output_dir'):
-                    output_dir = orchestrator._get_output_dir(task_dir)
-                    assert "_shadow" in output_dir
+                output_dir = orchestrator._get_output_dir(task_dir)
+                assert "_shadow" in output_dir
 
 
 class TestIntegrationWithExistingTests:
