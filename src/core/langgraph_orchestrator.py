@@ -8,11 +8,14 @@ The VERIFY node has a conditional edge back to CODE if verification fails,
 or to LEARN if verification passes.
 """
 
-from typing import TypedDict, List, Literal, Optional, Callable
+from typing import TypedDict, List, Literal, Optional
 from langgraph.graph import StateGraph, END
 from functools import partial
 from src.core.phase_runner import PhaseRunner
 import logging
+
+# Configure logging
+logging.basicConfig(level=logging.WARNING)
 
 
 class OrchestratorState(TypedDict):
