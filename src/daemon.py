@@ -61,6 +61,14 @@ class Daemon:
 
         interval = self.config.get("interval", 1)
 
+        # Validate interval to prevent DoS and ensure sensible values
+        if not isinstance(interval, (int, float)):
+            interval = 1
+        elif interval <= 0:
+            interval = 1
+        elif interval > 3600:  # Max 1 hour interval
+            interval = 3600
+
         while self._running and not self._stop_event.is_set():
             time.sleep(interval)
 
