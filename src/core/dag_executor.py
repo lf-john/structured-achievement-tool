@@ -55,7 +55,7 @@ class DAGExecutor:
 
         for story in self.stories:
             story_id = story.get("id", "")
-            dependencies = story.get("dependencies", [])
+            dependencies = story.get("dependsOn", []) # Map from 'dependsOn' in prd.json
 
             if story_id:
                 graph[story_id] = list(dependencies)

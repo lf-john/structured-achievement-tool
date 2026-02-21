@@ -7,6 +7,7 @@ Provides key-value storage using SQLite database with JSON serialization.
 import sqlite3
 import json
 import os
+import threading
 
 
 class SQLiteStateManager:
@@ -20,22 +21,24 @@ class SQLiteStateManager:
             db_path: Path to the SQLite database file
         """
         self.db_path = db_path
+        self.lock = threading.Lock()
         self._init_database()
 
     def _init_database(self):
         """Create the state table if it doesn't exist."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with self.lock:
+            conn = sqlite3.connect(self.db_path, timeout=30)
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS state (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            )
-        """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS state (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            """)
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+            conn.close()
 
     def set(self, key: str, value) -> None:
         """
@@ -47,16 +50,17 @@ class SQLiteStateManager:
         """
         json_value = json.dumps(value)
 
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with self.lock:
+            conn = sqlite3.connect(self.db_path, timeout=30)
+            cursor = conn.cursor()
 
-        cursor.execute(
-            "INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)",
-            (key, json_value)
-        )
+            cursor.execute(
+                "INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)",
+                (key, json_value)
+            )
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+            conn.close()
 
     def get(self, key: str):
         """
@@ -68,13 +72,14 @@ class SQLiteStateManager:
         Returns:
             The parsed JSON data, or None if the key doesn't exist
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with self.lock:
+            conn = sqlite3.connect(self.db_path, timeout=30)
+            cursor = conn.cursor()
 
-        cursor.execute("SELECT value FROM state WHERE key = ?", (key,))
-        result = cursor.fetchone()
+            cursor.execute("SELECT value FROM state WHERE key = ?", (key,))
+            result = cursor.fetchone()
 
-        conn.close()
+            conn.close()
 
         if result is None:
             return None
@@ -88,10 +93,11 @@ class SQLiteStateManager:
         Args:
             key: The key to delete
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with self.lock:
+            conn = sqlite3.connect(self.db_path, timeout=30)
+            cursor = conn.cursor()
 
-        cursor.execute("DELETE FROM state WHERE key = ?", (key,))
+            cursor.execute("DELETE FROM state WHERE key = ?", (key,))
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+            conn.close()

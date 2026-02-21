@@ -4,22 +4,22 @@ IMPLEMENTATION PLAN for US-001: Implement Dependency DAG Executor
 Components:
   - DAGExecutor: Main class for executing stories based on dependency graph
     * __init__(stories: List[Dict]): Initialize with list of stories
-    * build_dependency_graph(): Build adjacency list representation of dependencies
+    * build_dependency_graph(): Build adjacency list representation of dependsOn
     * topological_sort(): Perform Kahn's algorithm for topological ordering
     * get_execution_levels(): Group stories into levels for parallel execution
     * execute_sequential(): Execute stories in dependency order (sequential)
     * execute_parallel(): Execute independent stories concurrently (asyncio)
-    * detect_circular_dependencies(): Detect cycles in the dependency graph
+    * detect_circular_dependsOn(): Detect cycles in the dependency graph
 
   - Story data structure:
     * id: Unique identifier (e.g., "US-001")
-    * dependencies: List of story IDs this story depends on
+    * dependsOn: List of story IDs this story depends on
 
 Test Cases:
   1. AC 1 (DAGExecutor can build dependency graph from stories)
      -> test_dag_executor_builds_graph_from_stories
      -> test_graph_has_correct_edges
-     -> test_graph_with_no_dependencies
+     -> test_graph_with_no_dependsOn
 
   2. AC 2 (Topological sort correctly orders stories)
      -> test_topological_sort_simple_chain
@@ -30,17 +30,17 @@ Test Cases:
   3. AC 3 (Independent stories can be identified for parallel execution)
      -> test_identify_independent_stories
      -> test_get_execution_levels
-     -> test_execution_levels_have_no_cross_level_dependencies
+     -> test_execution_levels_have_no_cross_level_dependsOn
      -> test_parallel_execution_structure
 
-  4. AC 4 (Circular dependencies raise an error)
+  4. AC 4 (Circular dependsOn raise an error)
      -> test_circular_dependency_detection
      -> test_self_dependency_raises_error
      -> test_complex_circular_dependency
 
 Edge Cases:
   - Empty story list
-  - Single story with no dependencies
+  - Single story with no dependsOn
   - All stories independent (can all run in parallel)
   - All stories in single chain (must run sequentially)
   - Story with non-existent dependency
@@ -76,8 +76,8 @@ class TestDAGExecutorClassExists:
     def test_dag_executor_can_be_instantiated_with_stories(self):
         """Test that DAGExecutor can be instantiated with stories."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
         ]
         executor = DAGExecutor(stories=stories)
         assert executor is not None
@@ -90,15 +90,15 @@ class TestBuildDependencyGraph:
     def test_dag_executor_builds_graph_from_stories(self):
         """Test that build_dependency_graph creates correct adjacency list."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
-            {"id": "US-003", "dependencies": ["US-001", "US-002"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
+            {"id": "US-003", "dependsOn": ["US-001", "US-002"]},
         ]
 
         executor = DAGExecutor(stories=stories)
         graph = executor.build_dependency_graph()
 
-        # Graph should map story IDs to their dependencies
+        # Graph should map story IDs to their dependsOn
         assert "US-001" in graph
         assert "US-002" in graph
         assert "US-003" in graph
@@ -108,12 +108,12 @@ class TestBuildDependencyGraph:
         assert graph["US-002"] == ["US-001"]
         assert set(graph["US-003"]) == {"US-001", "US-002"}
 
-    def test_graph_with_no_dependencies(self):
+    def test_graph_with_no_dependsOn(self):
         """Test graph with all independent stories."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": []},
-            {"id": "US-003", "dependencies": []},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": []},
+            {"id": "US-003", "dependsOn": []},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -124,12 +124,12 @@ class TestBuildDependencyGraph:
             assert graph[story_id] == []
 
     def test_graph_has_correct_edges(self):
-        """Test that edges are created correctly for dependencies."""
+        """Test that edges are created correctly for dependsOn."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
-            {"id": "US-003", "dependencies": ["US-001"]},
-            {"id": "US-004", "dependencies": ["US-002", "US-003"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
+            {"id": "US-003", "dependsOn": ["US-001"]},
+            {"id": "US-004", "dependsOn": ["US-002", "US-003"]},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -143,8 +143,8 @@ class TestBuildDependencyGraph:
     def test_build_graph_stores_stories(self):
         """Test that executor stores stories for later execution."""
         stories = [
-            {"id": "US-001", "dependencies": [], "task": "First task"},
-            {"id": "US-002", "dependencies": ["US-001"], "task": "Second task"},
+            {"id": "US-001", "dependsOn": [], "task": "First task"},
+            {"id": "US-002", "dependsOn": ["US-001"], "task": "Second task"},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -156,14 +156,14 @@ class TestBuildDependencyGraph:
 
 
 class TestTopologicalSort:
-    """Test acceptance criterion 2: Topological sort correctly orders stories by dependencies."""
+    """Test acceptance criterion 2: Topological sort correctly orders stories by dependsOn."""
 
     def test_topological_sort_simple_chain(self):
         """Test topological sort with a simple linear chain."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
-            {"id": "US-003", "dependencies": ["US-002"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
+            {"id": "US-003", "dependsOn": ["US-002"]},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -177,10 +177,10 @@ class TestTopologicalSort:
     def test_topological_sort_diamond_pattern(self):
         """Test topological sort with diamond dependency pattern."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
-            {"id": "US-003", "dependencies": ["US-001"]},
-            {"id": "US-004", "dependencies": ["US-002", "US-003"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
+            {"id": "US-003", "dependsOn": ["US-001"]},
+            {"id": "US-004", "dependsOn": ["US-002", "US-003"]},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -198,30 +198,30 @@ class TestTopologicalSort:
     def test_topological_sort_complex_graph(self):
         """Test topological sort with a more complex dependency graph."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
-            {"id": "US-003", "dependencies": ["US-001"]},
-            {"id": "US-004", "dependencies": ["US-002"]},
-            {"id": "US-005", "dependencies": ["US-002", "US-003"]},
-            {"id": "US-006", "dependencies": ["US-005"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
+            {"id": "US-003", "dependsOn": ["US-001"]},
+            {"id": "US-004", "dependsOn": ["US-002"]},
+            {"id": "US-005", "dependsOn": ["US-002", "US-003"]},
+            {"id": "US-006", "dependsOn": ["US-005"]},
         ]
 
         executor = DAGExecutor(stories=stories)
         order = executor.topological_sort()
 
-        # Verify all dependencies come before their dependents
+        # Verify all dependsOn come before their dependents
         for story in stories:
             story_id = story["id"]
-            for dep in story["dependencies"]:
+            for dep in story["dependsOn"]:
                 assert order.index(dep) < order.index(story_id), \
                     f"{dep} should come before {story_id}"
 
     def test_topological_sort_with_independent_stories(self):
-        """Test topological sort when multiple stories have no dependencies."""
+        """Test topological sort when multiple stories have no dependsOn."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": []},
-            {"id": "US-003", "dependencies": []},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": []},
+            {"id": "US-003", "dependsOn": []},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -233,7 +233,7 @@ class TestTopologicalSort:
     def test_topological_sort_single_story(self):
         """Test topological sort with a single story."""
         stories = [
-            {"id": "US-001", "dependencies": []},
+            {"id": "US-001", "dependsOn": []},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -248,9 +248,9 @@ class TestIdentifyIndependentStories:
     def test_identify_independent_stories(self):
         """Test that independent stories are identified correctly."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": []},
-            {"id": "US-003", "dependencies": ["US-001", "US-002"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": []},
+            {"id": "US-003", "dependsOn": ["US-001", "US-002"]},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -264,30 +264,30 @@ class TestIdentifyIndependentStories:
     def test_get_execution_levels(self):
         """Test that stories are grouped into correct execution levels."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
-            {"id": "US-003", "dependencies": ["US-001"]},
-            {"id": "US-004", "dependencies": ["US-002", "US-003"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
+            {"id": "US-003", "dependsOn": ["US-001"]},
+            {"id": "US-004", "dependsOn": ["US-002", "US-003"]},
         ]
 
         executor = DAGExecutor(stories=stories)
         levels = executor.get_execution_levels()
 
-        # Level 0: US-001 (no dependencies)
+        # Level 0: US-001 (no dependsOn)
         assert levels[0] == ["US-001"]
         # Level 1: US-002, US-003 (depend only on US-001)
         assert set(levels[1]) == {"US-002", "US-003"}
         # Level 2: US-004 (depends on both level 1 stories)
         assert levels[2] == ["US-004"]
 
-    def test_execution_levels_have_no_cross_level_dependencies(self):
+    def test_execution_levels_have_no_cross_level_dependsOn(self):
         """Test that no story depends on another in the same or later level."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
-            {"id": "US-003", "dependencies": ["US-001"]},
-            {"id": "US-004", "dependencies": ["US-002"]},
-            {"id": "US-005", "dependencies": ["US-002", "US-003"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
+            {"id": "US-003", "dependsOn": ["US-001"]},
+            {"id": "US-004", "dependsOn": ["US-002"]},
+            {"id": "US-005", "dependsOn": ["US-002", "US-003"]},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -299,11 +299,11 @@ class TestIdentifyIndependentStories:
             for story_id in level:
                 story_to_level[story_id] = level_idx
 
-        # Verify all dependencies are in earlier levels
+        # Verify all dependsOn are in earlier levels
         for story in stories:
             story_id = story["id"]
             story_level = story_to_level[story_id]
-            for dep in story["dependencies"]:
+            for dep in story["dependsOn"]:
                 dep_level = story_to_level[dep]
                 assert dep_level < story_level, \
                     f"{dep} (level {dep_level}) should be before {story_id} (level {story_level})"
@@ -311,9 +311,9 @@ class TestIdentifyIndependentStories:
     def test_parallel_execution_structure(self):
         """Test that execution structure allows for parallel execution."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": []},
-            {"id": "US-003", "dependencies": []},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": []},
+            {"id": "US-003", "dependsOn": []},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -326,10 +326,10 @@ class TestIdentifyIndependentStories:
     def test_all_stories_in_sequential_chain(self):
         """Test execution levels when all stories must run sequentially."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
-            {"id": "US-003", "dependencies": ["US-002"]},
-            {"id": "US-004", "dependencies": ["US-003"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
+            {"id": "US-003", "dependsOn": ["US-002"]},
+            {"id": "US-004", "dependsOn": ["US-003"]},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -344,7 +344,7 @@ class TestIdentifyIndependentStories:
 
 
 class TestCircularDependencyDetection:
-    """Test acceptance criterion 4: Circular dependencies raise an error."""
+    """Test acceptance criterion 4: Circular dependsOn raise an error."""
 
     def test_circular_dependency_exists_class(self):
         """Test that CircularDependencyError exception class exists."""
@@ -354,8 +354,8 @@ class TestCircularDependencyDetection:
     def test_circular_dependency_detection_two_nodes(self):
         """Test detection of simple circular dependency (A -> B -> A)."""
         stories = [
-            {"id": "US-001", "dependencies": ["US-002"]},
-            {"id": "US-002", "dependencies": ["US-001"]},
+            {"id": "US-001", "dependsOn": ["US-002"]},
+            {"id": "US-002", "dependsOn": ["US-001"]},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -367,7 +367,7 @@ class TestCircularDependencyDetection:
     def test_self_dependency_raises_error(self):
         """Test that a story depending on itself raises an error."""
         stories = [
-            {"id": "US-001", "dependencies": ["US-001"]},
+            {"id": "US-001", "dependsOn": ["US-001"]},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -378,9 +378,9 @@ class TestCircularDependencyDetection:
     def test_complex_circular_dependency(self):
         """Test detection of complex circular dependency (A -> B -> C -> A)."""
         stories = [
-            {"id": "US-001", "dependencies": ["US-002"]},
-            {"id": "US-002", "dependencies": ["US-003"]},
-            {"id": "US-003", "dependencies": ["US-001"]},
+            {"id": "US-001", "dependsOn": ["US-002"]},
+            {"id": "US-002", "dependsOn": ["US-003"]},
+            {"id": "US-003", "dependsOn": ["US-001"]},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -391,10 +391,10 @@ class TestCircularDependencyDetection:
     def test_partial_circular_dependency_detection(self):
         """Test detection of circular dependency in larger graph."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
-            {"id": "US-003", "dependencies": ["US-002"]},
-            {"id": "US-004", "dependencies": ["US-003", "US-002"]},  # Creates cycle with US-002
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
+            {"id": "US-003", "dependsOn": ["US-002"]},
+            {"id": "US-004", "dependsOn": ["US-003", "US-002"]},  # Creates cycle with US-002
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -403,11 +403,11 @@ class TestCircularDependencyDetection:
         # But wait, this is not actually a cycle. Let me fix this.
         # Actually, let's create a real cycle:
         stories_with_cycle = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
-            {"id": "US-003", "dependencies": ["US-002"]},
-            {"id": "US-004", "dependencies": ["US-003"]},
-            {"id": "US-002", "dependencies": ["US-004"]},  # This creates the cycle
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
+            {"id": "US-003", "dependsOn": ["US-002"]},
+            {"id": "US-004", "dependsOn": ["US-003"]},
+            {"id": "US-002", "dependsOn": ["US-004"]},  # This creates the cycle
         ]
 
         executor_with_cycle = DAGExecutor(stories=stories_with_cycle)
@@ -415,30 +415,30 @@ class TestCircularDependencyDetection:
         with pytest.raises(CircularDependencyError):
             executor_with_cycle.topological_sort()
 
-    def test_detect_circular_dependencies_method(self):
-        """Test the explicit detect_circular_dependencies method if it exists."""
+    def test_detect_circular_dependsOn_method(self):
+        """Test the explicit detect_circular_dependsOn method if it exists."""
         stories = [
-            {"id": "US-001", "dependencies": ["US-002"]},
-            {"id": "US-002", "dependencies": ["US-001"]},
+            {"id": "US-001", "dependsOn": ["US-002"]},
+            {"id": "US-002", "dependsOn": ["US-001"]},
         ]
 
         executor = DAGExecutor(stories=stories)
 
         # If executor has explicit detect method, test it
-        if hasattr(executor, 'detect_circular_dependencies'):
-            is_circular = executor.detect_circular_dependencies()
+        if hasattr(executor, 'detect_circular_dependsOn'):
+            is_circular = executor.detect_circular_dependsOn()
             assert is_circular is True
 
         # Test with non-circular graph
         stories_valid = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
         ]
 
         executor_valid = DAGExecutor(stories=stories_valid)
 
-        if hasattr(executor_valid, 'detect_circular_dependencies'):
-            is_circular = executor_valid.detect_circular_dependencies()
+        if hasattr(executor_valid, 'detect_circular_dependsOn'):
+            is_circular = executor_valid.detect_circular_dependsOn()
             assert is_circular is False
 
 
@@ -448,8 +448,8 @@ class TestExecuteSequential:
     def test_execute_sequential_method_exists(self):
         """Test that execute_sequential method exists."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -461,9 +461,9 @@ class TestExecuteSequential:
         mock_execute.return_value = {"status": "completed"}
 
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
-            {"id": "US-003", "dependencies": ["US-002"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
+            {"id": "US-003", "dependsOn": ["US-002"]},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -486,9 +486,9 @@ class TestExecuteSequential:
         ]
 
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
-            {"id": "US-003", "dependencies": ["US-002"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
+            {"id": "US-003", "dependsOn": ["US-002"]},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -505,8 +505,8 @@ class TestExecuteParallel:
     def test_execute_parallel_method_exists(self):
         """Test that execute_parallel method exists."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": []},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": []},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -524,8 +524,8 @@ class TestExecuteParallel:
         ]
 
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": []},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": []},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -536,7 +536,7 @@ class TestExecuteParallel:
 
     @pytest.mark.asyncio
     @patch('src.core.dag_executor.DAGExecutor._execute_story_async')
-    async def test_execute_parallel_respects_dependencies(self, mock_execute):
+    async def test_execute_parallel_respects_dependsOn(self, mock_execute):
         """Test that parallel execution respects dependency levels."""
         mock_execute = AsyncMock()
         mock_execute.side_effect = [
@@ -546,9 +546,9 @@ class TestExecuteParallel:
         ]
 
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-001"]},
-            {"id": "US-003", "dependencies": ["US-001"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-001"]},
+            {"id": "US-003", "dependsOn": ["US-001"]},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -573,10 +573,10 @@ class TestEdgeCases:
         order = executor.topological_sort()
         assert order == []
 
-    def test_single_story_no_dependencies(self):
-        """Test with a single story that has no dependencies."""
+    def test_single_story_no_dependsOn(self):
+        """Test with a single story that has no dependsOn."""
         stories = [
-            {"id": "US-001", "dependencies": []},
+            {"id": "US-001", "dependsOn": []},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -589,8 +589,8 @@ class TestEdgeCases:
     def test_story_with_non_existent_dependency(self):
         """Test handling of story with dependency that doesn't exist."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": ["US-999"]},  # Non-existent
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": ["US-999"]},  # Non-existent
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -603,16 +603,16 @@ class TestEdgeCases:
             assert "US-001" in order
             assert "US-002" in order
         except (ValueError, KeyError):
-            # Also acceptable to raise an error for invalid dependencies
+            # Also acceptable to raise an error for invalid dependsOn
             pass
 
     def test_all_stories_independent(self):
         """Test when all stories are independent (can all run in parallel)."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": []},
-            {"id": "US-003", "dependencies": []},
-            {"id": "US-004", "dependencies": []},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": []},
+            {"id": "US-003", "dependsOn": []},
+            {"id": "US-004", "dependsOn": []},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -625,9 +625,9 @@ class TestEdgeCases:
     def test_multiple_valid_topological_orderings(self):
         """Test that any valid topological ordering is acceptable."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-002", "dependencies": []},
-            {"id": "US-003", "dependencies": ["US-001", "US-002"]},
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-002", "dependsOn": []},
+            {"id": "US-003", "dependsOn": ["US-001", "US-002"]},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -640,8 +640,8 @@ class TestEdgeCases:
     def test_duplicate_story_ids(self):
         """Test handling of duplicate story IDs."""
         stories = [
-            {"id": "US-001", "dependencies": []},
-            {"id": "US-001", "dependencies": []},  # Duplicate
+            {"id": "US-001", "dependsOn": []},
+            {"id": "US-001", "dependsOn": []},  # Duplicate
         ]
 
         # This is invalid input - behavior depends on implementation
@@ -663,8 +663,8 @@ class TestIntegrationWithOrchestrator:
     def test_dag_executor_has_story_execution_interface(self):
         """Test that DAGExecutor provides interface for story execution."""
         stories = [
-            {"id": "US-001", "dependencies": [], "task": "Task 1"},
-            {"id": "US-002", "dependencies": ["US-001"], "task": "Task 2"},
+            {"id": "US-001", "dependsOn": [], "task": "Task 1"},
+            {"id": "US-002", "dependsOn": ["US-001"], "task": "Task 2"},
         ]
 
         executor = DAGExecutor(stories=stories)
@@ -676,7 +676,7 @@ class TestIntegrationWithOrchestrator:
     def test_dag_executor_can_use_phase_runner(self, mock_runner):
         """Test that DAGExecutor can integrate with PhaseRunner for story execution."""
         stories = [
-            {"id": "US-001", "dependencies": [], "task": "Test task"},
+            {"id": "US-001", "dependsOn": [], "task": "Test task"},
         ]
 
         # If DAGExecutor accepts a runner parameter

@@ -20,6 +20,17 @@ class StoryAgent:
         with open(path, "r") as f:
             return f.read()
 
+    def _parse_json(self, text: str) -> Dict[str, Any]:
+        """Robustly parse JSON from LLM output."""
+        try:
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start == -1 or end == 0:
+                return json.loads(text)
+            return json.loads(text[start:end])
+        except Exception as e:
+            raise ValueError(f"Failed to parse JSON from response: {str(e)}\nRaw: {text}")
+
     def classify(self, user_request: str) -> Dict[str, Any]:
         """Classify the user request into a task type."""
         template = self._read_template("classify")
@@ -31,8 +42,7 @@ class StoryAgent:
             messages=[{"role": "user", "content": user_request}]
         )
         
-        text = response.content[0].text
-        return json.loads(text)
+        return self._parse_json(response.content[0].text)
 
     def decompose(self, user_request: str, task_type: str) -> Dict[str, Any]:
         """Decompose the request into atomic user stories."""
@@ -47,5 +57,4 @@ class StoryAgent:
             messages=[{"role": "user", "content": user_prompt}]
         )
         
-        text = response.content[0].text
-        return json.loads(text)
+        return self._parse_json(response.content[0].text)

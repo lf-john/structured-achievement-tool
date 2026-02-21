@@ -16,7 +16,8 @@ def mock_workspace(tmp_path):
 @patch("src.core.story_agent.StoryAgent.classify")
 @patch("src.core.story_agent.StoryAgent.decompose")
 @patch("src.core.phase_runner.PhaseRunner.execute_cli")
-def test_full_orchestration_flow(mock_execute, mock_decompose, mock_classify, mock_workspace):
+@pytest.mark.asyncio
+async def test_full_orchestration_flow(mock_execute, mock_decompose, mock_classify, mock_workspace):
     # Setup mocks
     mock_classify.return_value = {"task_type": "research", "confidence": 1.0}
     mock_decompose.return_value = {
@@ -33,7 +34,7 @@ def test_full_orchestration_flow(mock_execute, mock_decompose, mock_classify, mo
 
     # Run orchestrator
     orch = Orchestrator(project_path="/tmp", api_key="fake")
-    report = orch.process_task_file(mock_workspace)
+    report = await orch.process_task_file(mock_workspace)
 
     # Assertions
     assert report["classification"]["task_type"] == "research"

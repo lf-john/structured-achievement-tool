@@ -37,7 +37,8 @@ class PhaseRunner:
             cwd=task_dir,
             env=env,
             capture_output=True,
-            text=True
+            text=True,
+            timeout=600 # 10 minute timeout
         )
 
         return {
