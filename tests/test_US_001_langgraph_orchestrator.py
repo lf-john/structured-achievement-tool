@@ -3,7 +3,7 @@ IMPLEMENTATION PLAN for US-001:
 
 Components:
   - LangGraphOrchestrator: A class that builds a LangGraph StateGraph
-    * __init__(): Initialize the orchestrator and build the state graph
+    * __init__(project_path: str): Initialize with project_path and build the state graph
     * build_graph(): Creates and configures the StateGraph with nodes and edges
     * get_graph(): Returns the compiled StateGraph
     * State (TypedDict): Holds current story, task, and output of each phase
@@ -33,6 +33,8 @@ Edge Cases:
   - Multiple executions through the graph
   - State accumulation across phases
   - Verify passing vs failing conditions
+
+AMENDED BY US-001: All test cases updated to pass project_path parameter to LangGraphOrchestrator
 """
 
 import pytest
@@ -55,13 +57,15 @@ class TestLangGraphOrchestratorClassExists:
 
     def test_class_can_be_instantiated(self):
         """Test that LangGraphOrchestrator can be instantiated."""
-        orchestrator = LangGraphOrchestrator()
+        # AMENDED BY US-001: Updated to pass project_path parameter
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         assert orchestrator is not None
         assert isinstance(orchestrator, LangGraphOrchestrator)
 
     def test_has_graph_builder_method(self):
         """Test that orchestrator has a method to get the graph."""
-        orchestrator = LangGraphOrchestrator()
+        # AMENDED BY US-001: Updated to pass project_path parameter
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         assert hasattr(orchestrator, 'get_graph') or hasattr(orchestrator, 'graph')
         # The graph should be accessible
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
@@ -117,7 +121,7 @@ class TestNodesExist:
 
     def test_graph_has_design_node(self):
         """Test that graph has a DESIGN node."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         # Graph should have all nodes defined
@@ -129,7 +133,7 @@ class TestNodesExist:
 
     def test_graph_has_tdd_red_node(self):
         """Test that graph has a TDD_RED node."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         nodes = graph.nodes if hasattr(graph, 'nodes') else getattr(graph.builder, 'nodes', {})
@@ -137,7 +141,7 @@ class TestNodesExist:
 
     def test_graph_has_code_node(self):
         """Test that graph has a CODE node."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         nodes = graph.nodes if hasattr(graph, 'nodes') else getattr(graph.builder, 'nodes', {})
@@ -145,7 +149,7 @@ class TestNodesExist:
 
     def test_graph_has_tdd_green_node(self):
         """Test that graph has a TDD_GREEN node."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         nodes = graph.nodes if hasattr(graph, 'nodes') else getattr(graph.builder, 'nodes', {})
@@ -153,7 +157,7 @@ class TestNodesExist:
 
     def test_graph_has_verify_node(self):
         """Test that graph has a VERIFY node."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         nodes = graph.nodes if hasattr(graph, 'nodes') else getattr(graph.builder, 'nodes', {})
@@ -161,7 +165,7 @@ class TestNodesExist:
 
     def test_graph_has_learn_node(self):
         """Test that graph has a LEARN node."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         nodes = graph.nodes if hasattr(graph, 'nodes') else getattr(graph.builder, 'nodes', {})
@@ -169,7 +173,7 @@ class TestNodesExist:
 
     def test_all_six_nodes_present(self):
         """Test that all six phase nodes are present."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         nodes = graph.nodes if hasattr(graph, 'nodes') else getattr(graph.builder, 'nodes', {})
@@ -185,7 +189,7 @@ class TestNodeFunctions:
 
     def test_design_node_appends_message(self):
         """Test that design_node appends a message to state."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
 
         # Get the design node function
         design_node = orchestrator.design_node if hasattr(orchestrator, 'design_node') else None
@@ -281,7 +285,7 @@ class TestEdgesConnectCorrectly:
 
     def test_graph_has_edges(self):
         """Test that graph has edges defined."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         # Graph should have edges
@@ -289,7 +293,7 @@ class TestEdgesConnectCorrectly:
 
     def test_edge_from_design_to_tdd_red(self):
         """Test that there's an edge from DESIGN to TDD_RED."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         # Check that the edge exists in the graph structure
@@ -298,24 +302,24 @@ class TestEdgesConnectCorrectly:
 
     def test_edge_from_tdd_red_to_code(self):
         """Test that there's an edge from TDD_RED to CODE."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         assert True  # Placeholder
 
     def test_edge_from_code_to_tdd_green(self):
         """Test that there's an edge from CODE to TDD_GREEN."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         assert True  # Placeholder
 
     def test_edge_from_tdd_green_to_verify(self):
         """Test that there's an edge from TDD_GREEN to VERIFY."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         assert True  # Placeholder
 
     def test_sequence_of_edges(self):
         """Test that edges form the correct sequence: DESIGN -> TDD_RED -> CODE -> TDD_GREEN -> VERIFY."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         # The graph should have the main flow defined
@@ -375,7 +379,7 @@ class TestVerifyConditionalEdge:
 
     def test_conditional_edge_configured_on_graph(self):
         """Test that the graph has a conditional edge from VERIFY."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         # Graph should have conditional edge configured
@@ -387,7 +391,7 @@ class TestGraphCompiles:
 
     def test_graph_compiles_successfully(self):
         """Test that the StateGraph compiles without errors."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         # The graph should be compilable
@@ -401,7 +405,7 @@ class TestGraphCompiles:
 
     def test_compiled_graph_is_invocable(self):
         """Test that compiled graph can be invoked."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         # Compile if needed
@@ -419,7 +423,7 @@ class TestSuccessfulPathExecution:
 
     def test_run_full_successful_path(self):
         """Test running the graph through all phases with VERIFY passing."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         # Compile if needed
@@ -451,7 +455,7 @@ class TestSuccessfulPathExecution:
 
     def test_successful_path_accumulates_outputs(self):
         """Test that successful execution accumulates phase outputs."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         if hasattr(graph, 'compile'):
@@ -494,7 +498,7 @@ class TestVerifyFailureLoop:
 
     def test_run_path_with_verify_failure(self):
         """Test running the graph with VERIFY failing and looping back to CODE."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         if hasattr(graph, 'compile'):
@@ -525,7 +529,7 @@ class TestEdgeCases:
 
     def test_empty_state_handling(self):
         """Test graph behavior with minimal state."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         minimal_state = {
@@ -574,8 +578,9 @@ class TestEdgeCases:
 
     def test_multiple_graph_instances(self):
         """Test that multiple orchestrator instances can coexist."""
-        orchestrator1 = LangGraphOrchestrator()
-        orchestrator2 = LangGraphOrchestrator()
+        # AMENDED BY US-001: Updated to pass project_path parameter as required by modified __init__
+        orchestrator1 = LangGraphOrchestrator(project_path="/tmp/test1")
+        orchestrator2 = LangGraphOrchestrator(project_path="/tmp/test2")
 
         assert orchestrator1 is not orchestrator2
 
@@ -591,7 +596,7 @@ class TestIntegration:
 
     def test_full_workflow_with_passing_verification(self):
         """Test complete workflow: DESIGN -> TDD_RED -> CODE -> TDD_GREEN -> VERIFY -> LEARN."""
-        orchestrator = LangGraphOrchestrator()
+        orchestrator = LangGraphOrchestrator(project_path="/tmp/test")
         graph = orchestrator.get_graph() if hasattr(orchestrator, 'get_graph') else orchestrator.graph
 
         if hasattr(graph, 'compile'):
