@@ -404,6 +404,16 @@ class TestBackwardCompatibility:
         assert result == [0.1, 0.2, 0.3, 0.4]
 
     @patch('src.core.embedding_service.ollama.embeddings')
+    def test_embed_text_handles_exceptions(self, mock_embeddings, embedding_service):
+        """Test that embed_text handles exceptions gracefully."""
+        mock_embeddings.side_effect = Exception("Ollama API error")
+
+        with pytest.raises(Exception) as exc_info:
+            embedding_service.embed_text("test")
+
+        assert "ollama" in str(exc_info.value).lower()
+
+    @patch('src.core.embedding_service.ollama.embeddings')
     def test_embed_batch_method_still_exists(self, mock_embeddings, embedding_service):
         """Test that embed_batch method still exists."""
         assert hasattr(embedding_service, 'embed_batch')
@@ -418,6 +428,14 @@ class TestBackwardCompatibility:
 
         assert len(results) == 2
         assert all(isinstance(r, list) for r in results)
+
+    @patch('src.core.embedding_service.ollama.embeddings')
+    def test_embed_batch_handles_empty_list(self, mock_embeddings, embedding_service):
+        """Test that embed_batch handles empty list input."""
+        results = embedding_service.embed_batch([])
+
+        assert results == []
+        assert mock_embeddings.call_count == 0
 
 
 class TestEdgeCases:
