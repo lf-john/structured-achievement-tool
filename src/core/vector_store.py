@@ -150,6 +150,10 @@ class VectorStore:
                 - score: Similarity score (lower distance = higher similarity)
                 - id: Document ID
         """
+        # Handle empty query text
+        if not query_text or not query_text.strip():
+            return []
+
         # Generate embedding for the query
         query_embedding = self.embedding_service.embed_text(query_text)
         query_blob = self._serialize_embedding(query_embedding)
