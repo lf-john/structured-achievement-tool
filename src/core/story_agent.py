@@ -1,60 +1,50 @@
-import json
-import os
-from typing import Dict, Any, List
-import anthropic
+import json, os
+from typing import Dict, Any
+from src.core.logic_core import LogicCore
 
 class StoryAgent:
-    def __init__(self, api_key: str, base_url: str = None):
-        self.client = anthropic.Anthropic(
-            api_key=api_key,
-            base_url=base_url
-        )
-        # Use absolute path to templates directory
-        self.template_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
-            "templates"
-        )
+    def __init__(self, project_path: str):
+        self.logic = LogicCore(project_path)
+        self.template_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "templates")
 
     def _read_template(self, name: str) -> str:
-        path = os.path.join(self.template_dir, f"{name}.md")
-        with open(path, "r") as f:
+        with open(os.path.join(self.template_dir, f"{name}.md"), "r") as f:
             return f.read()
 
-    def _parse_json(self, text: str) -> Dict[str, Any]:
-        """Robustly parse JSON from LLM output."""
+    def _parse_json(self, text: str) -> Dict:
         try:
             start = text.find("{")
             end = text.rfind("}") + 1
-            if start == -1 or end == 0:
-                return json.loads(text)
+            if start == -1: return {"response": text}
             return json.loads(text[start:end])
         except Exception as e:
-            raise ValueError(f"Failed to parse JSON from response: {str(e)}\nRaw: {text}")
+            raise ValueError(f"JSON parse failed: {e}\nRaw: {text}")
 
-    def classify(self, user_request: str) -> Dict[str, Any]:
-        """Classify the user request into a task type."""
+    def classify(self, user_request: str) -> Dict:
         template = self._read_template("classify")
-        
-        response = self.client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            max_tokens=1024,
-            system=template,
-            messages=[{"role": "user", "content": user_request}]
-        )
-        
-        return self._parse_json(response.content[0].text)
+        # Append the required <User> tag
+        prompt = user_request + "\n\n<User>"
+        response = self.logic.generate_text(model="sonnet", prompt=prompt, system_prompt=template)
+        return self._parse_json(response)
 
-    def decompose(self, user_request: str, task_type: str) -> Dict[str, Any]:
-        """Decompose the request into atomic user stories."""
+    def decompose(self, user_request: str, task_type: str, existing_prd: Dict = None, existing_progress: Dict = None) -> Dict:
         template = self._read_template("decompose")
         
-        user_prompt = f"Request: {user_request}\nType: {task_type}"
+        prompt = f"Request: {user_request}\nType: {task_type}"
+        if existing_prd:
+            prompt += f"\n\nExisting PRD:\n{json.dumps(existing_prd, indent=2)}"
+        if existing_progress:
+            prompt += f"\n\nExisting Progress:\n{json.dumps(existing_progress, indent=2)}"
+            
+        prompt += "\n\n<User>"
         
-        response = self.client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            max_tokens=4096,
-            system=template,
-            messages=[{"role": "user", "content": user_prompt}]
-        )
+        response = self.logic.generate_text(model="sonnet", prompt=prompt, system_prompt=template)
+        prd = self._parse_json(response)
         
-        return self._parse_json(response.content[0].text)
+        # Enforce required schema for Ralph Pro
+        if "stories" in prd:
+            for story in prd["stories"]:
+                if "status" not in story:
+                    story["status"] = "pending"
+                    
+        return prd
