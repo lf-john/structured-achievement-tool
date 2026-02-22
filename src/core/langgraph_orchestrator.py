@@ -12,6 +12,7 @@ from typing import TypedDict, List, Literal, Optional
 from langgraph.graph import StateGraph, END
 from functools import partial
 from src.core.phase_runner import PhaseRunner
+from src.core.context_retriever import retrieve_context, format_context
 import logging
 
 # Configure logging
@@ -63,31 +64,52 @@ def design_node(state: OrchestratorState, runner: Optional[PhaseRunner] = None, 
     return state
 
 
-def tdd_red_node(state: OrchestratorState, runner: Optional[PhaseRunner] = None, task_dir: str = ".") -> OrchestratorState:
+def tdd_red_node(state: OrchestratorState, runner: Optional[PhaseRunner] = None, task_dir: str = ".", vector_store=None) -> OrchestratorState:
     """TDD_RED phase node.
 
     Executes the TDD_RED phase CLI tool via PhaseRunner.
+    Searches VectorStore for similar past tasks and enriches the prompt with context.
 
     Args:
         state: The orchestrator state
         runner: PhaseRunner instance for executing CLI tools
         task_dir: Directory to execute in
+        vector_store: Optional VectorStore instance for context retrieval
 
     Returns:
         Updated state with phase output appended
     """
     state = state.copy()
 
+    # Retrieve similar tasks from vector store for context
+    task = state.get('task', 'N/A')
+    context = ""
+
+    if vector_store is not None:
+        try:
+            # Search for top 3 similar past tasks
+            similar_tasks = retrieve_context(task, vector_store, k=3)
+            # Format the results into readable context
+            context = format_context(similar_tasks)
+        except Exception as e:
+            # Log error but continue workflow
+            logging.warning(f"Context retrieval failed: {e}")
+            context = ""
+
     if runner:
         try:
-            prompt = f"TDD_RED phase for task: {state.get('task', 'N/A')}"
+            # Build the prompt with context enrichment
+            prompt = f"TDD_RED phase for task: {task}"
+            if context:
+                prompt = f"{prompt}\n\n{context}"
+
             result = runner.execute_cli("claude", prompt, task_dir)
-            message = result.get('stdout', '') or f"TDD_RED phase completed for task: {state.get('task', 'N/A')}"
+            message = result.get('stdout', '') or f"TDD_RED phase completed for task: {task}"
         except Exception as e:
             logging.warning(f"TDD_RED phase CLI execution failed: {e}")
-            message = f"TDD_RED phase completed for task: {state.get('task', 'N/A')} (CLI failed)"
+            message = f"TDD_RED phase completed for task: {task} (CLI failed)"
     else:
-        message = f"TDD_RED phase completed for task: {state.get('task', 'N/A')}"
+        message = f"TDD_RED phase completed for task: {task}"
 
     state['phase_outputs'] = state.get('phase_outputs', []) + [message]
     return state
@@ -250,17 +272,20 @@ class LangGraphOrchestrator:
     Attributes:
         project_path: Path to the project directory
         runner: PhaseRunner instance for executing CLI tools
+        vector_store: Optional VectorStore instance for context retrieval
         graph: Compiled LangGraph StateGraph
     """
 
-    def __init__(self, project_path: str):
+    def __init__(self, project_path: str, vector_store=None):
         """Initialize the orchestrator with a project path and build the state graph.
 
         Args:
             project_path: Path to the project directory for PhaseRunner
+            vector_store: Optional VectorStore instance for context retrieval
         """
         self.project_path = project_path
         self.runner = PhaseRunner(project_path)
+        self.vector_store = vector_store
         self.graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
@@ -278,7 +303,7 @@ class LangGraphOrchestrator:
         # This ensures each node has access to the PhaseRunner instance
         task_dir = self.project_path
         builder.add_node('design', partial(design_node, runner=self.runner, task_dir=task_dir))
-        builder.add_node('tdd_red', partial(tdd_red_node, runner=self.runner, task_dir=task_dir))
+        builder.add_node('tdd_red', partial(tdd_red_node, runner=self.runner, task_dir=task_dir, vector_store=self.vector_store))
         builder.add_node('code', partial(code_node, runner=self.runner, task_dir=task_dir))
         builder.add_node('tdd_green', partial(tdd_green_node, runner=self.runner, task_dir=task_dir))
         builder.add_node('verify', partial(verify_node, runner=self.runner, task_dir=task_dir))
