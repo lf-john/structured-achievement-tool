@@ -8,6 +8,11 @@
     "CLASSIFIER": "haiku",
     "DECOMPOSE": "sonnet",
     "DECOMPOSER": "sonnet",
+    "DESIGN": "sonnet",
+    "TEST_WRITER": "haiku",
+    "CODER": "sonnet",
+    "VERIFIER_ARCH": "haiku",
+    "LEARNER": "haiku",
     "SUMMARIZE": "haiku",
     "HEALTH_CHECK": "haiku"
   },
