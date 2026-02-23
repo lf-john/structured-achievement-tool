@@ -16,6 +16,7 @@ from src.llm.routing_engine import RoutingEngine
 
 logger = logging.getLogger(__name__)
 
+# This function simulates the reproduction of a failure for the DebugWorkflow.
 def simulate_reproduction(failure_context: str) -> dict:
     """
     Simulates an attempt to reproduce a failure based on the provided context.
