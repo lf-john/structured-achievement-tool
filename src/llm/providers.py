@@ -174,7 +174,13 @@ def get_env_for_provider(provider: ProviderConfig) -> Dict[str, str]:
 
 
 def is_provider_available(provider: ProviderConfig) -> bool:
-    """Check if a provider's prerequisites are met (API keys, CLI tools)."""
+    """Check if a provider's prerequisites are met (API keys, CLI tools).
+
+    Claude-native models use `claude` CLI's built-in auth (no env vars needed).
+    GLM models via z.ai proxy require ANTHROPIC_AUTH_TOKEN.
+    Gemini models require GEMINI_API_KEY.
+    Ollama models require the ollama CLI.
+    """
     import shutil
 
     # Check CLI command exists
@@ -186,10 +192,13 @@ def is_provider_available(provider: ProviderConfig) -> bool:
         if not os.environ.get("GEMINI_API_KEY"):
             return False
 
-    # GLM models require ANTHROPIC_AUTH_TOKEN or specific env vars
+    # GLM/z.ai proxy models need ANTHROPIC_AUTH_TOKEN
     if provider.env_vars.get("ANTHROPIC_BASE_URL"):
-        if not os.environ.get("ANTHROPIC_AUTH_TOKEN") and not os.environ.get("ANTHROPIC_API_KEY"):
+        if not os.environ.get("ANTHROPIC_AUTH_TOKEN"):
             return False
+
+    # Claude-native models: claude CLI handles auth internally
+    # Ollama models: just need the CLI (no API keys)
 
     return True
 
