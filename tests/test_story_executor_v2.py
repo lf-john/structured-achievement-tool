@@ -3,6 +3,7 @@
 import asyncio
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
+from datetime import datetime, timedelta
 
 from src.execution.story_executor import (
     get_workflow_for_story,
@@ -14,6 +15,9 @@ from src.workflows.dev_tdd_workflow import DevTDDWorkflow
 from src.workflows.config_tdd_workflow import ConfigTDDWorkflow
 from src.workflows.debug_workflow import DebugWorkflow
 from src.workflows.research_workflow import ResearchWorkflow
+
+# Imports for Audit Journaling - expected to fail in TDD-RED
+from src.execution.audit_journal import AuditJournal, AuditRecord
 
 
 class TestWorkflowSelection:
@@ -71,7 +75,10 @@ class TestExecuteStory:
 
         story = {"id": "US-001", "title": "Test", "type": "development"}
 
-        with patch("src.execution.story_executor.get_current_commit", return_value="abc123"):
+        with patch("src.execution.story_executor.get_current_commit", return_value="abc123") as mock_get_commit, \
+             patch("src.execution.story_executor.AuditJournal") as MockAuditJournal, \
+             patch("src.execution.story_executor.AuditRecord") as MockAuditRecord:
+            
             result = await execute_story(
                 story=story,
                 task_id="task-1",
@@ -83,6 +90,13 @@ class TestExecuteStory:
 
         assert not result.success
         assert "Cancelled" in result.reason
+        MockAuditJournal.return_value.log_record.assert_called_once()
+        args, kwargs = MockAuditJournal.return_value.log_record.call_args
+        logged_record = args[0]
+        assert logged_record.story_id == "US-001"
+        assert logged_record.success is False
+        assert logged_record.error_summary == "Story execution cancelled."
+
 
     @pytest.mark.asyncio
     async def test_max_attempts_exhausted(self):
@@ -92,15 +106,18 @@ class TestExecuteStory:
         mock_graph = MagicMock()
         # Simulate failed workflow execution
         mock_graph.invoke.return_value = {
-            "phase_outputs": [{"status": "failed", "exit_code": 1, "phase": "CODE"}],
+            "phase_outputs": [{"status": "failed", "exit_code": 1, "phase": "CODE", "llm_provider": "Claude"}],
             "verify_passed": False,
             "failure_context": "test failure",
+            "llm_provider_used_per_phase": {"plan": "Gemini", "code": "Claude"}
         }
 
         with patch("src.execution.story_executor.get_workflow_for_story", return_value=mock_graph), \
              patch("src.execution.story_executor.get_current_commit", return_value="abc123"), \
              patch("src.execution.story_executor.classify_failure") as mock_classify, \
-             patch("asyncio.sleep", new_callable=AsyncMock):
+             patch("asyncio.sleep", new_callable=AsyncMock), \
+             patch("src.execution.story_executor.AuditJournal") as MockAuditJournal, \
+             patch("src.execution.story_executor.AuditRecord") as MockAuditRecord:
 
             mock_classify.return_value = MagicMock(
                 severity=MagicMock(value="persistent"),
@@ -120,3 +137,114 @@ class TestExecuteStory:
 
         assert not result.success
         assert result.attempts == 2
+        
+        MockAuditJournal.return_value.log_record.assert_called_once()
+        args, kwargs = MockAuditJournal.return_value.log_record.call_args
+        logged_record = args[0]
+        assert logged_record.story_id == "US-001"
+        assert logged_record.success is False
+        assert logged_record.total_turns == 2 # Max attempts
+        assert logged_record.llm_provider_used_per_phase == {"plan": "Gemini", "code": "Claude"}
+        assert "test failure" in logged_record.error_summary # Check that error context is included
+        assert "Exhausted retries" in logged_record.error_summary
+
+    @pytest.mark.asyncio
+    async def test_execute_story_logs_audit_record_on_success(self):
+        """
+        AC: Every story execution produces exactly one audit JSONL record.
+        Test that execute_story logs an audit record on successful completion.
+        """
+        story = {"id": "US-002", "title": "Successful Story", "type": "development"}
+        
+        mock_graph = MagicMock()
+        mock_graph.invoke.return_value = {
+            "phase_outputs": [{"status": "success", "exit_code": 0, "phase": "CODE", "llm_provider": "Gemini"}],
+            "verify_passed": True,
+            "llm_provider_used_per_phase": {"plan": "Claude", "code": "Gemini", "verify": "Claude"}
+        }
+
+        with patch("src.execution.story_executor.get_workflow_for_story", return_value=mock_graph), \
+             patch("src.execution.story_executor.get_current_commit", return_value="def456"), \
+             patch("asyncio.sleep", new_callable=AsyncMock), \
+             patch("src.execution.story_executor.AuditJournal") as MockAuditJournal, \
+             patch("src.execution.story_executor.AuditRecord") as MockAuditRecord, \
+             patch("time.time", side_effect=[1000, 1100]): # Simulate 100 seconds duration
+
+            result = await execute_story(
+                story=story,
+                task_id="task-2",
+                task_description="successful test",
+                working_directory="/tmp",
+                max_attempts=1,
+            )
+
+        assert result.success
+        assert result.attempts == 1
+
+        MockAuditJournal.return_value.log_record.assert_called_once()
+        args, kwargs = MockAuditJournal.return_value.log_record.call_args
+        logged_record = args[0]
+        assert logged_record.story_id == "US-002"
+        assert logged_record.story_title == "Successful Story"
+        assert logged_record.task_file == "task-2"
+        assert logged_record.success is True
+        assert logged_record.duration_seconds == 100
+        assert logged_record.llm_provider_used_per_phase == {"plan": "Claude", "code": "Gemini", "verify": "Claude"}
+        assert logged_record.error_summary is None
+        assert "CODE" in logged_record.phases_completed # Assuming phases completed are derived from phase_outputs
+        
+    @pytest.mark.asyncio
+    async def test_execute_story_logs_audit_record_on_failure(self):
+        """
+        AC: Every story execution produces exactly one audit JSONL record.
+        Test that execute_story logs an audit record on failed completion.
+        """
+        story = {"id": "US-003", "title": "Failed Story", "type": "development"}
+        
+        mock_graph = MagicMock()
+        mock_graph.invoke.return_value = {
+            "phase_outputs": [{"status": "failed", "exit_code": 1, "phase": "TDD_RED", "llm_provider": "Claude"}],
+            "verify_passed": False,
+            "failure_context": "TDD_RED phase failed",
+            "llm_provider_used_per_phase": {"plan": "Gemini", "tdd_red": "Claude"}
+        }
+
+        with patch("src.execution.story_executor.get_workflow_for_story", return_value=mock_graph), \
+             patch("src.execution.story_executor.get_current_commit", return_value="ghi789"), \
+             patch("src.execution.story_executor.classify_failure") as mock_classify, \
+             patch("asyncio.sleep", new_callable=AsyncMock), \
+             patch("src.execution.story_executor.AuditJournal") as MockAuditJournal, \
+             patch("src.execution.story_executor.AuditRecord") as MockAuditRecord, \
+             patch("time.time", side_effect=[2000, 2070]): # Simulate 70 seconds duration
+
+            mock_classify.return_value = MagicMock(
+                severity=MagicMock(value="transient"),
+                message="test failure",
+            )
+            from src.agents.failure_classifier import FailureSeverity
+            mock_classify.return_value.severity = FailureSeverity.TRANSIENT
+
+
+            result = await execute_story(
+                story=story,
+                task_id="task-3",
+                task_description="failed test",
+                working_directory="/tmp",
+                max_attempts=1,
+            )
+
+        assert not result.success
+        assert result.attempts == 1
+
+        MockAuditJournal.return_value.log_record.assert_called_once()
+        args, kwargs = MockAuditJournal.return_value.log_record.call_args
+        logged_record = args[0]
+        assert logged_record.story_id == "US-003"
+        assert logged_record.story_title == "Failed Story"
+        assert logged_record.task_file == "task-3"
+        assert logged_record.success is False
+        assert logged_record.duration_seconds == 70
+        assert logged_record.llm_provider_used_per_phase == {"plan": "Gemini", "tdd_red": "Claude"}
+        assert "TDD_RED phase failed" in logged_record.error_summary
+        assert "TDD_RED" in logged_record.phases_completed # Even if failed, it was attempted and outputted
+

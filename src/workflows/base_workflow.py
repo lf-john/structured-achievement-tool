@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 MAX_PHASE_RETRIES = 10
 CHECK_RETRY_LIMIT = 3  # Max retries for test check loops before moving on
+VERIFY_RETRY_LIMIT = 3  # Max VERIFY→CODE cycles before accepting and moving to LEARN
 
 # Thread pool for running async code from synchronous LangGraph nodes.
 # LangGraph's graph.invoke() is synchronous, but our CLI runner is async.
@@ -159,6 +160,9 @@ def phase_node(
     # Each VERIFY→CODE→CHECK cycle should get a fresh retry budget.
     if phase_name in ("VERIFY", "VERIFY_SCRIPT"):
         state["phase_retry_count"] = 0
+        # Track VERIFY→CODE cycle count
+        if status == PhaseStatus.FAILED:
+            state["verify_retry_count"] = state.get("verify_retry_count", 0) + 1
 
     logger.info(f"Phase {phase_name} completed: status={status.value}, duration={duration:.1f}s, provider={provider.name}")
 
@@ -311,6 +315,11 @@ def mediator_gate_node(
 def verify_decision(state: StoryState) -> Literal["pass", "fail"]:
     """Route after VERIFY: pass → LEARN, fail → CODE."""
     if state.get("verify_passed", True):
+        return "pass"
+    # Limit VERIFY→CODE cycles to avoid infinite loops
+    verify_retries = state.get("verify_retry_count", 0)
+    if verify_retries >= VERIFY_RETRY_LIMIT:
+        logger.warning(f"VERIFY failed {verify_retries} times, accepting and moving to LEARN")
         return "pass"
     return "fail"
 
