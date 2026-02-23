@@ -1,20 +1,17 @@
-
-import json
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import List, Optional
+import json
+import os
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class AuditRecord(BaseModel):
-    """
-    Pydantic model for storing audit records of task execution.
-    """
-    timestamp: datetime = Field(default_factory=datetime.now)
+    timestamp: datetime
     task_file: str
     story_id: str
     story_title: str
-    llm_provider_per_phase: Dict[str, str]
+    llm_provider_per_phase: dict
     session_id: str
     total_turns: int
     exit_code: int
@@ -25,17 +22,10 @@ class AuditRecord(BaseModel):
 
 
 class AuditJournal:
-    """
-    Manages the appending of AuditRecord instances to a JSONL file.
-    """
-    def __init__(self, journal_path: str = ".memory/audit_journal.jsonl"):
+    def __init__(self, journal_path: str = '.memory/audit_journal.jsonl'):
         self.journal_file_path = journal_path
+        os.makedirs(os.path.dirname(self.journal_file_path), exist_ok=True)
 
     def append_record(self, record: AuditRecord):
-        """
-        Serializes an AuditRecord instance to JSON and appends it as a new line
-        to the audit journal file.
-        """
         with open(self.journal_file_path, 'a') as f:
             f.write(record.model_dump_json() + '\n')
-

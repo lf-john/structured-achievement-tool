@@ -155,6 +155,11 @@ def phase_node(
     if phase_name in ("VERIFY", "VERIFY_SCRIPT") and status == PhaseStatus.FAILED:
         state["verify_passed"] = False
 
+    # Reset check retry counter when VERIFY completes (pass or fail).
+    # Each VERIFY→CODE→CHECK cycle should get a fresh retry budget.
+    if phase_name in ("VERIFY", "VERIFY_SCRIPT"):
+        state["phase_retry_count"] = 0
+
     logger.info(f"Phase {phase_name} completed: status={status.value}, duration={duration:.1f}s, provider={provider.name}")
 
     # Auto-commit after code-producing phases
