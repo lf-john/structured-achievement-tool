@@ -115,6 +115,10 @@ class RoutingEngine:
         for name, provider in PROVIDERS.items():
             power = provider.code_power if is_code_task else provider.power
 
+            # Skip providers that aren't available (missing API keys, CLI tools)
+            if not is_provider_available(provider):
+                continue
+
             # Power adequacy check: model must be strong enough for the task
             if power < min_adequate_power:
                 continue
