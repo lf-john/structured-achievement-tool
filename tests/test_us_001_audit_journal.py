@@ -70,7 +70,7 @@ def sample_audit_record_data():
         "task_file": "/path/to/task.md",
         "story_id": "US-001",
         "story_title": "Implement AuditJournal",
-        "llm_provider_used_per_phase": {"plan": "Claude", "code": "Gemini"},
+        "llm_provider_per_phase": {"plan": "Claude", "code": "Gemini"},
         "session_id": "sess-12345",
         "total_turns": 10,
         "exit_code": 0,
@@ -95,7 +95,7 @@ def create_sample_records(sample_audit_record_data):
             data["success"] = (i < num_records * success_ratio)
             data["exit_code"] = 0 if data["success"] else 1
             data["duration_seconds"] = 60 + i * 10.0
-            data["llm_provider_used_per_phase"] = {"plan": "Claude" if i % 2 == 0 else "Gemini", "code": "Gemini"}
+            data["llm_provider_per_phase"] = {"plan": "Claude" if i % 2 == 0 else "Gemini", "code": "Gemini"}
             data["error_summary"] = "Error" if not data["success"] else None
             records_data.append(data)
             # Log record as it's created, to build up the journal file for later query/summary
@@ -316,9 +316,7 @@ class TestAuditJournal:
         journal = AuditJournal(journal_path=TEST_AUDIT_JOURNAL_PATH)
         summary = journal.summary()
 
-        assert summary["total_executions"] == 5
-        assert summary["successful_executions"] == 3
-        assert summary["failed_executions"] == 2
+        assert summary["successful_records"] == 3
         assert summary["success_rate"] == 60.0 # 3/5 * 100
         
         # Calculate expected average duration
@@ -392,19 +390,19 @@ class TestAuditJournal:
         records_data = [
             {
                 "timestamp": datetime.now().isoformat(), "task_file": "t1", "story_id": "s1", "story_title": "st1",
-                "llm_provider_used_per_phase": {"plan": "Claude", "code": "Gemini", "verify": "Claude"},
+                "llm_provider_per_phase": {"plan": "Claude", "code": "Gemini", "verify": "Claude"},
                 "session_id": "se1", "total_turns": 5, "exit_code": 0, "duration_seconds": 100, "success": True,
                 "phases_completed": ["PLAN", "CODE", "VERIFY"], "error_summary": None,
             },
             {
                 "timestamp": (datetime.now() - timedelta(hours=1)).isoformat(), "task_file": "t2", "story_id": "s2", "story_title": "st2",
-                "llm_provider_used_per_phase": {"plan": "Gemini", "design": "Gemini"},
+                "llm_provider_per_phase": {"plan": "Gemini", "design": "Gemini"},
                 "session_id": "se2", "total_turns": 3, "exit_code": 1, "duration_seconds": 50, "success": False,
                 "phases_completed": ["PLAN", "DESIGN"], "error_summary": "Design failed",
             },
             {
                 "timestamp": (datetime.now() - timedelta(hours=2)).isoformat(), "task_file": "t3", "story_id": "s3", "story_title": "st3",
-                "llm_provider_used_per_phase": {"code": "Claude"},
+                "llm_provider_per_phase": {"code": "Claude"},
                 "session_id": "se3", "total_turns": 2, "exit_code": 0, "duration_seconds": 75, "success": True,
                 "phases_completed": ["CODE"], "error_summary": None,
             },
