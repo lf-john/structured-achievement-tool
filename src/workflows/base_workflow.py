@@ -84,6 +84,7 @@ def phase_node(
     story_complexity = story.get("complexity", 5)
     is_code = phase_name in ("CODE", "FIX", "EXECUTE")
     provider = routing_engine.select(agent_name, story_complexity=story_complexity, is_code_task=is_code)
+    logger.info(f"Phase {phase_name} ({agent_name}) → {provider.name} (story: {story.get('id', '?')})")
 
     # Build prompt
     prompt = build_prompt(
