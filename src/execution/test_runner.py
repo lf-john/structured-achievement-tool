@@ -144,14 +144,28 @@ def get_test_command(
 
     # Search for story-specific test files
     test_dirs = ["tests", "test", "custom/tests"]
+
+    # Build search terms from story ID and title
+    search_terms = [story_id.replace("-", "_"), story_id]
+    story_title = story.get("title", "")
+    if story_title:
+        # Convert "Implement slugify utility function" to search terms like "slugify", "string_helpers"
+        title_words = [w.lower() for w in re.split(r'\W+', story_title) if len(w) > 3]
+        search_terms.extend(title_words)
+
     for test_dir in test_dirs:
         full_dir = os.path.join(working_directory, test_dir)
         if not os.path.isdir(full_dir):
             continue
 
         for f in os.listdir(full_dir):
-            if story_id.replace("-", "_") in f or story_id in f:
-                if f.endswith(".test.py") or f.endswith("_test.py"):
+            # Match by story ID or title keywords
+            f_lower = f.lower()
+            matched = any(term.lower() in f_lower for term in search_terms)
+            if matched:
+                if f.endswith(".py") and f.startswith("test_"):
+                    return f"pytest {os.path.join(test_dir, f)} -v"
+                elif f.endswith(".test.py") or f.endswith("_test.py"):
                     return f"pytest {os.path.join(test_dir, f)} -v"
                 elif f.endswith(".test.js"):
                     return f"node {os.path.join(test_dir, f)}"

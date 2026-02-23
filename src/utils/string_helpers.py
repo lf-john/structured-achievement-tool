@@ -4,18 +4,19 @@ import unicodedata
 
 def slugify(text: str) -> str:
     """Convert arbitrary text to a URL-safe slug."""
-    # Normalize unicode: decompose characters (e.g. é → e + combining accent)
+    # Normalize unicode to closest ASCII equivalent
     text = unicodedata.normalize('NFKD', text)
-    # Encode to ASCII bytes, ignoring non-ASCII, then decode back
     text = text.encode('ascii', 'ignore').decode('ascii')
     # Lowercase
     text = text.lower()
-    # Replace underscores, dots, and whitespace with hyphens
-    text = re.sub(r'[\s_\.]+', '-', text)
-    # Strip all characters that are not alphanumeric or hyphens
-    text = re.sub(r'[^a-z0-9-]', '', text)
+    # Replace underscores with hyphens
+    text = text.replace('_', '-')
+    # Replace non-alphanumeric, non-hyphen, non-whitespace with space
+    text = re.sub(r'[^a-z0-9\s-]', ' ', text)
+    # Collapse whitespace sequences into a single hyphen
+    text = re.sub(r'\s+', '-', text)
     # Collapse consecutive hyphens
     text = re.sub(r'-+', '-', text)
-    # Remove leading/trailing hyphens
+    # Strip leading/trailing hyphens
     text = text.strip('-')
     return text
