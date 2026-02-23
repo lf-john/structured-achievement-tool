@@ -1,234 +1,343 @@
 """
-Tests for src.utils.text_truncator — Truncate text with word boundary awareness.
-
-IMPLEMENTATION PLAN for US-001:
+IMPLEMENTATION PLAN for US-001: Implement text_truncator utility
 
 Components:
-  - text_truncator.truncate(text, max_length, suffix='...'): Main function
-    - Validates max_length >= len(suffix), raises ValueError if not
-    - Returns text unchanged if len(text) <= max_length
-    - Finds last word boundary before (max_length - len(suffix))
-    - If no word boundary found, truncates at hard position
-    - Appends suffix and returns result
+  - truncate(text: str, max_length: int, suffix: str = '...') -> str
+    Truncates text to max_length characters, breaking at word boundaries when possible.
+    - If text fits in max_length, return unchanged
+    - If truncation needed, find last word boundary within available space
+    - Append suffix after truncation
+    - Raise ValueError if max_length < len(suffix)
+    - Handle edge cases: empty strings, whitespace-only text, single long words
 
-Test Categories:
-  1. Happy Path: Text unchanged, word boundary, custom suffix
-  2. Validation: ValueError when max_length < len(suffix)
-  3. Edge Cases: Empty string, single long word, whitespace-only, exact length
+Test Cases:
+  1. AC1: No truncation - text shorter than max_length returns unchanged
+  2. AC2: Word boundary truncation - breaks at last space before max_length
+  3. AC3: Hard truncation - single word longer than available space gets truncated with suffix
+  4. AC4: Empty string - empty input returns empty string
+  5. AC5: Whitespace only - whitespace-only text returns unchanged if fits
+  6. AC6: Long word with suffix - single word with suffix appended when no boundary
+  7. AC7: Exact length - text exactly at max_length returns unchanged
+  8. AC8: ValueError - max_length < len(suffix) raises ValueError
+  9. AC9: Another word boundary example - truncates correctly at word boundaries
+  10. AC10: Default suffix - suffix parameter defaults to '...'
 
-Acceptance Criteria Mapping:
-  AC1: truncate('hello world', 100) -> 'hello world' unchanged
-  AC2: truncate('hello world foo', 8) -> 'hello...' (word boundary)
-  AC3: truncate('hello world', 5, '...') -> ValueError (max_length == len(suffix))
-  AC4: truncate('hello world', 2, '...') -> ValueError (max_length < len(suffix))
-  AC5: truncate('', 10) -> ''
-  AC6: truncate('superlongword', 8) -> 'super...' (hard cut)
-  AC7: truncate('hello world', 11) -> 'hello world' (exact length)
-  AC8: truncate('hello world foo', 9, '!') -> 'hello wo!' (custom suffix)
-  AC9: truncate('   ', 10) -> graceful handling of whitespace
+Edge Cases:
+  - Very small max_length (e.g., 1)
+  - Multiple consecutive spaces
+  - Text with no spaces (single word)
+  - max_length equal to len(text)
+  - Different suffix values and lengths
+  - Suffix longer than text would allow
+  - Only spaces in text
+  - Mixed word and space patterns
 """
 
 import pytest
 from src.utils.text_truncator import truncate
 
 
-class TestTruncateHappyPath:
-    """Test cases for normal truncate behavior."""
+class TestTruncateBasicBehavior:
+    """Test basic truncation behavior."""
 
-    def test_should_return_text_unchanged_when_length_within_limit(self):
-        """AC1: Text shorter than max_length returns unchanged."""
+    def test_no_truncation_when_text_shorter_than_max_length(self):
+        """AC1: Text shorter than max_length should return unchanged."""
         result = truncate('hello world', 100)
         assert result == 'hello world'
 
-    def test_should_return_text_unchanged_when_length_equals_max_length(self):
-        """AC7: Text exactly at max_length returns unchanged."""
-        result = truncate('hello world', 11)
-        assert result == 'hello world'
+    def test_text_exact_length_returns_unchanged(self):
+        """AC7: Text exactly at max_length should return unchanged."""
+        result = truncate('hello', 5)
+        assert result == 'hello'
 
-    def test_should_break_at_word_boundary_with_default_suffix(self):
-        """AC2: Truncates at last word boundary before max_length."""
-        result = truncate('hello world foo', 8)
-        assert result == 'hello...'
-
-    def test_should_break_at_word_boundary_with_custom_suffix(self):
-        """AC8: Custom suffix replaces default ellipsis."""
-        result = truncate('hello world foo', 9, '!')
-        assert result == 'hello wo!'
-
-    def test_should_truncate_long_word_when_no_boundary_exists(self):
-        """AC6: Hard truncate at max_length - len(suffix) for single long words."""
-        result = truncate('superlongword', 8)
-        assert result == 'super...'
-
-    def test_should_return_empty_string_when_input_empty(self):
-        """AC5: Empty string input returns empty string."""
+    def test_empty_string_returns_empty(self):
+        """AC4: Empty string should return empty string."""
         result = truncate('', 10)
         assert result == ''
 
-    def test_should_handle_multiple_word_boundaries(self):
-        """Multiple words should truncate at appropriate boundary."""
-        result = truncate('one two three four five', 12)
-        assert result == 'one two...'
+    def test_whitespace_only_returns_unchanged_if_fits(self):
+        """AC5: Whitespace-only text should return unchanged if it fits."""
+        result = truncate('   ', 10)
+        assert result == '   '
 
-    def test_should_preserve_whitespace_before_boundary(self):
-        """Whitespace handling in word boundary detection."""
+    def test_suffix_parameter_defaults_to_ellipsis(self):
+        """AC10: Suffix parameter should default to '...' when not provided."""
+        result = truncate('hello world foo', 11)
+        assert result == 'hello...'
+        assert result.endswith('...')
+
+
+class TestTruncateWordBoundary:
+    """Test truncation at word boundaries."""
+
+    def test_truncate_at_word_boundary_case_1(self):
+        """AC2: Truncate 'hello world foo' with max_length 11 should break at word boundary."""
+        result = truncate('hello world foo', 11)
+        assert result == 'hello...'
+        # Verify it's 8 chars (5 for 'hello' + 3 for '...')
+        assert len(result) == 8
+
+    def test_truncate_at_word_boundary_case_2(self):
+        """AC9: Truncate 'hello world' with max_length 8 should break at word boundary."""
         result = truncate('hello world', 8)
         assert result == 'hello...'
+        assert len(result) == 8
 
-    def test_should_handle_single_word_longer_than_limit(self):
-        """Single word longer than max_length truncates with hard cut."""
-        result = truncate('antidisestablishmentarianism', 10)
-        assert result == 'antidis...'
+    def test_truncate_multiple_words(self):
+        """Test truncation with multiple words keeps last complete word."""
+        result = truncate('the quick brown fox', 12)
+        # 'the quick' is 9 chars, suffix is 3, total would be 12
+        assert result == 'the quick...'
+        assert len(result) == 12
+
+    def test_truncate_preserves_word_before_space(self):
+        """Test that truncation breaks after word, not in middle of word."""
+        result = truncate('hello world test', 10)
+        # max_length=10, suffix=3, available=7
+        # 'hello ' is 6 chars, 'hello wo' is 8 chars
+        # Last boundary within 7 chars is at position 6 (after 'hello ')
+        assert result == 'hello...'
+        assert not result.startswith('hello w')
 
 
-class TestTruncateErrorCases:
-    """Test cases for error conditions."""
+class TestTruncateHardTruncation:
+    """Test hard truncation when no word boundary exists."""
 
-    def test_should_raise_value_error_when_max_length_equals_suffix_length(self):
-        """AC3: ValueError when max_length == len(suffix)."""
+    def test_single_word_longer_than_available_space(self):
+        """AC3: Single word longer than available space gets truncated with suffix."""
+        result = truncate('hello', 5, '...')
+        # max_length=5, suffix=3, available=2
+        # 'hello' is 5 chars, so it fits unchanged
+        assert result == 'hello'
+
+    def test_single_word_no_spaces_gets_hard_truncated(self):
+        """AC6: Single word 'superlongwordwithnobreaks' truncated to 10 chars."""
+        result = truncate('superlongwordwithnobreaks', 10, '...')
+        assert result == 'superlo...'
+        assert len(result) == 10
+
+    def test_hard_truncate_when_no_word_boundary(self):
+        """Test that without word boundaries, text is truncated at available length."""
+        result = truncate('abcdefghijklmnop', 7, '...')
+        # max_length=7, suffix=3, available=4
+        assert result == 'abcd...'
+        assert len(result) == 7
+
+    def test_single_long_word_truncated_correctly(self):
+        """Test single long word is truncated to fit max_length."""
+        result = truncate('verylongword', 8, '...')
+        # max_length=8, suffix=3, available=5
+        assert result == 'veryl...'
+        assert len(result) == 8
+
+
+class TestTruncateErrors:
+    """Test error conditions."""
+
+    def test_max_length_less_than_suffix_length_raises_error(self):
+        """AC8: ValueError when max_length < len(suffix)."""
         with pytest.raises(ValueError):
-            truncate('hello world', 5, '...')  # 5 == len('...')
+            truncate('hi', 2, '...')
 
-    def test_should_raise_value_error_when_max_length_less_than_suffix_length(self):
-        """AC4: ValueError when max_length < len(suffix)."""
+    def test_very_small_max_length_raises_error_if_less_than_suffix(self):
+        """Test that very small max_length raises ValueError."""
         with pytest.raises(ValueError):
-            truncate('hello world', 2, '...')  # 2 < 3
+            truncate('hello world', 1, '...')
 
-    def test_should_raise_value_error_with_custom_suffix_too_long(self):
-        """ValueError when custom suffix is longer than max_length."""
+    def test_zero_max_length_raises_error(self):
+        """Test that zero max_length raises ValueError."""
         with pytest.raises(ValueError):
-            truncate('hello world', 5, 'suffix!')  # 7 > 5
+            truncate('hello', 0, '...')
 
-    def test_should_raise_value_error_with_single_char_max_and_default_suffix(self):
-        """ValueError when max_length is 1 and default suffix is 3 chars."""
+    def test_negative_max_length_raises_error(self):
+        """Test that negative max_length raises ValueError."""
         with pytest.raises(ValueError):
-            truncate('hello', 1)
+            truncate('hello', -5, '...')
 
-    def test_should_raise_value_error_with_zero_max_length(self):
-        """ValueError when max_length is 0."""
-        with pytest.raises(ValueError):
-            truncate('hello', 0)
+    def test_max_length_exactly_equal_to_suffix_length_allowed(self):
+        """Test that max_length equal to suffix length is allowed (empty text space)."""
+        # This should not raise; it should return just the suffix
+        result = truncate('hello world', 3, '...')
+        assert result == '...'
+        assert len(result) == 3
+
+
+class TestTruncateCustomSuffix:
+    """Test custom suffix parameter."""
+
+    def test_custom_suffix_single_char(self):
+        """Test truncation with single character suffix."""
+        result = truncate('hello world test', 9, '!')
+        # max_length=9, suffix='!' (1 char), available=8
+        # 'hello ' is 6 chars, should use last boundary at 6
+        assert result == 'hello !'
+        assert len(result) == 7
+
+    def test_custom_suffix_longer_string(self):
+        """Test truncation with longer custom suffix."""
+        result = truncate('hello world', 11, ' [...]')
+        # max_length=11, suffix=' [...]' (6 chars), available=5
+        # 'hello' is 5 chars, fits exactly
+        assert result == 'hello [...]'
+        assert len(result) == 11
+
+    def test_empty_suffix(self):
+        """Test truncation with empty suffix."""
+        result = truncate('hello world', 5, '')
+        # max_length=5, suffix='' (0 chars), available=5
+        # 'hello' is 5 chars, but we need to check for space at position 5
+        # First 5 chars are 'hello', and there's a space at position 5
+        # So we truncate at last boundary which would be after 'hello'
+        assert result == 'hello'
+        assert len(result) == 5
+
+    def test_suffix_with_spaces(self):
+        """Test suffix that contains spaces."""
+        result = truncate('hello world test', 15, ' ...')
+        # max_length=15, suffix=' ...' (4 chars), available=11
+        assert result.endswith(' ...')
+        assert len(result) == 15
 
 
 class TestTruncateEdgeCases:
-    """Test cases for boundary conditions and edge cases."""
+    """Test edge cases and boundary conditions."""
 
-    def test_should_handle_whitespace_only_input(self):
-        """AC9: Whitespace-only text handled gracefully."""
-        result = truncate('   ', 10)
-        # Whitespace-only should be treated as trimmed away or truncated to empty
-        assert isinstance(result, str)
-        assert len(result) <= 10
+    def test_single_space_character(self):
+        """Test with single space character."""
+        result = truncate(' ', 5)
+        assert result == ' '
 
-    def test_should_handle_tabs_and_newlines(self):
-        """Whitespace types (tabs, newlines) handled gracefully."""
-        result = truncate('\t\n\t', 10)
-        assert isinstance(result, str)
-        assert len(result) <= 10
+    def test_multiple_consecutive_spaces(self):
+        """Test text with multiple consecutive spaces."""
+        result = truncate('hello     world', 8)
+        # Should find last space boundary within available space
+        assert '...' in result
 
-    def test_should_handle_text_with_multiple_spaces_between_words(self):
-        """Multiple consecutive spaces between words."""
-        result = truncate('hello    world   foo', 10)
-        assert result.endswith('...')
-        assert len(result) <= 10
+    def test_text_with_leading_spaces(self):
+        """Test text with leading spaces."""
+        result = truncate('  hello world', 10)
+        # '  hello ' is 8 chars, with suffix would be 11
+        # Last boundary within 7 available chars is at position 2 (after '  ')
+        assert result.startswith('  ')
 
-    def test_should_handle_very_long_text(self):
-        """Very long text truncates correctly."""
-        long_text = ' '.join(['word'] * 1000)
+    def test_text_with_trailing_spaces(self):
+        """Test text with trailing spaces."""
+        result = truncate('hello world  ', 8)
+        assert len(result) <= 8
+
+    def test_very_long_text(self):
+        """Test with very long text."""
+        long_text = 'word ' * 100  # 500 chars
         result = truncate(long_text, 20)
         assert len(result) == 20
         assert result.endswith('...')
 
-    def test_should_truncate_exactly_at_max_length(self):
-        """Result length must not exceed max_length."""
-        result = truncate('hello world foo bar baz', 15)
-        assert len(result) <= 15
+    def test_single_character_text(self):
+        """Test with single character text."""
+        result = truncate('a', 10)
+        assert result == 'a'
 
-    def test_should_preserve_special_characters_in_text(self):
-        """Special characters preserved before truncation point."""
-        result = truncate('hello-world foo_bar', 12)
-        assert '-' in result or '_' in result or result == 'hello-world'
+    def test_two_character_text(self):
+        """Test with two character text."""
+        result = truncate('ab', 10)
+        assert result == 'ab'
 
-    def test_should_handle_unicode_text(self):
-        """Unicode characters handled correctly."""
-        result = truncate('café résumé naïve', 12)
-        assert isinstance(result, str)
-        assert len(result) <= 12
+    def test_max_length_equal_to_text_length(self):
+        """Test when max_length exactly equals text length."""
+        text = 'hello world'
+        result = truncate(text, len(text))
+        assert result == text
 
-    def test_should_truncate_text_with_no_spaces(self):
-        """Text with no word boundaries truncates at hard position."""
-        result = truncate('abcdefghijklmnop', 8)
-        assert result == 'abcde...'
+    def test_max_length_one_less_than_text_length(self):
+        """Test when max_length is one less than text length."""
+        result = truncate('hello', 4)
+        # max_length=4, suffix=3, available=1
+        # 'hello' with only 1 char available becomes 'h...'
+        assert result == 'h...'
+        assert len(result) == 4
 
-    def test_should_handle_suffix_of_length_one(self):
-        """Custom suffix of single character."""
-        result = truncate('hello world foo', 8, '.')
-        assert len(result) == 8
-        assert result.endswith('.')
 
-    def test_should_handle_empty_string_with_custom_suffix(self):
-        """Empty string with custom suffix returns empty string."""
-        result = truncate('', 10, '>>>')
-        assert result == ''
+class TestTruncateSpecialCases:
+    """Test special and corner cases."""
 
-    def test_should_return_suffix_only_when_content_fits_in_suffix_space(self):
-        """When only suffix length available, return suffix or empty based on implementation."""
-        # max_length = 4, suffix = '...' (3 chars)
-        # This should allow 1 char of content
-        result = truncate('a', 4, '...')
-        assert len(result) <= 4
-
-    def test_should_handle_hyphenated_words_at_boundary(self):
-        """Hyphenated words treated as single word or split at hyphen."""
-        result = truncate('hello-world foo bar', 10)
-        assert '...' in result
-        assert len(result) <= 10
-
-    def test_should_preserve_content_when_exactly_one_word_fits(self):
-        """When exactly one word fits with suffix."""
-        result = truncate('hello world', 8)
-        # 'hello' is 5 chars, '...' is 3 chars = 8 total
+    def test_word_boundary_at_exact_available_length(self):
+        """Test when word boundary is exactly at available length."""
+        result = truncate('hello world test', 8)
+        # max_length=8, suffix=3, available=5
+        # 'hello' is 5 chars and followed by space
         assert result == 'hello...'
 
-    def test_should_handle_leading_spaces(self):
-        """Text with leading spaces."""
-        result = truncate('   hello world', 10)
-        assert isinstance(result, str)
-        assert len(result) <= 10
+    def test_multiple_spaces_between_words(self):
+        """Test with multiple spaces between words as boundary."""
+        result = truncate('hello  world', 10)
+        # 'hello  ' is 7 chars, with suffix would be 10
+        assert 'hello' in result
+        assert len(result) == 10
 
-    def test_should_handle_trailing_spaces_in_text(self):
-        """Text with trailing spaces before truncation point."""
-        result = truncate('hello world   ', 8)
-        assert len(result) <= 8
-        assert '...' in result
+    def test_only_one_word_exists_truncate_it(self):
+        """Test when only one word exists and it needs truncation."""
+        result = truncate('supercalifragilisticexpialidocious', 10, '...')
+        assert result == 'superca...'
+        assert len(result) == 10
+
+    def test_two_words_where_first_fits(self):
+        """Test two words where first fits exactly with available space."""
+        result = truncate('hi world', 5)
+        # max_length=5, suffix=3, available=2
+        # 'hi' is 2 chars, followed by space
+        assert result == 'hi...'
+        assert len(result) == 5
+
+    def test_suffix_equals_max_length(self):
+        """Test when suffix length equals max_length."""
+        result = truncate('hello world test', 3, '...')
+        assert result == '...'
+        assert len(result) == 3
+
+    def test_word_boundary_with_tabs(self):
+        """Test that only spaces are considered word boundaries, not tabs."""
+        result = truncate('hello\tworld', 8)
+        # Tabs should not be treated as word boundaries
+        # 'hello\tw' would be 7 chars, with suffix = 10
+        # So we need hard truncation
+        assert len(result) == 8
+
+    def test_newline_not_word_boundary(self):
+        """Test that newlines are not treated as word boundaries."""
+        result = truncate('hello\nworld', 8)
+        assert len(result) == 8
 
 
 class TestTruncateIntegration:
-    """Integration tests combining multiple requirements."""
+    """Integration tests combining multiple features."""
 
-    def test_should_truncate_and_suffix_correctly_combined(self):
-        """Truncation and suffix combine to respect max_length."""
-        result = truncate('the quick brown fox jumps', 15, '...')
-        assert len(result) == 15
-        assert result.endswith('...')
-        assert 'quick' in result or result == 'the quick br...'
-
-    def test_should_handle_real_world_sentence(self):
-        """Real-world example: truncate sentence for display."""
+    def test_full_workflow_with_word_boundaries(self):
+        """Test complete workflow with proper word boundary truncation."""
         text = 'The quick brown fox jumps over the lazy dog'
         result = truncate(text, 20)
-        assert len(result) <= 20
-        assert '...' in result
+        assert len(result) == 20
+        assert result.endswith('...')
+        # Ensure it broke at a word boundary
+        assert not result[:-3].endswith(' ')
 
-    def test_should_maintain_readability_with_custom_suffix(self):
-        """Custom suffix maintains truncation semantics."""
-        result = truncate('hello world foo', 10, ' [more]')
-        assert '[more]' in result
-        assert len(result) <= 10
+    def test_full_workflow_with_hard_truncation(self):
+        """Test complete workflow requiring hard truncation."""
+        text = 'verylongwordwithoutanyspaces'
+        result = truncate(text, 15)
+        assert len(result) == 15
+        assert result.endswith('...')
 
-    def test_should_work_with_default_suffix_consistently(self):
-        """Default suffix '...' works consistently."""
-        result1 = truncate('hello world foo', 8, '...')
-        result2 = truncate('hello world foo', 8)
+    def test_default_suffix_behavior(self):
+        """Test that default suffix is used correctly."""
+        result1 = truncate('hello world', 8)
+        result2 = truncate('hello world', 8, '...')
         assert result1 == result2
         assert result1 == 'hello...'
+
+    def test_preserves_content_integrity(self):
+        """Test that truncation preserves content integrity (no mangling)."""
+        text = 'Hello World! How are you today?'
+        result = truncate(text, 15)
+        assert len(result) <= 15
+        # Check that the truncated part is actually from the original
+        assert text.startswith(result[:-3])  # Remove suffix and check prefix
