@@ -86,6 +86,8 @@ class StoryState(TypedDict):
     design_output: str  # Architecture decisions from DESIGN phase
     test_files: str  # Test file content from TDD_RED phase
     plan_output: str  # Plan from PLAN phase (config/maint workflows)
+    reproduction_status: Optional[str]
+    reproduction_details: Optional[str]
 
 
 def create_initial_state(
@@ -116,4 +118,6 @@ def create_initial_state(
         design_output="",
         test_files="",
         plan_output="",
+        reproduction_status=None,
+        reproduction_details=None,
     )
