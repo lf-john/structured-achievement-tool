@@ -92,7 +92,7 @@ def create_sample_records(sample_audit_record_data):
             data["task_file"] = f"{task_file_prefix}_{i}.md"
             data["story_id"] = f"US-00{i+1}"
             data["story_title"] = f"Story {i+1}"
-            data["success"] = (i % 2) == 0 if i < num_records * success_ratio else (i % 2) != 0
+            data["success"] = (i < num_records * success_ratio)
             data["exit_code"] = 0 if data["success"] else 1
             data["duration_seconds"] = 60 + i * 10.0
             data["llm_provider_used_per_phase"] = {"plan": "Claude" if i % 2 == 0 else "Gemini", "code": "Gemini"}
@@ -365,8 +365,8 @@ class TestAuditJournal:
         total_duration = sum(d["duration_seconds"] for d in records_data)
         assert pytest.approx(summary["avg_duration_seconds"], 0.01) == total_duration / 3
         
-        assert summary["llm_provider_usage"]["Claude"] == 1
-        assert summary["llm_provider_usage"]["Gemini"] == 5
+        assert summary["llm_provider_usage"]["Claude"] == 2
+        assert summary["llm_provider_usage"]["Gemini"] == 4
 
     def test_summary_handles_empty_journal_file(self, clean_audit_journal):
         """

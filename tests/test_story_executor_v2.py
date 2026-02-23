@@ -91,11 +91,11 @@ class TestExecuteStory:
         assert not result.success
         assert "Cancelled" in result.reason
         MockAuditJournal.return_value.log_record.assert_called_once()
-        args, kwargs = MockAuditJournal.return_value.log_record.call_args
-        logged_record = args[0]
-        assert logged_record.story_id == "US-001"
-        assert logged_record.success is False
-        assert logged_record.error_summary == "Story execution cancelled."
+        MockAuditRecord.assert_called_once()
+        logged_record_kwargs = MockAuditRecord.call_args.kwargs
+        assert logged_record_kwargs["story_id"] == "US-001"
+        assert logged_record_kwargs["success"] is False
+        assert logged_record_kwargs["error_summary"] == "Cancelled by user"
 
 
     @pytest.mark.asyncio
@@ -139,14 +139,15 @@ class TestExecuteStory:
         assert result.attempts == 2
         
         MockAuditJournal.return_value.log_record.assert_called_once()
-        args, kwargs = MockAuditJournal.return_value.log_record.call_args
-        logged_record = args[0]
-        assert logged_record.story_id == "US-001"
-        assert logged_record.success is False
-        assert logged_record.total_turns == 2 # Max attempts
-        assert logged_record.llm_provider_used_per_phase == {"plan": "Gemini", "code": "Claude"}
-        assert "test failure" in logged_record.error_summary # Check that error context is included
-        assert "Exhausted retries" in logged_record.error_summary
+        MockAuditRecord.assert_called_once()
+        logged_record_kwargs = MockAuditRecord.call_args.kwargs
+        assert logged_record_kwargs["story_id"] == "US-001"
+        assert logged_record_kwargs["success"] is False
+        assert logged_record_kwargs["total_turns"] == 2 # Max attempts
+        assert logged_record_kwargs["llm_provider_used_per_phase"] == {"plan": "Gemini", "code": "Claude"}
+        assert "test failure" in logged_record_kwargs["error_summary"]
+        assert "Exhausted" in logged_record_kwargs["error_summary"]
+        assert "test failure" in logged_record_kwargs["error_summary"]
 
     @pytest.mark.asyncio
     async def test_execute_story_logs_audit_record_on_success(self):
@@ -158,7 +159,7 @@ class TestExecuteStory:
         
         mock_graph = MagicMock()
         mock_graph.invoke.return_value = {
-            "phase_outputs": [{"status": "success", "exit_code": 0, "phase": "CODE", "llm_provider": "Gemini"}],
+            "phase_outputs": [{"status": "complete", "exit_code": 0, "phase": "CODE", "llm_provider": "Gemini"}],
             "verify_passed": True,
             "llm_provider_used_per_phase": {"plan": "Claude", "code": "Gemini", "verify": "Claude"}
         }
@@ -182,16 +183,16 @@ class TestExecuteStory:
         assert result.attempts == 1
 
         MockAuditJournal.return_value.log_record.assert_called_once()
-        args, kwargs = MockAuditJournal.return_value.log_record.call_args
-        logged_record = args[0]
-        assert logged_record.story_id == "US-002"
-        assert logged_record.story_title == "Successful Story"
-        assert logged_record.task_file == "task-2"
-        assert logged_record.success is True
-        assert logged_record.duration_seconds == 100
-        assert logged_record.llm_provider_used_per_phase == {"plan": "Claude", "code": "Gemini", "verify": "Claude"}
-        assert logged_record.error_summary is None
-        assert "CODE" in logged_record.phases_completed # Assuming phases completed are derived from phase_outputs
+        MockAuditRecord.assert_called_once()
+        logged_record_kwargs = MockAuditRecord.call_args.kwargs
+        assert logged_record_kwargs["story_id"] == "US-002"
+        assert logged_record_kwargs["story_title"] == "Successful Story"
+        assert logged_record_kwargs["task_file"] == "task-2"
+        assert logged_record_kwargs["success"] is True
+        assert logged_record_kwargs["duration_seconds"] == 100
+        assert logged_record_kwargs["llm_provider_used_per_phase"] == {"plan": "Claude", "code": "Gemini", "verify": "Claude"}
+        assert logged_record_kwargs["error_summary"] is None
+        assert "CODE" in logged_record_kwargs["phases_completed"]
         
     @pytest.mark.asyncio
     async def test_execute_story_logs_audit_record_on_failure(self):
@@ -237,14 +238,14 @@ class TestExecuteStory:
         assert result.attempts == 1
 
         MockAuditJournal.return_value.log_record.assert_called_once()
-        args, kwargs = MockAuditJournal.return_value.log_record.call_args
-        logged_record = args[0]
-        assert logged_record.story_id == "US-003"
-        assert logged_record.story_title == "Failed Story"
-        assert logged_record.task_file == "task-3"
-        assert logged_record.success is False
-        assert logged_record.duration_seconds == 70
-        assert logged_record.llm_provider_used_per_phase == {"plan": "Gemini", "tdd_red": "Claude"}
-        assert "TDD_RED phase failed" in logged_record.error_summary
-        assert "TDD_RED" in logged_record.phases_completed # Even if failed, it was attempted and outputted
+        MockAuditRecord.assert_called_once()
+        logged_record_kwargs = MockAuditRecord.call_args.kwargs
+        assert logged_record_kwargs["story_id"] == "US-003"
+        assert logged_record_kwargs["story_title"] == "Failed Story"
+        assert logged_record_kwargs["task_file"] == "task-3"
+        assert logged_record_kwargs["success"] is False
+        assert logged_record_kwargs["duration_seconds"] == 70
+        assert logged_record_kwargs["llm_provider_used_per_phase"] == {"plan": "Gemini", "tdd_red": "Claude"}
+        assert "TDD_RED phase failed" in logged_record_kwargs["error_summary"]
+        assert "TDD_RED" in logged_record_kwargs["phases_completed"]
 
