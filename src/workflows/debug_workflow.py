@@ -64,7 +64,7 @@ class DebugWorkflow(BaseWorkflow):
         # Define nodes for the core stages
         workflow.add_node("reproduce", reproduce)
         workflow.add_node("diagnose", diagnose)
-        workflow.add_node("ROUTING", routing_decision) # Added to satisfy test expecting uppercase "ROUTING"
+        workflow.add_node("ROUTING", routing_decision)
 
         # Define nodes for the routing outcome branches
         workflow.add_node("dev", dev_branch)
@@ -77,11 +77,11 @@ class DebugWorkflow(BaseWorkflow):
 
         # Define edges
         workflow.add_edge("reproduce", "diagnose")
-        workflow.add_edge("diagnose", "routing") # Assuming a node named "routing"
+        workflow.add_edge("diagnose", "ROUTING")
 
         # The routing decision is a conditional edge from a node to multiple potential next nodes
         workflow.add_conditional_edges(
-            "routing",  # The source node for the conditional transition
+            "ROUTING",  # The source node for the conditional transition
             routing_decision,
             {
                 "dev": "dev",
