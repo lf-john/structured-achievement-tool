@@ -213,6 +213,11 @@ def test_check_node(
 
     status = PhaseStatus.COMPLETE if state["verify_passed"] else PhaseStatus.FAILED
 
+    # Increment retry counter when check fails (used by check_test_decision to break loops)
+    if not state["verify_passed"]:
+        state["phase_retry_count"] = state.get("phase_retry_count", 0) + 1
+        logger.info(f"Test check {phase_name}: retry count now {state['phase_retry_count']}/{MAX_PHASE_RETRIES}")
+
     phase_output = PhaseOutput(
         phase=phase_name,
         status=status,
@@ -304,9 +309,10 @@ def check_test_decision(state: StoryState) -> Literal["pass", "fail"]:
     """Route after test check nodes."""
     if state.get("verify_passed", True):
         return "pass"
-    # Check retry limit
+    # Check retry limit (3 retries for checks, not the full MAX_PHASE_RETRIES)
     retry_count = state.get("phase_retry_count", 0)
-    if retry_count >= MAX_PHASE_RETRIES:
+    if retry_count >= 3:
+        logger.warning(f"Check failed {retry_count} times, moving on")
         return "pass"  # Give up on retrying, continue to next phase
     return "fail"
 
