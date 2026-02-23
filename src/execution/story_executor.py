@@ -80,7 +80,7 @@ def _log_audit_record(
     phases_completed = [p.get("phase", "") for p in final_state.get("phase_outputs", []) if p.get("phase")] if final_state else []
 
     record = AuditRecord(
-        timestamp=datetime.now(),
+        timestamp=datetime.now().isoformat(),
         task_file=task_file,
         story_id=story_id,
         story_title=story_title,
