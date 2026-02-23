@@ -208,7 +208,8 @@ async def execute_story(
 
         # Execute the workflow
         try:
-            final_state = await graph.invoke(state) # ADDED AWAIT HERE
+            final_state = await graph.invoke(state)
+            final_story_state = final_state # Update final_story_state here with the result of invoke # ADDED AWAIT HERE
 
             # Check if workflow completed successfully
             phase_outputs = final_state.get("phase_outputs", [])
@@ -294,14 +295,23 @@ async def execute_story(
 
     # After the loop, determine the final outcome if not already set by a break
     if not story_completed_successfully_in_loop:
-        if not final_success and final_reason == "": # Only update if not already set by cancellation or fatal error
-            if notifier:
-                notifier.notify_story_failed(story_id, story_title, f"Failed after {max_attempts} attempts")
-            final_success = False
+        # If we reached here and the story wasn't successfully completed in the loop,
+        # it means it either failed fatally, was cancelled, or exhausted attempts.
+        # final_success, final_reason, final_exit_code should already be set
+        # by the break statements in the failure paths (cancellation, fatal error, circuit breaker).
+        # If it just exhausted attempts without a specific fatal or cancellation break,
+        # then final_success will be False, and final_reason will be the last_failure_reason.
+        if final_reason == "": # This case covers exhaustion without a specific error reason set before
             final_reason = f"Exhausted {max_attempts} attempts. Last failure: {last_failure_reason}"
             final_exit_code = 1
-        if final_story_state is None:
-            final_story_state = state # Fallback to last known state if not set
+            final_success = False # Ensure it's explicitly False
+    else: # Story completed successfully in the loop
+        final_success = True
+        final_reason = "Story completed successfully"
+        final_exit_code = 0
+
+    if final_story_state is None and state is not None:
+        final_story_state = state # Fallback to last known state if not set
 
     # Log audit record once at the end
     _create_and_log_audit_record(
