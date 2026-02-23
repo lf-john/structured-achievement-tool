@@ -155,6 +155,7 @@ def phase_node(
     # Update verify_passed for VERIFY phases to feed verify_decision
     if phase_name in ("VERIFY", "VERIFY_SCRIPT"):
         state["verify_passed"] = (status == PhaseStatus.COMPLETE)
+        logger.info(f"VERIFY phase setting verify_passed={state['verify_passed']} (status={status.value})")
         # Reset check retry counter — each VERIFY→CODE→CHECK cycle gets fresh budget
         state["phase_retry_count"] = 0
         # Track VERIFY→CODE cycle count when VERIFY fails
@@ -311,12 +312,14 @@ def mediator_gate_node(
 
 def verify_decision(state: StoryState) -> Literal["pass", "fail"]:
     """Route after VERIFY: pass → LEARN, fail → CODE."""
-    if state.get("verify_passed", True):
+    vp = state.get("verify_passed", True)
+    vr = state.get("verify_retry_count", 0)
+    logger.info(f"verify_decision: verify_passed={vp}, verify_retry_count={vr}")
+    if vp:
         return "pass"
     # Limit VERIFY→CODE cycles to avoid infinite loops
-    verify_retries = state.get("verify_retry_count", 0)
-    if verify_retries >= VERIFY_RETRY_LIMIT:
-        logger.warning(f"VERIFY failed {verify_retries} times, accepting and moving to LEARN")
+    if vr >= VERIFY_RETRY_LIMIT:
+        logger.warning(f"VERIFY failed {vr} times, accepting and moving to LEARN")
         return "pass"
     return "fail"
 
