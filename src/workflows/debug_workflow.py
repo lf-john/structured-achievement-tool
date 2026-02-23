@@ -29,6 +29,43 @@ def simulate_reproduction(failure_context: str) -> dict:
     else:
         return {"status": "not_reproduced", "details": f"Could not reproduce failure with context: {failure_context[:50]}..."}
 
+
+def categorize_diagnosis(reproduction_details: str) -> dict:
+    """
+    Categorizes a diagnosed issue into one of four outcomes: Dev, Config, Maint, or Report.
+
+    Returns:
+        dict with "category" and "reasoning" keys
+    """
+    details_lower = reproduction_details.lower()
+
+    # Check for maintenance issues (system resource/infrastructure problems)
+    if any(term in details_lower for term in ["disk", "space", "memory", "permissions", "service", "restart"]):
+        return {
+            "category": "Maint",
+            "reasoning": "System resource or infrastructure issue requiring maintenance"
+        }
+
+    # Check for configuration issues
+    if any(term in details_lower for term in ["config", "parameter", "port", "invalid"]):
+        return {
+            "category": "Config",
+            "reasoning": "Configuration parameter or setting issue"
+        }
+
+    # Check for non-reproducible/informational issues
+    if "not reproduced" in details_lower or "not_reproduced" in details_lower:
+        return {
+            "category": "Report",
+            "reasoning": "Non-reproducible issue - informational only"
+        }
+
+    # Default to Dev (code-level issues)
+    return {
+        "category": "Dev",
+        "reasoning": "Code-level issue requiring development fix"
+    }
+
 # Placeholder node functions - these will contain actual logic later
 def reproduce(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
     logger.info("Entering REPRODUCE state.")
@@ -43,7 +80,19 @@ def reproduce(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
 
 def diagnose(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
     logger.info("Entering DIAGNOSE state.")
-    # Placeholder for actual diagnosis logic
+
+    # Get reproduction details to use for diagnosis
+    reproduction_details = state.get("reproduction_details", "")
+
+    # Categorize the diagnosed issue
+    diagnosis = categorize_diagnosis(reproduction_details)
+
+    # Update state with diagnosis information
+    state["diagnosis_category"] = diagnosis["category"]
+    state["diagnosis_reasoning"] = diagnosis["reasoning"]
+
+    logger.info(f"Diagnosis: {diagnosis['category']} - {diagnosis['reasoning']}")
+
     return state
 
 def routing(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
@@ -77,6 +126,8 @@ class DebugWorkflow(BaseWorkflow):
     """
     def __init__(self, routing_engine: Optional[RoutingEngine] = None):
         super().__init__(routing_engine)
+        # Compile the workflow graph and store as app
+        self.app = self.compile()
 
     def routing_decision(self, state: StoryState) -> Literal["dev", "config", "maint", "report"]:
         """
@@ -91,6 +142,18 @@ class DebugWorkflow(BaseWorkflow):
         decision = self.routing_engine.route_debug_issue(state)
         logger.info(f"Routing decision: {decision}")
         return decision
+
+    def run(self, state: StoryState) -> StoryState:
+        """
+        Run the DebugWorkflow with the given initial state.
+
+        Args:
+            state: The initial StoryState
+
+        Returns:
+            The final StoryState after the workflow completes
+        """
+        return self.app.invoke(state)
 
     def build_graph(self) -> StateGraph:
         """
