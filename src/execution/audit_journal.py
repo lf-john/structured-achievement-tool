@@ -1,50 +1,63 @@
-import os
 import json
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
-from collections import defaultdict
 
 class AuditRecord(BaseModel):
-    timestamp: datetime = Field(default_factory=datetime.now)
-    task_file: str
-    story_id: str
-    story_title: str
-    llm_provider_used_per_phase: Dict[str, str]
-    session_id: str = "N/A" # Default if not explicitly provided
-    total_turns: int
-    exit_code: int
-    duration_seconds: float
-    success: bool
-    phases_completed: List[str]
-    error_summary: Optional[str] = None
+    """
+    Pydantic model for a single audit log entry of a story execution.
+    """
+    timestamp: datetime = Field(default_factory=datetime.now, description="Timestamp of the record creation")
+    task_file: str = Field(..., description="Path to the task file (e.g., /path/to/task.md)")
+    story_id: str = Field(..., description="Unique identifier for the story")
+    story_title: str = Field(..., description="Title of the story")
+    llm_provider_used_per_phase: Dict[str, str] = Field(default_factory=dict, description="LLM provider used for each phase (e.g., {'plan': 'Claude', 'code': 'Gemini'})")
+    session_id: str = Field(..., description="Unique identifier for the execution session")
+    total_turns: int = Field(..., description="Total LLM turns taken during story execution")
+    exit_code: int = Field(..., description="Exit code of the story execution (0 for success, non-zero for failure)")
+    duration_seconds: float = Field(..., description="Duration of the story execution in seconds")
+    success: bool = Field(..., description="True if the story execution was successful, False otherwise")
+    phases_completed: List[str] = Field(default_factory=list, description="List of phases completed during the story execution")
+    error_summary: Optional[str] = Field(None, description="Summary of the error if the story failed")
 
 class AuditJournal:
+    """
+    Manages the audit journal for SAT story executions.
+    Logs records to a JSONL file and provides query and summary capabilities.
+    """
     def __init__(self, journal_path: str = ".memory/audit_journal.jsonl"):
         self.journal_path = journal_path
+        # Ensure the directory exists
         os.makedirs(os.path.dirname(self.journal_path), exist_ok=True)
 
     def log_record(self, record: AuditRecord):
+        """
+        Appends an AuditRecord to the audit journal file as a JSON line.
+        """
         with open(self.journal_path, "a") as f:
             f.write(record.model_dump_json() + "\n")
 
-    def _read_records(self) -> List[AuditRecord]:
+    def _read_all_records(self) -> List[AuditRecord]:
+        """Reads all records from the journal file."""
         records = []
         if not os.path.exists(self.journal_path):
             return records
         with open(self.journal_path, "r") as f:
             for line in f:
                 try:
-                    data = json.loads(line)
-                    records.append(AuditRecord(**data))
-                except json.JSONDecodeError as e:
-                    print(f"Error decoding JSON from audit journal: {e} - Line: {line.strip()}")
-                except ValueError as e:
-                    print(f"Error validating AuditRecord from audit journal: {e} - Data: {data}")
+                    records.append(AuditRecord.model_validate_json(line))
+                except Exception as e:
+                    # Log error if a line is malformed, but continue processing
+                    print(f"Error reading audit record: {e} in line: {line.strip()}")
         return records
 
     def query(self, since: Optional[datetime] = None, task_file: Optional[str] = None, success: Optional[bool] = None) -> List[AuditRecord]:
-        all_records = self._read_records()
+        """
+        Queries audit records based on optional filters.
+        """
+        all_records = self._read_all_records()
         filtered_records = []
         for record in all_records:
             match = True
@@ -58,9 +71,12 @@ class AuditJournal:
                 filtered_records.append(record)
         return filtered_records
 
-    def summary(self) -> Dict[str, Any]:
-        all_records = self._read_records()
-        
+    def summary(self) -> Dict[str, any]:
+        """
+        Returns aggregate statistics from the audit journal.
+        """
+        all_records = self._read_all_records()
+
         total_executions = len(all_records)
         successful_executions = sum(1 for r in all_records if r.success)
         failed_executions = total_executions - successful_executions
@@ -69,17 +85,17 @@ class AuditJournal:
         
         total_duration = sum(r.duration_seconds for r in all_records)
         avg_duration_seconds = (total_duration / total_executions) if total_executions > 0 else 0.0
-        
-        llm_provider_usage = defaultdict(int)
+
+        llm_provider_usage: Dict[str, int] = {}
         for record in all_records:
             for provider in record.llm_provider_used_per_phase.values():
-                llm_provider_usage[provider] += 1
-                
+                llm_provider_usage[provider] = llm_provider_usage.get(provider, 0) + 1
+
         return {
             "total_executions": total_executions,
             "successful_executions": successful_executions,
             "failed_executions": failed_executions,
-            "success_rate": round(success_rate, 2),
-            "avg_duration_seconds": round(avg_duration_seconds, 2),
-            "llm_provider_usage": dict(llm_provider_usage),
+            "success_rate": success_rate,
+            "avg_duration_seconds": avg_duration_seconds,
+            "llm_provider_usage": llm_provider_usage,
         }

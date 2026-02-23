@@ -80,13 +80,13 @@ def _log_audit_record(
     phases_completed = [p.get("phase", "") for p in final_state.get("phase_outputs", []) if p.get("phase")] if final_state else []
 
     record = AuditRecord(
-        timestamp=datetime.now().isoformat(),
+        timestamp=datetime.now(),
         task_file=task_file,
         story_id=story_id,
         story_title=story_title,
         llm_provider_used_per_phase=llm_provider_used_per_phase,
-        session_id=f"{task_file}-{story_id}",
-        total_turns=attempts,
+        session_id=final_state.get("session_id", f"{task_file}-{story_id}") if final_state else f"{task_file}-{story_id}",
+        total_turns=final_state.get("story_attempt", attempts) if final_state else attempts,
         exit_code=exit_code,
         duration_seconds=duration,
         success=success,
