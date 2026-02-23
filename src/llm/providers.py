@@ -173,6 +173,27 @@ def get_env_for_provider(provider: ProviderConfig) -> Dict[str, str]:
     return env
 
 
+def is_provider_available(provider: ProviderConfig) -> bool:
+    """Check if a provider's prerequisites are met (API keys, CLI tools)."""
+    import shutil
+
+    # Check CLI command exists
+    if not shutil.which(provider.cli_command):
+        return False
+
+    # Gemini requires GEMINI_API_KEY
+    if provider.cli_command == "gemini":
+        if not os.environ.get("GEMINI_API_KEY"):
+            return False
+
+    # GLM models require ANTHROPIC_AUTH_TOKEN or specific env vars
+    if provider.env_vars.get("ANTHROPIC_BASE_URL"):
+        if not os.environ.get("ANTHROPIC_AUTH_TOKEN") and not os.environ.get("ANTHROPIC_API_KEY"):
+            return False
+
+    return True
+
+
 def list_providers(local_only: bool = False, cloud_only: bool = False) -> list:
     """List available providers, optionally filtered."""
     result = []
