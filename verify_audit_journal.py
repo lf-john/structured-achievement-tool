@@ -1,89 +1,61 @@
+import sys
+from pathlib import Path
+from datetime import datetime
 import json
 import os
-from datetime import datetime
-from pathlib import Path
-import sys
 
-# Add the src directory to the Python path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add src to path to allow imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.execution.audit_journal import AuditJournal, AuditRecord
 
 def run_verification():
-    """
-    Verifies the AuditJournal functionality.
-    Returns True if verification passes, False otherwise.
-    """
-    test_journal_path = Path(".memory/test_audit_journal.jsonl")
-    test_journal_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Clean up previous test file if it exists
-    if test_journal_path.exists():
-        test_journal_path.unlink()
-
     try:
-        # 1. Create a sample AuditRecord
+        # 1. Create a dummy record
         record = AuditRecord(
-            task_file="test_task.md",
-            story_id="TS-1",
+            task_file="test.md",
+            story_id="test-story",
             story_title="Test Story",
-            llm_provider_per_phase={"design": "claude-3-opus", "code": "gemini-1.5-pro"},
-            session_id="test-session-123",
+            llm_provider_per_phase={"design": "claude"},
+            session_id="test-session",
             total_turns=5,
             exit_code=0,
             duration_seconds=123.45,
             success=True,
-            phases_completed=["design", "code", "verify"],
+            phases_completed=["design", "code"],
             error_summary=None,
         )
 
-        # 2. Instantiate AuditJournal and append the record
-        journal = AuditJournal(journal_path=test_journal_path)
+        # 2. Append it to a temporary journal file
+        journal_path = Path(".memory/test_audit_journal.jsonl")
+        if journal_path.exists():
+            journal_path.unlink()
+
+        journal = AuditJournal(journal_path=journal_path)
         journal.append_record(record)
 
-        # 3. Verify the file was created and contains the correct data
-        if not test_journal_path.exists():
-            print("FAIL: Journal file was not created.")
-            return False
+        # 3. Read the file and verify its content
+        with open(journal_path, "r") as f:
+            content = f.read()
 
-        with open(test_journal_path, "r") as f:
-            line = f.readline()
-            if not line:
-                print("FAIL: Journal file is empty.")
-                return False
+        data = json.loads(content)
 
-            try:
-                data = json.loads(line)
-            except json.JSONDecodeError:
-                print("FAIL: Could not decode JSON from journal file.")
-                return False
+        # 4. Assert correctness
+        assert data['story_id'] == "test-story"
+        assert data['success'] is True
+        assert content.strip().endswith("}") # check it's a single line json
 
-        # 4. Check if the written data matches the original record
-        # Pydantic's model_dump_json takes care of serialization details like datetime
-        expected_data = json.loads(record.model_dump_json())
-
-        if data["story_id"] != expected_data["story_id"]:
-             print(f"FAIL: story_id mismatch. Got {data['story_id']}, expected {expected_data['story_id']}")
-             return False
-
-        if data["success"] != expected_data["success"]:
-             print(f"FAIL: success mismatch. Got {data['success']}, expected {expected_data['success']}")
-             return False
-
-        print("PASS: AuditJournal correctly appended the record as a JSON line.")
+        print("Verification successful!")
+        # Clean up
+        if journal_path.exists():
+            journal_path.unlink()
+        
         return True
 
     except Exception as e:
-        print(f"An unexpected error occurred during verification: {e}")
+        print(f"Verification failed: {e}", file=sys.stderr)
         return False
-    finally:
-        # 5. Clean up the test file
-        if test_journal_path.exists():
-            test_journal_path.unlink()
-            print(f"Cleaned up {test_journal_path}")
 
 if __name__ == "__main__":
-    if run_verification():
-        sys.exit(0)
-    else:
+    if not run_verification():
         sys.exit(1)
