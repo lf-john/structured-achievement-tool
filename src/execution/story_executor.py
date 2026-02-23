@@ -86,15 +86,16 @@ def _create_and_log_audit_record(
     story_title: str,
     task_id: str,
     story_start_datetime: datetime, # The actual datetime when the story started
-    execution_start_monotonic_time: float, # The monotonic time when execute_story began
+    execution_start_monotonic_time: float,
+
     success: bool,
-    final_state: dict,
+    final_state: Optional[dict],
     session_id_from_state: str,
     error_summary: Optional[str] = None,
     exit_code: int = 0,
 ):
     """Helper to create and log an AuditRecord."""
-    duration_seconds = time.monotonic() - execution_start_monotonic_time
+    duration_seconds = (datetime.now() - story_start_datetime).total_seconds()
     phase_outputs = final_state.get("phase_outputs", []) if final_state else []
     llm_provider_per_phase = {
         p.get("phase"): p.get("llm_provider", "unknown")

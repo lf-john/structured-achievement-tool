@@ -3,13 +3,14 @@ from unittest.mock import mock_open, patch
 from datetime import datetime, timedelta
 import json
 import sys
+import os
 
 # This import will cause ModuleNotFoundError in TDD-RED phase
 from src.execution.audit_journal import AuditJournal, AuditRecord
 from pydantic import ValidationError
 
 """
-IMPLEMENTATION PLAN for US-001:
+IMPLEMENTATION PLAN for US-003:
 
 Components:
   - AuditJournal class (src/execution/audit_journal.py):
@@ -47,27 +48,30 @@ Test Cases:
      - AC 3 -> test_audit_record_model_definition_with_valid_data(): Verifies correct instantiation and type checking.
      - AC 3 -> test_audit_record_model_validation_fails_on_invalid_data(): Ensures Pydantic validation works.
   2. AuditJournal Initialization:
-     - AC 2 -> test_audit_journal_initialization(): Ensures AuditJournal can be instantiated.
+     - AC 1 -> test_audit_journal_initialization_creates_directory(): Ensures AuditJournal creates the directory.
+     - AC 1 -> test_audit_journal_initialization(): Ensures AuditJournal can be instantiated.
   3. Append Records:
-     - AC 4 -> test_append_record_writes_valid_json_line(): Verifies a single record is written as a correct JSON line.
-     - AC 4 -> test_append_record_writes_multiple_records_as_json_lines(): Verifies multiple records are written correctly.
-     - AC 4 -> test_append_record_creates_journal_file_if_not_exists(): Ensures file creation.
+     - AC 2 -> test_append_record_writes_valid_json_line(): Verifies a single record is written as a correct JSON line.
+     - AC 2 -> test_append_record_writes_multiple_records_as_json_lines(): Verifies multiple records are written correctly.
+     - AC 2 -> test_append_record_creates_journal_file_if_not_exists(): Ensures file creation.
   4. Query Records:
-     - AC 5 -> test_query_returns_all_records_when_no_filters(): No filters applied.
-     - AC 5 -> test_query_filters_by_since_datetime(): Filters by timestamp (since).
-     - AC 5 -> test_query_filters_by_task_file(): Filters by task_file.
-     - AC 5 -> test_query_filters_by_success_status(): Filters by success boolean.
-     - AC 5 -> test_query_filters_by_combined_parameters(): Filters by multiple criteria.
-     - AC 5 -> test_query_returns_empty_list_for_no_matches(): No records match filters.
-     - AC 5 -> test_query_handles_empty_journal_file(): Query on an empty journal.
+     - AC 4 -> test_query_returns_all_records_when_no_filters(): No filters applied.
+     - AC 4 -> test_query_filters_by_since_datetime(): Filters by timestamp (since).
+     - AC 4 -> test_query_filters_by_task_file(): Filters by task_file.
+     - AC 4 -> test_query_filters_by_success_status(): Filters by success boolean.
+     - AC 4 -> test_query_filters_by_combined_parameters(): Filters by multiple criteria.
+     - AC 4 -> test_query_returns_empty_list_for_no_matches(): No records match filters.
+     - AC 4 -> test_query_handles_empty_journal_file(): Query on an empty journal.
+     - AC 4 -> test_query_handles_malformed_json_lines(): Ensures malformed lines are skipped gracefully.
   5. Summary Statistics:
-     - AC 6 -> test_summary_calculates_correct_statistics_for_multiple_records(): Verifies all aggregate statistics are correct for a set of records.
-     - AC 6 -> test_summary_handles_empty_journal_file(): Summary on an empty journal returns default/zero values.
-     - AC 6 -> test_summary_handles_single_record(): Summary for a single record.
-     - AC 6 -> test_summary_calculates_success_rate_correctly(): Specific check for success rate with mixed results.
+     - AC 5 -> test_summary_calculates_correct_statistics_for_multiple_records(): Verifies all aggregate statistics are correct for a set of records.
+     - AC 5 -> test_summary_handles_empty_journal_file(): Summary on an empty journal returns default/zero values.
+     - AC 5 -> test_summary_handles_single_record(): Summary for a single record.
+     - AC 5 -> test_summary_calculates_success_rate_correctly(): Specific check for success rate with mixed results.
 """
 
 JOURNAL_FILE = ".memory/audit_journal.jsonl"
+JOURNAL_DIR = os.path.dirname(JOURNAL_FILE)
 
 @pytest.fixture
 def mock_audit_records():
@@ -136,12 +140,21 @@ def mock_jsonl_content(mock_audit_records):
     """Fixture to provide JSONL content string from mock records."""
     return "\n".join(record.model_dump_json() for record in mock_audit_records) + "\n"
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def mock_filesystem():
-    """Fixture to mock file system operations for AuditJournal."""
+    """Fixture to mock file system operations for AuditJournal for append/creation tests."""
     m_open = mock_open()
     with patch("builtins.open", m_open):
-        with patch("os.path.exists", return_value=True): # Assume file exists by default for reads
+        with patch("os.path.exists", return_value=True): # Assume file exists by default for writes
+            with patch("os.makedirs", return_value=None): # Mock makedirs
+                yield m_open
+
+@pytest.fixture
+def mock_journal_reader(mock_jsonl_content):
+    """Fixture to mock file system operations for AuditJournal for read tests."""
+    m_open = mock_open(read_data=mock_jsonl_content)
+    with patch("builtins.open", m_open):
+        with patch("os.path.exists", return_value=True): # Assume file exists for reads
             yield m_open
 
 class TestAuditRecord:
@@ -204,13 +217,20 @@ class TestAuditRecord:
 class TestAuditJournal:
     """Tests for the AuditJournal class."""
 
+    def test_audit_journal_initialization_creates_directory(self):
+        """AC 1: Ensures AuditJournal creates the journal directory if it doesn't exist."""
+        with patch("os.path.exists", return_value=False) as mock_exists:
+            with patch("os.makedirs") as mock_makedirs:
+                AuditJournal(JOURNAL_FILE)
+                mock_makedirs.assert_called_once_with(JOURNAL_DIR, exist_ok=True)
+
     def test_audit_journal_initialization(self, mock_filesystem):
-        """AC 2: Ensures AuditJournal can be instantiated."""
+        """AC 1: Ensures AuditJournal can be instantiated."""
         journal = AuditJournal(JOURNAL_FILE)
         assert journal.journal_file == JOURNAL_FILE
 
     def test_append_record_writes_valid_json_line(self, mock_filesystem):
-        """AC 4: Verifies a single record is written as a correct JSON line."""
+        """AC 2: Verifies a single record is written as a correct JSON line."""
         journal = AuditJournal(JOURNAL_FILE)
         record = AuditRecord(
             timestamp=datetime(2023, 1, 1, 12, 0, 0),
@@ -235,7 +255,7 @@ class TestAuditJournal:
         assert json.loads(written_content) == json.loads(record.model_dump_json())
 
     def test_append_record_writes_multiple_records_as_json_lines(self, mock_filesystem, mock_audit_records):
-        """AC 4: Verifies multiple records are written correctly."""
+        """AC 2: Verifies multiple records are written correctly."""
         journal = AuditJournal(JOURNAL_FILE)
         for record in mock_audit_records:
             journal.append_record(record)
@@ -246,7 +266,7 @@ class TestAuditJournal:
             assert mock_filesystem().write.call_args_list[i].args[0] == expected_jsonl
 
     def test_append_record_creates_journal_file_if_not_exists(self):
-        """AC 4: Ensures journal file is created if it does not exist."""
+        """AC 2: Ensures journal file is created if it does not exist."""
         with patch("builtins.open", mock_open()) as m_open:
             with patch("os.path.exists", return_value=False): # File does not exist initially
                 journal = AuditJournal(JOURNAL_FILE)
@@ -267,18 +287,16 @@ class TestAuditJournal:
             journal.append_record(record)
             m_open.assert_called_with(JOURNAL_FILE, "a", encoding="utf-8")
 
-    def test_query_returns_all_records_when_no_filters(self, mock_filesystem, mock_jsonl_content, mock_audit_records):
-        """AC 5: Tests query returns all records when no filters are applied."""
-        mock_filesystem().return_value.__enter__.return_value.readlines.return_value = mock_jsonl_content.splitlines(keepends=True)
+    def test_query_returns_all_records_when_no_filters(self, mock_journal_reader, mock_audit_records):
+        """AC 4: Tests query returns all records when no filters are applied."""
         journal = AuditJournal(JOURNAL_FILE)
         results = journal.query()
         assert len(results) == len(mock_audit_records)
         assert all(isinstance(r, AuditRecord) for r in results)
         assert [r.story_id for r in results] == [r.story_id for r in mock_audit_records]
 
-    def test_query_filters_by_since_datetime(self, mock_filesystem, mock_jsonl_content, mock_audit_records):
-        """AC 5: Tests query filters records based on 'since' datetime."""
-        mock_filesystem().return_value.__enter__.return_value.readlines.return_value = mock_jsonl_content.splitlines(keepends=True)
+    def test_query_filters_by_since_datetime(self, mock_journal_reader, mock_audit_records):
+        """AC 4: Tests query filters records based on 'since' datetime."""
         journal = AuditJournal(JOURNAL_FILE)
         # Query for records since 2023-01-01 10:30:00
         since_time = datetime(2023, 1, 1, 10, 30, 0)
@@ -286,17 +304,15 @@ class TestAuditJournal:
         expected_story_ids = ["story_2", "story_3", "story_4"] # story_1 is before since_time
         assert [r.story_id for r in results] == expected_story_ids
 
-    def test_query_filters_by_task_file(self, mock_filesystem, mock_jsonl_content):
-        """AC 5: Tests query filters records based on 'task_file'."""
-        mock_filesystem().return_value.__enter__.return_value.readlines.return_value = mock_jsonl_content.splitlines(keepends=True)
+    def test_query_filters_by_task_file(self, mock_journal_reader):
+        """AC 4: Tests query filters records based on 'task_file'."""
         journal = AuditJournal(JOURNAL_FILE)
         results = journal.query(task_file="task_A.md")
         expected_story_ids = ["story_1", "story_3"]
         assert [r.story_id for r in results] == expected_story_ids
 
-    def test_query_filters_by_success_status(self, mock_filesystem, mock_jsonl_content):
-        """AC 5: Tests query filters records based on 'success' status."""
-        mock_filesystem().return_value.__enter__.return_value.readlines.return_value = mock_jsonl_content.splitlines(keepends=True)
+    def test_query_filters_by_success_status(self, mock_journal_reader):
+        """AC 4: Tests query filters records based on 'success' status."""
         journal = AuditJournal(JOURNAL_FILE)
         results_success = journal.query(success=True)
         expected_success_story_ids = ["story_1", "story_3", "story_4"]
@@ -306,9 +322,8 @@ class TestAuditJournal:
         expected_failure_story_ids = ["story_2"]
         assert [r.story_id for r in results_failure] == expected_failure_story_ids
 
-    def test_query_filters_by_combined_parameters(self, mock_filesystem, mock_jsonl_content):
-        """AC 5: Tests query filters records based on combined parameters."""
-        mock_filesystem().return_value.__enter__.return_value.readlines.return_value = mock_jsonl_content.splitlines(keepends=True)
+    def test_query_filters_by_combined_parameters(self, mock_journal_reader):
+        """AC 4: Tests query filters records based on combined parameters."""
         journal = AuditJournal(JOURNAL_FILE)
         # task_file="task_A.md", success=True, since=datetime(2023, 1, 1, 10, 30, 0)
         results = journal.query(
@@ -319,15 +334,14 @@ class TestAuditJournal:
         expected_story_ids = ["story_3"] # story_1 is before since_time, story_2 is not task_A.md and is failure
         assert [r.story_id for r in results] == expected_story_ids
 
-    def test_query_returns_empty_list_for_no_matches(self, mock_filesystem, mock_jsonl_content):
-        """AC 5: Tests query returns an empty list if no records match the filters."""
-        mock_filesystem().return_value.__enter__.return_value.readlines.return_value = mock_jsonl_content.splitlines(keepends=True)
+    def test_query_returns_empty_list_for_no_matches(self, mock_journal_reader):
+        """AC 4: Tests query returns an empty list if no records match the filters."""
         journal = AuditJournal(JOURNAL_FILE)
         results = journal.query(task_file="non_existent_task.md")
         assert len(results) == 0
 
     def test_query_handles_empty_journal_file(self):
-        """AC 5: Tests query on an empty journal file."""
+        """AC 4: Tests query on an empty journal file."""
         with patch("builtins.open", mock_open()) as m_open:
             with patch("os.path.exists", return_value=True):
                 m_open.return_value.__enter__.return_value.readlines.return_value = []
@@ -335,9 +349,50 @@ class TestAuditJournal:
                 results = journal.query()
             assert len(results) == 0
 
-    def test_summary_calculates_correct_statistics_for_multiple_records(self, mock_filesystem, mock_jsonl_content):
-        """AC 6: Verifies all aggregate statistics are correct for a set of records."""
-        mock_filesystem().return_value.__enter__.return_value.readlines.return_value = mock_jsonl_content.splitlines(keepends=True)
+    def test_query_handles_malformed_json_lines(self):
+        """AC 4: Tests that query gracefully handles and skips malformed JSON lines."""
+        malformed_content = [
+            AuditRecord(
+                timestamp=datetime(2023, 1, 1, 10, 0, 0),
+                task_file="task_A.md",
+                story_id="story_1",
+                story_title="Title 1",
+                llm_provider_per_phase={"plan": "Claude"},
+                session_id="session_123",
+                total_turns=5,
+                exit_code=0,
+                duration_seconds=120.5,
+                success=True,
+                phases_completed=["plan"],
+                error_summary=None,
+            ).model_dump_json() + "\n",
+            "{\"invalid_json\": \"missing_brace\"}\n", # Corrected line
+            AuditRecord(
+                timestamp=datetime(2023, 1, 1, 11, 0, 0),
+                task_file="task_B.md",
+                story_id="story_2",
+                story_title="Title 2",
+                llm_provider_per_phase={"design": "Gemini"},
+                session_id="session_124",
+                total_turns=3,
+                exit_code=1,
+                duration_seconds=60.0,
+                success=False,
+                phases_completed=["design"],
+                error_summary="Design phase failed",
+            ).model_dump_json() + "\n",
+        ]
+        with patch("builtins.open", mock_open(read_data="".join(malformed_content))) as m_open: 
+            with patch("os.path.exists", return_value=True):
+                journal = AuditJournal(JOURNAL_FILE)
+                results = journal.query()
+
+            assert len(results) == 2  # Only the two valid records should be returned
+            assert results[0].story_id == "story_1"
+            assert results[1].story_id == "story_2"
+
+    def test_summary_calculates_correct_statistics_for_multiple_records(self, mock_journal_reader):
+        """AC 5: Verifies all aggregate statistics are correct for a set of records."""
         journal = AuditJournal(JOURNAL_FILE)
         summary = journal.summary()
 
@@ -346,13 +401,13 @@ class TestAuditJournal:
         assert summary["failed_executions"] == 1
         assert summary["success_rate"] == 75.0
         assert pytest.approx(summary["average_duration_seconds"], 0.01) == (120.5 + 60.0 + 180.0 + 90.0) / 4
-        assert summary["total_llm_calls"] == 8 # 2+1+2+1
-        assert summary["llm_provider_usage"]["Claude"] == 3 # 2+2 in story 1 and 3, 1 in story 2
+        assert summary["total_llm_calls"] == 6 # 2+1+2+1
+        assert summary["llm_provider_usage"]["Claude"] == 3 # 2 in story 1 and 3
         assert summary["llm_provider_usage"]["Gemini"] == 3 # 1 in story 1, 1 in story 2, 1 in story 4
         assert summary["average_total_turns"] == (5 + 3 + 7 + 4) / 4
 
     def test_summary_handles_empty_journal_file(self):
-        """AC 6: Tests summary on an empty journal file."""
+        """AC 5: Tests summary on an empty journal file."""
         with patch("builtins.open", mock_open()) as m_open:
             with patch("os.path.exists", return_value=True):
                 m_open.return_value.__enter__.return_value.readlines.return_value = []
@@ -369,7 +424,7 @@ class TestAuditJournal:
             assert summary["average_total_turns"] == 0.0
 
     def test_summary_handles_single_record(self):
-        """AC 6: Tests summary calculation for a single record."""
+        """AC 5: Tests summary calculation for a single record."""
         record = AuditRecord(
             timestamp=datetime(2023, 1, 1, 10, 0, 0),
             task_file="single.md",
@@ -400,7 +455,7 @@ class TestAuditJournal:
             assert summary["average_total_turns"] == 5.0
 
     def test_summary_calculates_success_rate_correctly(self):
-        """AC 6: Specific check for success rate with mixed results."""
+        """AC 5: Specific check for success rate with mixed results."""
         records = [
             AuditRecord(timestamp=datetime.now(), task_file="t1", story_id="s1", story_title="S1", llm_provider_per_phase={}, session_id="1", total_turns=1, exit_code=0, duration_seconds=10.0, success=True, phases_completed=[], error_summary=None),
             AuditRecord(timestamp=datetime.now(), task_file="t2", story_id="s2", story_title="S2", llm_provider_per_phase={}, session_id="2", total_turns=1, exit_code=1, duration_seconds=10.0, success=False, phases_completed=[], error_summary="Fail"),
@@ -412,5 +467,3 @@ class TestAuditJournal:
                 journal = AuditJournal(JOURNAL_FILE)
                 summary = journal.summary()
             assert summary["success_rate"] == (2/3) * 100
-
-
