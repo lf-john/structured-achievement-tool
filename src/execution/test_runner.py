@@ -145,32 +145,50 @@ def get_test_command(
     # Search for story-specific test files
     test_dirs = ["tests", "test", "custom/tests"]
 
-    # Build search terms from story ID and title
-    search_terms = [story_id.replace("-", "_"), story_id]
+    # Build search terms from story title (more specific than story ID)
     story_title = story.get("title", "")
+    title_terms = []
     if story_title:
-        # Convert "Implement slugify utility function" to search terms like "slugify", "string_helpers"
-        title_words = [w.lower() for w in re.split(r'\W+', story_title) if len(w) > 3]
-        search_terms.extend(title_words)
+        # Extract meaningful keywords from title (skip common words)
+        skip = {"implement", "create", "add", "update", "fix", "write", "test", "build", "make", "the", "for", "and", "with"}
+        title_terms = [w.lower() for w in re.split(r'\W+', story_title) if len(w) > 3 and w.lower() not in skip]
+
+    # Also check for recently created test files (within last 5 minutes)
+    import time
+    recent_cutoff = time.time() - 300  # 5 minutes ago
 
     for test_dir in test_dirs:
         full_dir = os.path.join(working_directory, test_dir)
         if not os.path.isdir(full_dir):
             continue
 
+        candidates = []
         for f in os.listdir(full_dir):
-            # Match by story ID or title keywords
+            if not (f.endswith(".py") and f.startswith("test_")):
+                continue
+
+            filepath = os.path.join(full_dir, f)
+
+            # Priority 1: title keyword match
             f_lower = f.lower()
-            matched = any(term.lower() in f_lower for term in search_terms)
-            if matched:
-                if f.endswith(".py") and f.startswith("test_"):
-                    return f"pytest {os.path.join(test_dir, f)} -v"
-                elif f.endswith(".test.py") or f.endswith("_test.py"):
-                    return f"pytest {os.path.join(test_dir, f)} -v"
-                elif f.endswith(".test.js"):
-                    return f"node {os.path.join(test_dir, f)}"
-                elif f.endswith(".test.php"):
-                    return f"php {os.path.join(test_dir, f)}"
+            title_match = any(term in f_lower for term in title_terms) if title_terms else False
+
+            # Priority 2: recently modified file
+            try:
+                mtime = os.path.getmtime(filepath)
+                is_recent = mtime > recent_cutoff
+            except OSError:
+                is_recent = False
+
+            if title_match:
+                candidates.append((0, f, test_dir))  # highest priority
+            elif is_recent:
+                candidates.append((1, f, test_dir))  # second priority
+
+        if candidates:
+            candidates.sort()
+            _, best_file, best_dir = candidates[0]
+            return f"pytest {os.path.join(best_dir, best_file)} -v"
 
     # Project-level command
     if project_test_command:
