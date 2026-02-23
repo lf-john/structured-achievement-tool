@@ -6,6 +6,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # In-memory lock to prevent concurrent processing of the same file
 # This is critical for slow mounts like Google Drive
 active_tasks = set()
+# Recently completed tasks: {file_path: completion_time} — prevents re-detection
+# on slow FUSE mounts where tag writes may not propagate immediately
+recently_completed = {}
 
 def has_tag(file_path, tag):
     """Check if the file contains the specific tag on its own line."""
@@ -96,9 +99,11 @@ async def process_task_wrapper(orchestrator, file_path):
     try:
         result = await orchestrator_task
         if result and result.get("returncode") == 0:
-            mark_file_status(file_path, '<Working>', '<Finished>')
+            tagged = mark_file_status(file_path, '<Working>', '<Finished>')
+            logging.info(f"Marked {file_path} as <Finished>: {tagged}")
         else:
-            mark_file_status(file_path, '<Working>', '<Failed>')
+            tagged = mark_file_status(file_path, '<Working>', '<Failed>')
+            logging.info(f"Marked {file_path} as <Failed>: {tagged} (returncode={result.get('returncode') if result else 'None'})")
     except asyncio.CancelledError:
         logging.info(f"Task for {file_path} was cancelled.")
         if not mark_file_status(file_path, '<Cancel>', '<Finished>'):
@@ -108,6 +113,7 @@ async def process_task_wrapper(orchestrator, file_path):
         mark_file_status(file_path, '<Working>', '<Failed>')
     finally:
         monitor_task.cancel()
+        recently_completed[file_path] = time.time()
         active_tasks.remove(file_path)
         logging.info(f"Unlocking task: {file_path}")
 
@@ -133,10 +139,15 @@ async def async_main():
                     for filename in os.listdir(full_task_dir):
                         if filename.endswith('.md') and not filename.startswith('_') and '_response' not in filename:
                             file_path = os.path.join(full_task_dir, filename)
-                            if file_path not in active_tasks and has_tag(file_path, '<Pending>'):
+                            if file_path not in active_tasks and file_path not in recently_completed and has_tag(file_path, '<Pending>'):
                                 logging.info(f"New ready task detected: {file_path}")
                                 # Launch task in background so we can continue monitoring other directories
                                 asyncio.create_task(process_task_wrapper(orchestrator, file_path))
+            # Expire recently_completed entries after 60 seconds
+            now = time.time()
+            expired = [fp for fp, t in recently_completed.items() if now - t > 60]
+            for fp in expired:
+                del recently_completed[fp]
         except Exception as e:
             logging.error(f"Main loop error: {e}")
         
