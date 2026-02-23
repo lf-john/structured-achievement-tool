@@ -97,12 +97,12 @@ class TestGetTestCommand:
         assert cmd == "npm test"
 
     def test_story_specific_test_file(self, tmp_path):
-        story = {"id": "US-001"}
+        story = {"id": "US-001", "title": "Implement slugify function"}
         test_dir = tmp_path / "tests"
         test_dir.mkdir()
-        (test_dir / "US_001_test.py").write_text("")
+        (test_dir / "test_US_001_slugify.py").write_text("")
         cmd = get_test_command(story, str(tmp_path))
-        assert "US_001" in cmd
+        assert "slugify" in cmd
 
 
 class TestExecuteVerifications:
