@@ -1,88 +1,106 @@
 """
 DebugWorkflow — LangGraph state machine for debugging tasks.
 
-Defines states for REPRODUCE, DIAGNOSE, ROUTING, and outcome branches (Dev, Config, Maint, Report).
+Defines the core states: REPRODUCE, DIAGNOSE, ROUTING,
+and outcome branches: Dev, Config, Maint, Report.
 """
 
+import logging
 from typing import Literal, Optional
+
 from langgraph.graph import StateGraph, END
 
-from src.workflows.base_workflow import BaseWorkflow, phase_node # Assuming phase_node will be used for these states
+from src.workflows.base_workflow import BaseWorkflow, phase_node # Import phase_node for LLM-driven nodes
 from src.workflows.state import StoryState
 from src.llm.routing_engine import RoutingEngine
 
+logger = logging.getLogger(__name__)
 
-# Placeholder node functions for each state
-def reproduce(state: StoryState) -> StoryState:
-    print("Executing REPRODUCE phase...")
+# Placeholder node functions - these will contain actual logic later
+def reproduce(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
+    logger.info("Entering REPRODUCE state.")
+    # Placeholder for actual reproduction logic
     return state
 
-def diagnose(state: StoryState) -> StoryState:
-    print("Executing DIAGNOSE phase...")
+def diagnose(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
+    logger.info("Entering DIAGNOSE state.")
+    # Placeholder for actual diagnosis logic
     return state
 
-# Routing is a decision point, not a direct execution node, so it needs a decision function
-def routing_decision(state: StoryState) -> Literal["dev", "config", "maint", "report"]:
-    print("Executing ROUTING decision...")
-    # Placeholder for actual routing logic
-    # For now, let's just default to 'dev' for testing purposes or based on some state
-    # In a real scenario, this would use the routing_engine or other state info.
-    return "dev"
-
-def dev_branch(state: StoryState) -> StoryState:
-    print("Executing Dev branch...")
+def routing(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
+    logger.info("Entering ROUTING state.")
+    # Placeholder for actual routing logic, the decision will be made by routing_decision
     return state
 
-def config_branch(state: StoryState) -> StoryState:
-    print("Executing Config branch...")
+def dev_workflow(state: StoryState) -> StoryState:
+    logger.info("Entering DEV_WORKFLOW state.")
+    # Placeholder for kicking off a Dev TDD workflow
     return state
 
-def maint_branch(state: StoryState) -> StoryState:
-    print("Executing Maint branch...")
+def config_workflow(state: StoryState) -> StoryState:
+    logger.info("Entering CONFIG_WORKFLOW state.")
+    # Placeholder for kicking off a Config TDD workflow
     return state
 
-def report_branch(state: StoryState) -> StoryState:
-    print("Executing Report branch...")
+def maint_workflow(state: StoryState) -> StoryState:
+    logger.info("Entering MAINT_WORKFLOW state.")
+    # Placeholder for kicking off a Maintenance workflow
     return state
 
+def report_workflow(state: StoryState) -> StoryState:
+    logger.info("Entering REPORT_WORKFLOW state.")
+    # Placeholder for generating a report
+    return state
 
 class DebugWorkflow(BaseWorkflow):
     """
-    Implements the DebugWorkflow state machine with REPRODUCE, DIAGNOSE, and ROUTING stages,
-    and outcome branches (Dev, Config, Maint, Report).
+    Implements the Debugging Workflow state machine.
     """
-
     def __init__(self, routing_engine: Optional[RoutingEngine] = None):
         super().__init__(routing_engine)
 
-    def build_graph(self) -> StateGraph[StoryState, str]:
+    def routing_decision(self, state: StoryState) -> Literal["dev", "config", "maint", "report"]:
         """
-        Build and return the compiled LangGraph StateGraph for the DebugWorkflow.
+        Routes the debugging task to the appropriate specialized workflow
+        based on the output of the DIAGNOSE phase.
+        """
+        # In a real scenario, this would use the routing_engine to decide
+        # For now, it's a placeholder. The test implies the routing_engine will be mocked.
+        # We need to ensure the routing_engine has a method for this.
+        # Let's assume the routing_engine has a method called route_debug_issue that returns the decision.
+        # The test will mock this.
+        decision = self.routing_engine.route_debug_issue(state)
+        logger.info(f"Routing decision: {decision}")
+        return decision
+
+    def build_graph(self) -> StateGraph:
+        """
+        Builds and returns the LangGraph StateGraph for the DebugWorkflow.
         """
         workflow = StateGraph(StoryState)
 
-        # Define nodes for the core stages
-        workflow.add_node("reproduce", reproduce)
-        workflow.add_node("diagnose", diagnose)
-        workflow.add_node("ROUTING", routing_decision)
+        # Add nodes for the core stages
+        workflow.add_node("reproduce", lambda state: reproduce(state, self.routing_engine))
+        workflow.add_node("diagnose", lambda state: diagnose(state, self.routing_engine))
+        workflow.add_node("routing", lambda state: routing(state, self.routing_engine))
 
-        # Define nodes for the routing outcome branches
-        workflow.add_node("dev", dev_branch)
-        workflow.add_node("config", config_branch)
-        workflow.add_node("maint", maint_branch)
-        workflow.add_node("report", report_branch)
-        
-        # Set entry point
+        # Add nodes for the outcome branches
+        workflow.add_node("dev", dev_workflow)
+        workflow.add_node("config", config_workflow)
+        workflow.add_node("maint", maint_workflow)
+        workflow.add_node("report", report_workflow)
+
+        # Define the entry point
         workflow.set_entry_point("reproduce")
 
-        # Define edges
+        # Define transitions
         workflow.add_edge("reproduce", "diagnose")
-        workflow.add_edge("diagnose", "ROUTING")
+        workflow.add_edge("diagnose", "routing")
 
-        # The routing decision is a conditional edge from a node to multiple potential next nodes
+        # Conditional transitions from ROUTING
         workflow.add_conditional_edges(
-            "ROUTING",  # The source node for the conditional transition
-            routing_decision,
+            "routing",
+            self.routing_decision,
             {
                 "dev": "dev",
                 "config": "config",
@@ -91,7 +109,7 @@ class DebugWorkflow(BaseWorkflow):
             },
         )
 
-        # Each outcome branch leads to the END state for this workflow
+        # End points for the outcome branches (for now)
         workflow.add_edge("dev", END)
         workflow.add_edge("config", END)
         workflow.add_edge("maint", END)
