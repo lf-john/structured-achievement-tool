@@ -1,22 +1,26 @@
-from pydantic import BaseModel, Field
-from typing import Dict, List, Optional
-from datetime import datetime
 import json
 import os
+from datetime import datetime
+from typing import Dict, List, Optional
+from collections import defaultdict
+
+from pydantic import BaseModel, Field, ValidationError
+
 
 class AuditRecord(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
     task_file: str
     story_id: str
     story_title: str
-    llm_provider_used_per_phase: Dict[str, str] = Field(default_factory=dict)
+    llm_provider_used_per_phase: Dict[str, str]
     session_id: str
     total_turns: int
     exit_code: int
     duration_seconds: float
     success: bool
-    phases_completed: List[str] = Field(default_factory=list)
+    phases_completed: List[str]
     error_summary: Optional[str] = None
+
 
 class AuditJournal:
     def __init__(self, journal_path: str = ".memory/audit_journal.jsonl"):
@@ -27,7 +31,12 @@ class AuditJournal:
         with open(self.journal_path, "a") as f:
             f.write(record.model_dump_json() + "\n")
 
-    def query(self, since: Optional[datetime] = None, task_file: Optional[str] = None, success: Optional[bool] = None) -> List[AuditRecord]:
+    def query(
+        self,
+        since: Optional[datetime] = None,
+        task_file: Optional[str] = None,
+        success: Optional[bool] = None,
+    ) -> List[AuditRecord]:
         records = []
         if not os.path.exists(self.journal_path):
             return records
@@ -37,41 +46,44 @@ class AuditJournal:
                 try:
                     record_data = json.loads(line)
                     record = AuditRecord(**record_data)
-                    
+
                     if since and record.timestamp < since:
                         continue
                     if task_file and record.task_file != task_file:
                         continue
                     if success is not None and record.success != success:
                         continue
+
                     records.append(record)
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, ValidationError) as e:
                     # Log error if a line is malformed, but continue processing
-                    print(f"Warning: Malformed JSON line in audit journal: {line.strip()}")
-                except Exception as e:
-                    print(f"Warning: Could not parse audit record: {e} in line: {line.strip()}")
+                    print(f"Error parsing audit record: {e} in line: {line.strip()}")
         return records
 
-    def summary(self) -> Dict[str, any]:
+    def summary(self) -> Dict:
         records = self.query()
-        
         total_executions = len(records)
         successful_executions = sum(1 for r in records if r.success)
         failed_executions = total_executions - successful_executions
-        
-        success_rate = (successful_executions / total_executions * 100) if total_executions > 0 else 0.0
-        avg_duration_seconds = sum(r.duration_seconds for r in records) / total_executions if total_executions > 0 else 0.0
+        success_rate = (
+            (successful_executions / total_executions) * 100 if total_executions > 0 else 0.0
+        )
+        avg_duration_seconds = (
+            sum(r.duration_seconds for r in records) / total_executions
+            if total_executions > 0
+            else 0.0
+        )
 
-        llm_provider_usage = {}
+        llm_provider_usage = defaultdict(int)
         for record in records:
             for provider in record.llm_provider_used_per_phase.values():
-                llm_provider_usage[provider] = llm_provider_usage.get(provider, 0) + 1
+                llm_provider_usage[provider] += 1
 
         return {
             "total_executions": total_executions,
             "successful_executions": successful_executions,
             "failed_executions": failed_executions,
-            "success_rate": success_rate,
-            "avg_duration_seconds": avg_duration_seconds,
-            "llm_provider_usage": llm_provider_usage,
+            "success_rate": round(success_rate, 2),
+            "avg_duration_seconds": round(avg_duration_seconds, 2),
+            "llm_provider_usage": dict(llm_provider_usage),
         }
