@@ -178,7 +178,9 @@ def test_check_node(
     working_dir = state["working_directory"]
 
     test_cmd = get_test_command(story, working_dir)
+    logger.info(f"Test check {phase_name}: running '{test_cmd}' (expect_failure={expect_failure})")
     result = run_tests(working_dir, test_cmd)
+    logger.info(f"Test check {phase_name}: passed={result.passed}, total={result.total}, failures={result.failures}")
 
     test_result = TestResult(
         passed=result.passed,
