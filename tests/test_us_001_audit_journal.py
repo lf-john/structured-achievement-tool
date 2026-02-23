@@ -134,17 +134,15 @@ def mock_audit_records():
 @pytest.fixture
 def mock_jsonl_content(mock_audit_records):
     """Fixture to provide JSONL content string from mock records."""
-    return "
-".join(record.model_dump_json() for record in mock_audit_records) + "
-"
+    return "\n".join(record.model_dump_json() for record in mock_audit_records) + "\n"
 
 @pytest.fixture(autouse=True)
 def mock_filesystem():
     """Fixture to mock file system operations for AuditJournal."""
     m_open = mock_open()
-    with patch("builtins.open", m_open), 
-         patch("os.path.exists", return_value=True): # Assume file exists by default for reads
-        yield m_open
+    with patch("builtins.open", m_open):
+        with patch("os.path.exists", return_value=True): # Assume file exists by default for reads
+            yield m_open
 
 class TestAuditRecord:
     """Tests for the AuditRecord Pydantic model."""
@@ -232,8 +230,7 @@ class TestAuditJournal:
 
         mock_filesystem().write.assert_called_once()
         written_content = mock_filesystem().write.call_args[0][0]
-        assert written_content == record.model_dump_json() + "
-"
+        assert written_content == record.model_dump_json() + "\n"
         # Verify it's valid JSON
         assert json.loads(written_content) == record.model_dump()
 
@@ -245,14 +242,13 @@ class TestAuditJournal:
 
         assert mock_filesystem().write.call_count == len(mock_audit_records)
         for i, record in enumerate(mock_audit_records):
-            expected_jsonl = record.model_dump_json() + "
-"
+            expected_jsonl = record.model_dump_json() + "\n"
             assert mock_filesystem().write.call_args_list[i].args[0] == expected_jsonl
 
     def test_append_record_creates_journal_file_if_not_exists(self):
         """AC 4: Ensures journal file is created if it does not exist."""
-        with patch("builtins.open", mock_open()) as m_open, 
-             patch("os.path.exists", return_value=False): # File does not exist initially
+        with patch("builtins.open", mock_open()) as m_open:
+            with patch("os.path.exists", return_value=False): # File does not exist initially
             journal = AuditJournal(JOURNAL_FILE)
             record = AuditRecord(
                 timestamp=datetime(2023, 1, 1, 12, 0, 0),
@@ -428,7 +424,7 @@ class TestAuditJournal:
 try:
     # Run pytest programmatically to capture results and control exit
     # This will fail with ModuleNotFoundError, causing the except block to run
-    pytest.main(["-x", "tests/US-001_audit_journal.test.py"])
+        pytest.main(["-x", "tests/test_us_001_audit_journal.py"])
     exit_code = 0
 except Exception as e:
     # If pytest.main fails to even start (e.g., import errors),
