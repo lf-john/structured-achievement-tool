@@ -152,15 +152,12 @@ def phase_node(
     elif phase_name == "PLAN":
         state["plan_output"] = output_text
 
-    # Update verify_passed for phases that feed into verify_decision
-    if phase_name in ("VERIFY", "VERIFY_SCRIPT") and status == PhaseStatus.FAILED:
-        state["verify_passed"] = False
-
-    # Reset check retry counter when VERIFY completes (pass or fail).
-    # Each VERIFY→CODE→CHECK cycle should get a fresh retry budget.
+    # Update verify_passed for VERIFY phases to feed verify_decision
     if phase_name in ("VERIFY", "VERIFY_SCRIPT"):
+        state["verify_passed"] = (status == PhaseStatus.COMPLETE)
+        # Reset check retry counter — each VERIFY→CODE→CHECK cycle gets fresh budget
         state["phase_retry_count"] = 0
-        # Track VERIFY→CODE cycle count
+        # Track VERIFY→CODE cycle count when VERIFY fails
         if status == PhaseStatus.FAILED:
             state["verify_retry_count"] = state.get("verify_retry_count", 0) + 1
 
