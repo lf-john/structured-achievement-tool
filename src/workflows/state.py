@@ -88,6 +88,8 @@ class StoryState(TypedDict):
     plan_output: str  # Plan from PLAN phase (config/maint workflows)
     reproduction_status: Optional[str]
     reproduction_details: Optional[str]
+    diagnosis_category: Optional[str]  # Category from DIAGNOSE phase (Dev, Config, Maint, Report)
+    diagnosis_reasoning: Optional[str]  # Reasoning for diagnosis categorization
 
 
 def create_initial_state(
@@ -120,4 +122,6 @@ def create_initial_state(
         plan_output="",
         reproduction_status=None,
         reproduction_details=None,
+        diagnosis_category=None,
+        diagnosis_reasoning=None,
     )

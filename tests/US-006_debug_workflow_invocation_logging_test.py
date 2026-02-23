@@ -50,7 +50,7 @@ from datetime import datetime
 # These imports are expected to fail initially as the logging implementation is not yet done.
 from src.workflows.debug_workflow import DebugWorkflow
 from src.workflows.state import create_initial_state, StoryState
-from src.core.llm.routing_engine import RoutingEngine # Import for DebugWorkflow constructor
+from src.llm.routing_engine import RoutingEngine # Import for DebugWorkflow constructor
 
 @pytest.fixture
 def mock_routing_engine():
