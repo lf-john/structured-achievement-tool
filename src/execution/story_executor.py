@@ -313,9 +313,6 @@ async def execute_story(
     if final_story_state is None and state is not None:
         final_story_state = state # Fallback to last known state if not set
 
-    print(f"DEBUG: Final final_story_state before audit: {final_story_state}")
-    print(f"DEBUG: Last known state (from loop) before audit: {state}")
-
     # Log audit record once at the end
     _create_and_log_audit_record(
         audit_journal=audit_journal,
