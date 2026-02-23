@@ -232,7 +232,7 @@ class TestAuditJournal:
         written_content = mock_filesystem().write.call_args[0][0]
         assert written_content == record.model_dump_json() + "\n"
         # Verify it's valid JSON
-        assert json.loads(written_content) == record.model_dump()
+        assert json.loads(written_content) == json.loads(record.model_dump_json())
 
     def test_append_record_writes_multiple_records_as_json_lines(self, mock_filesystem, mock_audit_records):
         """AC 4: Verifies multiple records are written correctly."""
@@ -249,7 +249,7 @@ class TestAuditJournal:
         """AC 4: Ensures journal file is created if it does not exist."""
         with patch("builtins.open", mock_open()) as m_open:
             with patch("os.path.exists", return_value=False): # File does not exist initially
-            journal = AuditJournal(JOURNAL_FILE)
+                journal = AuditJournal(JOURNAL_FILE)
             record = AuditRecord(
                 timestamp=datetime(2023, 1, 1, 12, 0, 0),
                 task_file="new_task.md",
@@ -328,11 +328,11 @@ class TestAuditJournal:
 
     def test_query_handles_empty_journal_file(self):
         """AC 5: Tests query on an empty journal file."""
-        with patch("builtins.open", mock_open()) as m_open, 
-             patch("os.path.exists", return_value=True):
-            m_open.return_value.__enter__.return_value.readlines.return_value = []
-            journal = AuditJournal(JOURNAL_FILE)
-            results = journal.query()
+        with patch("builtins.open", mock_open()) as m_open:
+            with patch("os.path.exists", return_value=True):
+                m_open.return_value.__enter__.return_value.readlines.return_value = []
+                journal = AuditJournal(JOURNAL_FILE)
+                results = journal.query()
             assert len(results) == 0
 
     def test_summary_calculates_correct_statistics_for_multiple_records(self, mock_filesystem, mock_jsonl_content):
@@ -353,11 +353,11 @@ class TestAuditJournal:
 
     def test_summary_handles_empty_journal_file(self):
         """AC 6: Tests summary on an empty journal file."""
-        with patch("builtins.open", mock_open()) as m_open, 
-             patch("os.path.exists", return_value=True):
-            m_open.return_value.__enter__.return_value.readlines.return_value = []
-            journal = AuditJournal(JOURNAL_FILE)
-            summary = journal.summary()
+        with patch("builtins.open", mock_open()) as m_open:
+            with patch("os.path.exists", return_value=True):
+                m_open.return_value.__enter__.return_value.readlines.return_value = []
+                journal = AuditJournal(JOURNAL_FILE)
+                summary = journal.summary()
 
             assert summary["total_executions"] == 0
             assert summary["successful_executions"] == 0
@@ -384,12 +384,11 @@ class TestAuditJournal:
             phases_completed=["plan", "code"],
             error_summary=None,
         )
-        jsonl_content = record.model_dump_json() + "
-"
-        with patch("builtins.open", mock_open(read_data=jsonl_content)) as m_open, 
-             patch("os.path.exists", return_value=True):
-            journal = AuditJournal(JOURNAL_FILE)
-            summary = journal.summary()
+        jsonl_content = record.model_dump_json() + "\n"
+        with patch("builtins.open", mock_open(read_data=jsonl_content)) as m_open: 
+            with patch("os.path.exists", return_value=True):
+                journal = AuditJournal(JOURNAL_FILE)
+                summary = journal.summary()
 
             assert summary["total_executions"] == 1
             assert summary["successful_executions"] == 1
@@ -407,29 +406,11 @@ class TestAuditJournal:
             AuditRecord(timestamp=datetime.now(), task_file="t2", story_id="s2", story_title="S2", llm_provider_per_phase={}, session_id="2", total_turns=1, exit_code=1, duration_seconds=10.0, success=False, phases_completed=[], error_summary="Fail"),
             AuditRecord(timestamp=datetime.now(), task_file="t3", story_id="s3", story_title="S3", llm_provider_per_phase={}, session_id="3", total_turns=1, exit_code=0, duration_seconds=10.0, success=True, phases_completed=[], error_summary=None),
         ]
-        jsonl_content = "
-".join(r.model_dump_json() for r in records) + "
-"
-        with patch("builtins.open", mock_open(read_data=jsonl_content)) as m_open, 
-             patch("os.path.exists", return_value=True):
-            journal = AuditJournal(JOURNAL_FILE)
-            summary = journal.summary()
+        jsonl_content = "\n".join(r.model_dump_json() for r in records) + "\n"
+        with patch("builtins.open", mock_open(read_data=jsonl_content)) as m_open: 
+            with patch("os.path.exists", return_value=True):
+                journal = AuditJournal(JOURNAL_FILE)
+                summary = journal.summary()
             assert summary["success_rate"] == (2/3) * 100
 
-# This is critical for the TDD-RED-CHECK phase
-# It ensures that if pytest exits with an error (e.g., ModuleNotFoundError),
-# the script also exits with a non-zero code.
-# In a real pytest run, pytest itself handles exit codes, but for
-# isolated execution within a shell, this ensures the desired behavior.
-try:
-    # Run pytest programmatically to capture results and control exit
-    # This will fail with ModuleNotFoundError, causing the except block to run
-        pytest.main(["-x", "tests/test_us_001_audit_journal.py"])
-    exit_code = 0
-except Exception as e:
-    # If pytest.main fails to even start (e.g., import errors),
-    # we ensure a non-zero exit code.
-    print(f"Test run failed with an exception: {e}", file=sys.stderr)
-    exit_code = 1
 
-sys.exit(exit_code)
