@@ -216,7 +216,7 @@ async def execute_story(
             last_phase = phase_outputs[-1] if phase_outputs else {}
             last_status = last_phase.get("status", "failed")
 
-            if last_status == "complete" and final_state.get("verify_passed", True):
+            if final_state.get("verify_passed", False):
                 # Success
                 if notifier:
                     notifier.notify_story_complete(story_id, story_title)
@@ -312,6 +312,9 @@ async def execute_story(
 
     if final_story_state is None and state is not None:
         final_story_state = state # Fallback to last known state if not set
+
+    print(f"DEBUG: Final final_story_state before audit: {final_story_state}")
+    print(f"DEBUG: Last known state (from loop) before audit: {state}")
 
     # Log audit record once at the end
     _create_and_log_audit_record(

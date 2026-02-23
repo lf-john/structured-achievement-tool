@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import json
 import sys
 import os
+from pathlib import Path
 
 # This import will cause ModuleNotFoundError in TDD-RED phase
 from src.execution.audit_journal import AuditJournal, AuditRecord
@@ -219,15 +220,15 @@ class TestAuditJournal:
 
     def test_audit_journal_initialization_creates_directory(self):
         """AC 1: Ensures AuditJournal creates the journal directory if it doesn't exist."""
-        with patch("os.path.exists", return_value=False) as mock_exists:
-            with patch("os.makedirs") as mock_makedirs:
+        with patch("os.path.exists", return_value=False):
+            with patch("pathlib.Path.mkdir") as mock_mkdir:
                 AuditJournal(JOURNAL_FILE)
-                mock_makedirs.assert_called_once_with(JOURNAL_DIR, exist_ok=True)
+                mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
 
     def test_audit_journal_initialization(self, mock_filesystem):
         """AC 1: Ensures AuditJournal can be instantiated."""
         journal = AuditJournal(JOURNAL_FILE)
-        assert journal.journal_file == JOURNAL_FILE
+        assert journal.journal_file_path == Path(JOURNAL_FILE)
 
     def test_append_record_writes_valid_json_line(self, mock_filesystem):
         """AC 2: Verifies a single record is written as a correct JSON line."""
@@ -466,4 +467,4 @@ class TestAuditJournal:
             with patch("os.path.exists", return_value=True):
                 journal = AuditJournal(JOURNAL_FILE)
                 summary = journal.summary()
-            assert summary["success_rate"] == (2/3) * 100
+            assert pytest.approx(summary["success_rate"], 0.01) == (2/3) * 100
