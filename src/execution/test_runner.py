@@ -168,22 +168,30 @@ def get_test_command(
                 continue
 
             filepath = os.path.join(full_dir, f)
-
-            # Priority 1: title keyword match
             f_lower = f.lower()
+
+            # Check story ID match (e.g., "US-001" in filename)
+            id_match = story_id.lower().replace("-", "_") in f_lower or story_id.lower() in f_lower if story_id else False
+
+            # Check title keyword match
             title_match = any(term in f_lower for term in title_terms) if title_terms else False
 
-            # Priority 2: recently modified file
+            # Check recency
             try:
                 mtime = os.path.getmtime(filepath)
                 is_recent = mtime > recent_cutoff
             except OSError:
                 is_recent = False
 
-            if title_match:
-                candidates.append((0, f, test_dir))  # highest priority
+            # Priority: 0 = ID + title match, 1 = ID match only, 2 = title match only, 3 = recent only
+            if id_match and title_match:
+                candidates.append((0, f, test_dir))
+            elif id_match:
+                candidates.append((1, f, test_dir))
+            elif title_match:
+                candidates.append((2, f, test_dir))
             elif is_recent:
-                candidates.append((1, f, test_dir))  # second priority
+                candidates.append((3, f, test_dir))
 
         if candidates:
             candidates.sort()
