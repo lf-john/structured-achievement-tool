@@ -1,30 +1,26 @@
-import functools
 import asyncio
-import time
 import logging
+import time
+from functools import wraps
 
-# Configure logging for the retry decorator
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
+# Configure logging for retry attempts. This can be customized by the application.
+# For testing, we are patching logging.getLogger so no explicit configuration here.
 
 def retry(max_attempts=3, delay=1, backoff=2, exceptions=(Exception,)):
     """
-    A configurable retry decorator for synchronous and asynchronous functions.
+    A configurable retry decorator.
 
     Args:
-        max_attempts (int): Maximum number of attempts.
-        delay (int/float): Initial delay in seconds between retries.
-        backoff (int/float): Factor by which to multiply the delay after each retry.
+        max_attempts (int): Maximum number of attempts to try the function.
+        delay (int): Initial delay in seconds before the first retry.
+        backoff (int): Factor by which the delay will multiply after each retry.
         exceptions (tuple): A tuple of exception types to catch and retry on.
     """
     def decorator(func):
-        @functools.wraps(func)
+        logger = logging.getLogger(func.__module__)
+
+        @wraps(func)
         async def async_wrapper(*args, **kwargs):
-            current_delay = delay
             last_exception = None
             for attempt in range(1, max_attempts + 1):
                 try:
@@ -32,16 +28,19 @@ def retry(max_attempts=3, delay=1, backoff=2, exceptions=(Exception,)):
                 except exceptions as e:
                     last_exception = e
                     if attempt < max_attempts:
-                        logger.info(f"Attempt {attempt}/{max_attempts} failed for {func.__name__}: {e}. Retrying in {current_delay:.2f} seconds...")
-                        await asyncio.sleep(current_delay)
-                        current_delay *= backoff
+                        sleep_time = delay * (backoff ** (attempt - 1))
+                        logger.warning(
+                            f"Attempt {attempt} of {max_attempts} failed for {func.__name__}: {e}. Retrying in {sleep_time:.1f}s..."
+                        )
+                        await asyncio.sleep(sleep_time)
                     else:
                         logger.error(f"All {max_attempts} attempts failed for {func.__name__}. Last exception: {e}")
-            raise last_exception
+            if last_exception:
+                raise last_exception
+            raise RuntimeError("Retry decorator failed without an exception being caught in the loop.")
 
-        @functools.wraps(func)
+        @wraps(func)
         def sync_wrapper(*args, **kwargs):
-            current_delay = delay
             last_exception = None
             for attempt in range(1, max_attempts + 1):
                 try:
@@ -49,16 +48,19 @@ def retry(max_attempts=3, delay=1, backoff=2, exceptions=(Exception,)):
                 except exceptions as e:
                     last_exception = e
                     if attempt < max_attempts:
-                        logger.info(f"Attempt {attempt}/{max_attempts} failed for {func.__name__}: {e}. Retrying in {current_delay:.2f} seconds...")
-                        time.sleep(current_delay)
-                        current_delay *= backoff
+                        sleep_time = delay * (backoff ** (attempt - 1))
+                        logger.warning(
+                            f"Attempt {attempt} of {max_attempts} failed for {func.__name__}: {e}. Retrying in {sleep_time:.1f}s..."
+                        )
+                        time.sleep(sleep_time)
                     else:
                         logger.error(f"All {max_attempts} attempts failed for {func.__name__}. Last exception: {e}")
-            raise last_exception
+            if last_exception:
+                raise last_exception
+            raise RuntimeError("Retry decorator failed without an exception being caught in the loop.")
 
         if asyncio.iscoroutinefunction(func):
             return async_wrapper
         else:
             return sync_wrapper
     return decorator
-

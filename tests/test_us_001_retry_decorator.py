@@ -358,7 +358,3 @@ import sys
 # For the purpose of TDD-RED, simply having the failing import is sufficient for pytest to report failure.
 # If this file were executed directly outside pytest, and we wanted a non-zero exit for an import error,
 # we'd need a try-except around the import. Pytest handles this gracefully.
-
-# We simulate a failure here for the agent's validation. In a real pytest run, the import error
-# would cause pytest to exit non-zero naturally.
-sys.exit(1)
