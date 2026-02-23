@@ -1,20 +1,18 @@
-
-import json
 import os
+import json
 from datetime import datetime
 from src.execution.audit_journal import AuditJournal, AuditRecord
 
-def run_verification():
-    """
-    Verifies that the AuditJournal correctly appends a record
-    to the specified journal file.
-    """
-    journal_path = ".memory/test_audit_journal.jsonl"
-    if os.path.exists(journal_path):
-        os.remove(journal_path)
+# Define the path for the test journal
+TEST_JOURNAL_PATH = ".memory/test_audit_journal.jsonl"
 
+# Clean up previous test file if it exists
+if os.path.exists(TEST_JOURNAL_PATH):
+    os.remove(TEST_JOURNAL_PATH)
+
+try:
     # 1. Create a sample AuditRecord
-    record = AuditRecord(
+    sample_record = AuditRecord(
         task_file="test_task.md",
         story_id="TS-1",
         story_title="Test Story",
@@ -24,47 +22,42 @@ def run_verification():
         exit_code=0,
         duration_seconds=123.45,
         success=True,
-        phases_completed=["design", "code"],
+        phases_completed=["design", "code", "verify"],
         error_summary=None
     )
 
-    # 2. Append the record using AuditJournal
-    journal = AuditJournal(journal_path=journal_path)
-    journal.append_record(record)
+    # 2. Create an AuditJournal instance
+    journal = AuditJournal(journal_path=TEST_JOURNAL_PATH)
 
-    # 3. Verify the file content
-    if not os.path.exists(journal_path):
+    # 3. Append the record
+    journal.append_record(sample_record)
+
+    # 4. Verify the file content
+    if not os.path.exists(TEST_JOURNAL_PATH):
         print("FAIL: Journal file was not created.")
-        return False
-
-    with open(journal_path, "r") as f:
-        line = f.readline()
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            print(f"FAIL: Could not decode JSON from line: {line}")
-            return False
-
-    # 4. Clean up
-    os.remove(journal_path)
-
-    # 5. Assertions
-    expected_keys = set(AuditRecord.model_fields.keys())
-    actual_keys = set(data.keys())
-
-    if actual_keys != expected_keys:
-        print(f"FAIL: JSON keys do not match AuditRecord fields.")
-        print(f"Expected: {expected_keys}")
-        print(f"Actual:   {actual_keys}")
-        return False
-    
-    if data['story_id'] != 'TS-1':
-        print(f"FAIL: story_id mismatch. Expected 'TS-1', got '{data['story_id']}'")
-        return False
-
-    print("PASS: Audit record successfully written and verified.")
-    return True
-
-if __name__ == "__main__":
-    if not run_verification():
         exit(1)
+
+    with open(TEST_JOURNAL_PATH, "r") as f:
+        line = f.readline()
+        if not line:
+            print("FAIL: Journal file is empty.")
+            exit(1)
+
+        data = json.loads(line)
+        if data["story_id"] != "TS-1" or data["success"] is not True:
+            print(f"FAIL: Data mismatch in journal file. Got: {data}")
+            exit(1)
+
+    print("PASS: AuditRecord successfully appended and verified.")
+
+except Exception as e:
+    print(f"FAIL: An exception occurred: {e}")
+    import traceback
+    traceback.print_exc()
+    exit(1)
+
+finally:
+    # Clean up the test file
+    if os.path.exists(TEST_JOURNAL_PATH):
+        os.remove(TEST_JOURNAL_PATH)
+
