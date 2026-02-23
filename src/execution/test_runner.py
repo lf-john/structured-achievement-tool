@@ -183,15 +183,27 @@ def get_test_command(
             except OSError:
                 is_recent = False
 
-            # Priority: 0 = ID + title match, 1 = ID match only, 2 = title match only, 3 = recent only
-            if id_match and title_match:
+            # Priority (lower = better):
+            # 0: ID + title + recent — ideal match, definitely our file
+            # 1: ID + title (not recent) — strong match from a prior run
+            # 2: ID + recent (no title match) — likely our file, just named differently
+            # 3: title + recent — newly created file matching topic
+            # 4: title only (not recent) — topical but could be from different task
+            # 5: recent only — just created but no name correlation
+            # Note: ID-only without title or recency is EXCLUDED — story IDs are
+            # generic (US-001, US-002) and match unrelated old test files
+            if id_match and title_match and is_recent:
                 candidates.append((0, f, test_dir))
-            elif id_match:
+            elif id_match and title_match:
                 candidates.append((1, f, test_dir))
-            elif title_match:
+            elif id_match and is_recent:
                 candidates.append((2, f, test_dir))
-            elif is_recent:
+            elif title_match and is_recent:
                 candidates.append((3, f, test_dir))
+            elif title_match:
+                candidates.append((4, f, test_dir))
+            elif is_recent:
+                candidates.append((5, f, test_dir))
 
         if candidates:
             candidates.sort()
