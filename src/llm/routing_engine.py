@@ -129,8 +129,8 @@ class RoutingEngine:
                 if complexity >= power:
                     eligible.append(provider)
             elif provider.local:
-                # Rule 3: Local preferred when complexity <= 6 AND power > complexity
-                if complexity <= 6 and power > complexity:
+                # Rule 3: Local preferred when complexity <= 6 AND power >= complexity
+                if complexity <= 6 and power >= complexity:
                     eligible.append(provider)
                 # Rule 4: Nemotron preferred when complexity <= 3
                 elif provider.name == "nemotron" and complexity <= 3:
