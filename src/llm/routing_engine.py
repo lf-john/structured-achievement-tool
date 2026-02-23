@@ -51,6 +51,14 @@ AGENT_COMPLEXITY: dict[str, int] = {
 # Claude model names for Rule 1 identification
 CLAUDE_MODELS = {"opus", "sonnet", "haiku"}
 
+# Agents that require agentic providers (filesystem read/write capabilities).
+# Ollama models are text-only and cannot be used for these agents.
+AGENTIC_AGENTS = {
+    "design", "architect", "planner", "coder", "test_writer",
+    "executor", "reproducer", "verifier_arch", "verifier_security",
+    "verifier_lint", "mediator",
+}
+
 
 class RoutingEngine:
     """Select the best LLM provider for an agent based on complexity rules."""
@@ -105,6 +113,7 @@ class RoutingEngine:
             return PROVIDERS["nemotron"]  # Fallback if caller insists
 
         eligible = []
+        needs_agentic = agent_name in AGENTIC_AGENTS
 
         # Minimum adequate power: model must be within 1 level of the task complexity.
         # Without this, a power-6 model would be "eligible" for complexity-10 tasks
@@ -117,6 +126,10 @@ class RoutingEngine:
 
             # Skip providers that aren't available (missing API keys, CLI tools)
             if not is_provider_available(provider):
+                continue
+
+            # Agentic phases require providers with filesystem access
+            if needs_agentic and not provider.agentic:
                 continue
 
             # Power adequacy check: model must be strong enough for the task

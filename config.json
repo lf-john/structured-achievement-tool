@@ -3,19 +3,7 @@
   "default_primary": "sonnet",
   "default_backup": "glm5",
   "routing_rules_enabled": true,
-  "phase_models": {
-    "CLASSIFY": "haiku",
-    "CLASSIFIER": "haiku",
-    "DECOMPOSE": "sonnet",
-    "DECOMPOSER": "sonnet",
-    "DESIGN": "sonnet",
-    "TEST_WRITER": "haiku",
-    "CODER": "sonnet",
-    "VERIFIER_ARCH": "haiku",
-    "LEARNER": "haiku",
-    "SUMMARIZE": "haiku",
-    "HEALTH_CHECK": "haiku"
-  },
+  "phase_models": {},
   "execution": {
     "max_retries_per_story": 5,
     "max_phase_retries": 10,

@@ -32,6 +32,7 @@ class ProviderConfig(BaseModel):
     settings_file: Optional[str] = None  # Path to Claude settings file (for GLM backends)
     env_vars: Dict[str, str] = {}
     local: bool = False  # True for Ollama models
+    agentic: bool = False  # True for CLIs that can read/write files (claude, gemini)
 
     @property
     def is_claude(self) -> bool:
@@ -52,6 +53,7 @@ PROVIDERS: Dict[str, ProviderConfig] = {
         context_window=1_000_000,
         cli_command="claude",
         model_id="claude-opus-4-6",
+        agentic=True,
     ),
     "sonnet": ProviderConfig(
         name="sonnet",
@@ -60,6 +62,7 @@ PROVIDERS: Dict[str, ProviderConfig] = {
         context_window=1_000_000,
         cli_command="claude",
         model_id="claude-sonnet-4-6",
+        agentic=True,
     ),
     "haiku": ProviderConfig(
         name="haiku",
@@ -68,6 +71,7 @@ PROVIDERS: Dict[str, ProviderConfig] = {
         context_window=200_000,
         cli_command="claude",
         model_id="claude-haiku-4-5-20251001",
+        agentic=True,
     ),
     "gemini_pro": ProviderConfig(
         name="gemini_pro",
@@ -76,6 +80,7 @@ PROVIDERS: Dict[str, ProviderConfig] = {
         context_window=1_000_000,
         cli_command="gemini",
         model_id="gemini-2.5-pro",
+        agentic=True,
     ),
     "glm5": ProviderConfig(
         name="glm5",
@@ -83,8 +88,9 @@ PROVIDERS: Dict[str, ProviderConfig] = {
         cost_tier=CostTier.LOW,
         context_window=200_000,
         cli_command="claude",
-        model_id="glm-5.0",
+        model_id="glm-4.7",
         env_vars={"ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic"},
+        agentic=True,
     ),
     "gemini_flash": ProviderConfig(
         name="gemini_flash",
@@ -93,6 +99,7 @@ PROVIDERS: Dict[str, ProviderConfig] = {
         context_window=1_000_000,
         cli_command="gemini",
         model_id="gemini-2.5-flash",
+        agentic=True,
     ),
     "glm_flash": ProviderConfig(
         name="glm_flash",
@@ -102,6 +109,7 @@ PROVIDERS: Dict[str, ProviderConfig] = {
         cli_command="claude",
         model_id="glm-4.7-flash",
         env_vars={"ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic"},
+        agentic=True,
     ),
     "qwen3_8b": ProviderConfig(
         name="qwen3_8b",
@@ -153,22 +161,31 @@ def get_env_for_provider(provider: ProviderConfig) -> Dict[str, str]:
     """Build environment variables for a provider.
 
     Returns a copy of os.environ with provider-specific vars applied.
-    Handles the ANTHROPIC_AUTH_TOKEN poisoning issue from Ralph Pro:
-    non-GLM Claude backends must NOT have ANTHROPIC_AUTH_TOKEN set.
+
+    Key behaviors:
+    - GLM/z.ai proxy: Maps GLM_API_KEY → ANTHROPIC_API_KEY, sets ANTHROPIC_BASE_URL
+    - Claude-native: Strips ANTHROPIC_API_KEY/BASE_URL/AUTH_TOKEN to use built-in OAuth
+    - Gemini: GEMINI_API_KEY must be in environment
+    - Ollama: No special env needed
     """
     env = os.environ.copy()
 
-    # Apply provider-specific env vars
+    # Apply provider-specific env vars (e.g., ANTHROPIC_BASE_URL for GLM)
     env.update(provider.env_vars)
 
-    # For Claude-native backends, strip any existing ANTHROPIC_AUTH_TOKEN
-    # that might have been set for GLM (this causes 401 errors)
-    if provider.is_claude and "ANTHROPIC_AUTH_TOKEN" in env:
-        del env["ANTHROPIC_AUTH_TOKEN"]
+    # For GLM/z.ai proxy: map GLM_API_KEY to ANTHROPIC_API_KEY
+    if provider.env_vars.get("ANTHROPIC_BASE_URL"):
+        glm_key = os.environ.get("GLM_API_KEY", "")
+        if glm_key:
+            env["ANTHROPIC_API_KEY"] = glm_key
+
+    # For Claude-native backends: strip all proxy/auth vars to use built-in OAuth
+    if provider.is_claude:
+        for key in ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL"):
+            env.pop(key, None)
 
     # Strip CLAUDECODE env var to prevent nested session errors
-    if "CLAUDECODE" in env:
-        del env["CLAUDECODE"]
+    env.pop("CLAUDECODE", None)
 
     return env
 
@@ -192,9 +209,9 @@ def is_provider_available(provider: ProviderConfig) -> bool:
         if not os.environ.get("GEMINI_API_KEY"):
             return False
 
-    # GLM/z.ai proxy models need ANTHROPIC_AUTH_TOKEN
+    # GLM/z.ai proxy models need GLM_API_KEY
     if provider.env_vars.get("ANTHROPIC_BASE_URL"):
-        if not os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        if not os.environ.get("GLM_API_KEY"):
             return False
 
     # Claude-native models: claude CLI handles auth internally

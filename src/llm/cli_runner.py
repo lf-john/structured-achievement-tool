@@ -73,6 +73,9 @@ def _build_command(provider: ProviderConfig, prompt_file: Optional[str] = None, 
             cmd.extend(["-p", f"@{prompt_file}"])
         elif prompt:
             cmd.extend(["-p", prompt])
+        cmd.append("--yolo")  # Auto-accept all actions (headless mode)
+        if provider.model_id:
+            cmd.extend(["-m", provider.model_id])
         return cmd
 
     elif provider.cli_command == "ollama":
