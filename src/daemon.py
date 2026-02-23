@@ -1,5 +1,5 @@
 import time, logging, os, asyncio, traceback, re
-from src.orchestrator import Orchestrator
+from src.orchestrator_v2 import OrchestratorV2 as Orchestrator
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -17,6 +17,39 @@ def has_tag(file_path, tag):
         return bool(re.search(rf'^\s*{re.escape(tag)}\s*$', content, re.MULTILINE))
     except Exception as e:
         return False
+
+def is_task_ready(file_path):
+    """Check if the file is ready for processing (has <User> tag).
+
+    This is an alias for has_tag(file_path, '<Pending>') for compatibility
+    with test suite.
+    """
+    return has_tag(file_path, '<Pending>')
+
+def get_latest_md_file(directory):
+    """Find the latest .md file in a directory.
+
+    Returns the alphabetically last .md file that doesn't start with underscore.
+    Returns None if no suitable files are found.
+    """
+    if not os.path.exists(directory) or not os.path.isdir(directory):
+        return None
+
+    try:
+        md_files = [
+            f for f in os.listdir(directory)
+            if f.endswith('.md') and not f.startswith('_') and os.path.isfile(os.path.join(directory, f))
+        ]
+
+        if not md_files:
+            return None
+
+        # Sort alphabetically and return the last one
+        md_files.sort()
+        return os.path.join(directory, md_files[-1])
+    except Exception as e:
+        logging.error(f"Error finding latest md file in {directory}: {e}")
+        return None
 
 def mark_file_status(file_path, old_tag, new_tag):
     try:
@@ -55,14 +88,14 @@ async def process_task_wrapper(orchestrator, file_path):
     logging.info(f"Locking task: {file_path}")
     
     # Immediately mark as working
-    mark_file_status(file_path, '<User>', '<Working>')
+    mark_file_status(file_path, '<Pending>', '<Working>')
     
     orchestrator_task = asyncio.create_task(orchestrator.process_task_file(file_path))
     monitor_task = asyncio.create_task(monitor_cancellation(file_path, orchestrator_task))
     
     try:
         result = await orchestrator_task
-        if result and (result.get("returncode") == 0 or result.get("status") == "complete"):
+        if result and result.get("returncode") == 0:
             mark_file_status(file_path, '<Working>', '<Finished>')
         else:
             mark_file_status(file_path, '<Working>', '<Failed>')
@@ -96,11 +129,11 @@ async def async_main():
         try:
             for task_dir_name in os.listdir(watch_dir):
                 full_task_dir = os.path.join(watch_dir, task_dir_name)
-                if os.path.isdir(full_task_dir) and not task_dir_name.startswith('_'):
+                if os.path.isdir(full_task_dir) and not task_dir_name.startswith('_') and not task_dir_name.startswith('tmp'):
                     for filename in os.listdir(full_task_dir):
-                        if filename.endswith('.md') and not filename.startswith('_'):
+                        if filename.endswith('.md') and not filename.startswith('_') and '_response' not in filename:
                             file_path = os.path.join(full_task_dir, filename)
-                            if file_path not in active_tasks and has_tag(file_path, '<User>'):
+                            if file_path not in active_tasks and has_tag(file_path, '<Pending>'):
                                 logging.info(f"New ready task detected: {file_path}")
                                 # Launch task in background so we can continue monitoring other directories
                                 asyncio.create_task(process_task_wrapper(orchestrator, file_path))

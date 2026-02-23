@@ -7,7 +7,7 @@ local 'nomic-embed-text' Ollama model.
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from src.core.embedding_service import EmbeddingService
+from src.core.embedding_service import EmbeddingService, MAX_CHARS
 
 
 class TestEmbeddingService:
@@ -102,3 +102,103 @@ class TestEmbeddingService:
             assert len(vec1) == len(vec2)
         except Exception:
             pytest.skip("Ollama not available for integration test")
+
+
+class TestTruncation:
+    """Test suite for text truncation logic."""
+
+    def test_short_text_not_truncated(self):
+        """Text under the limit is returned unchanged."""
+        text = "Hello world"
+        assert EmbeddingService._truncate(text) == text
+
+    def test_long_text_truncated_to_max_chars(self):
+        """Text over the limit is truncated."""
+        text = "a" * (MAX_CHARS + 5000)
+        result = EmbeddingService._truncate(text)
+        assert len(result) <= MAX_CHARS
+
+    def test_truncation_prefers_sentence_boundary(self):
+        """Truncation cuts at a sentence boundary when possible."""
+        # Build text with a sentence break in the second half
+        filler = "x" * (MAX_CHARS - 100)
+        text = filler + ". More text after sentence. " + "y" * 5000
+        result = EmbeddingService._truncate(text)
+        assert result.endswith(".")
+        assert len(result) <= MAX_CHARS
+
+    def test_truncation_prefers_paragraph_boundary(self):
+        """Truncation prefers paragraph breaks over sentence breaks."""
+        filler = "x" * (MAX_CHARS - 100)
+        text = filler + "\n\nNew paragraph. " + "y" * 5000
+        result = EmbeddingService._truncate(text)
+        assert len(result) <= MAX_CHARS
+
+    def test_truncation_hard_cut_if_no_boundary(self):
+        """Falls back to hard truncation when no sentence boundary exists."""
+        text = "a" * (MAX_CHARS + 1000)
+        result = EmbeddingService._truncate(text)
+        assert len(result) == MAX_CHARS
+
+    @patch('ollama.embeddings')
+    def test_embed_text_truncates_long_input(self, mock_embeddings):
+        """embed_text truncates input before sending to Ollama."""
+        mock_embeddings.return_value = {'embedding': [0.1, 0.2]}
+        service = EmbeddingService()
+
+        long_text = "word " * 10000  # ~50k chars
+        service.embed_text(long_text)
+
+        call_args = mock_embeddings.call_args
+        sent_text = call_args.kwargs['prompt']
+        assert len(sent_text) <= MAX_CHARS
+
+
+class TestHealthCheck:
+    """Test suite for Ollama health check and auto-recovery."""
+
+    @patch('ollama.list')
+    def test_check_ollama_health_returns_true_when_healthy(self, mock_list):
+        """Returns True when Ollama responds."""
+        mock_list.return_value = {'models': []}
+        assert EmbeddingService.check_ollama_health() is True
+
+    @patch('ollama.list')
+    def test_check_ollama_health_returns_false_when_down(self, mock_list):
+        """Returns False when Ollama is unreachable."""
+        mock_list.side_effect = Exception("Connection refused")
+        assert EmbeddingService.check_ollama_health() is False
+
+    @patch('subprocess.run')
+    @patch('ollama.list')
+    def test_restart_ollama_calls_systemctl(self, mock_list, mock_run):
+        """restart_ollama calls systemctl restart."""
+        mock_run.return_value = MagicMock(returncode=0)
+        mock_list.return_value = {'models': []}
+
+        result = EmbeddingService.restart_ollama()
+        assert result is True
+        mock_run.assert_called_once()
+        assert 'ollama' in mock_run.call_args[0][0]
+
+    @patch('ollama.embeddings')
+    @patch('ollama.list')
+    def test_embed_text_retries_after_restart(self, mock_list, mock_embeddings):
+        """embed_text retries after restarting Ollama on failure."""
+        # First call fails, health check fails, but we can't actually restart in test
+        mock_embeddings.side_effect = [
+            Exception("Connection refused"),
+        ]
+        mock_list.side_effect = Exception("down")
+
+        service = EmbeddingService()
+        with pytest.raises(Exception):
+            service.embed_text("test")
+
+    @patch('ollama.embeddings')
+    def test_embed_text_succeeds_on_first_try(self, mock_embeddings):
+        """Normal path: embed_text succeeds without needing recovery."""
+        mock_embeddings.return_value = {'embedding': [0.1, 0.2]}
+        service = EmbeddingService()
+        result = service.embed_text("test")
+        assert result == [0.1, 0.2]

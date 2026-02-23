@@ -7,7 +7,7 @@ from src.core.embedding_service import EmbeddingService
 class Orchestrator:
     def __init__(self, project_path: str, vector_db_path: Optional[str] = None):
         self.project_path = project_path
-        self.agent = StoryAgent(project_path=self.project_path)
+        self.agent = StoryAgent(self.project_path)
 
         # Initialize vector store for RAG memory
         if vector_db_path is None:
@@ -46,7 +46,7 @@ class Orchestrator:
                 # We do NOT add <User> here automatically anymore since the user workflow relies on adding <User> to trigger.
                 # Oh wait, the prompt says "the file always ends with `# <User>`". 
                 # "Then when it creates a file, the file always ends with `# <User>`. This will not trigger processing. But I will edit the file and remove the `#`. This will trigger processing."
-                safeguard = "\n\n# <User>" if not is_final else ""
+                safeguard = "\n\n# <Pending>" if not is_final else ""
                 full_content = content + safeguard
                 with open(filepath, "w") as f:
                     f.write(full_content)
@@ -107,7 +107,19 @@ class Orchestrator:
         # Enrich the user request with similar task context
         enriched_request = user_request + similar_tasks_context
         prd = self.agent.decompose(enriched_request, task_type, existing_prd, existing_progress)
-        
+
+        # Validate PRD has stories array
+        if not isinstance(prd.get("stories"), list):
+            print(f"WARNING: Decompose returned invalid PRD (no stories array). Retrying...")
+            prd = self.agent.decompose(enriched_request, task_type, existing_prd, existing_progress)
+            if not isinstance(prd.get("stories"), list):
+                raise ValueError(f"Decompose failed to produce valid PRD with stories array for {parent_dir_name}")
+
+        # Ensure all stories have status: "pending" (safety net)
+        for story in prd.get("stories", []):
+            if "status" not in story:
+                story["status"] = "pending"
+
         with open(prd_path, "w") as f:
             json.dump(prd, f, indent=4)
         
@@ -148,22 +160,38 @@ class Orchestrator:
         log_content = f"--- Ralph Pro Execution Log for {parent_dir_name} ---\n\n"
         log_content += f"Exit Code: {process.returncode}\n\n"
         log_content += "--- STDOUT ---\n"
-        log_content += stdout.decode()
+        stdout_text = stdout.decode()
+        log_content += stdout_text
         log_content += "\n--- STDERR ---\n"
         log_content += stderr.decode()
 
-        if process.returncode == 0:
-            final_message = f"Task '{parent_dir_name}' completed successfully."
+        # Check progress.json to verify stories were actually completed
+        success = False
+        completed_count = 0
+        total_stories = len(prd.get("stories", []))
+        try:
+            with open(progress_path, "r") as f:
+                progress = json.load(f)
+            completed_count = len(progress.get("completedStories", []))
+            if completed_count > 0 and completed_count >= total_stories:
+                success = True
+        except Exception:
+            pass
+
+        if success:
+            final_message = f"Task '{parent_dir_name}' completed successfully. {completed_count}/{total_stories} stories done."
+        elif completed_count > 0:
+            final_message = f"Task '{parent_dir_name}' partially completed. {completed_count}/{total_stories} stories done."
         else:
-            final_message = f"Task '{parent_dir_name}' failed during execution. See logs for details."
+            final_message = f"Task '{parent_dir_name}' failed. 0/{total_stories} stories completed. Exit code: {process.returncode}"
 
         await self._write_response(task_dir, log_content)
         await self._write_response(task_dir, final_message, is_final=True)
 
         # Embed the completed task in vector memory for future context
         try:
-            # Create a document combining request and response
-            task_document = f"Request: {user_request}\n\nResponse: {log_content}\n\nResult: {final_message}"
+            # Create a concise summary for embedding (full logs are too long for the model's context window)
+            task_document = f"Request: {user_request[:2000]}\n\nResult: {final_message}"
 
             # Metadata about the task
             metadata = {
@@ -171,7 +199,7 @@ class Orchestrator:
                 "task_name": task_name,
                 "task_type": task_type,
                 "file_path": file_path,
-                "success": process.returncode == 0,
+                "success": success,
                 "returncode": process.returncode
             }
 
@@ -181,4 +209,6 @@ class Orchestrator:
         except Exception as e:
             print(f"Warning: Failed to embed task in vector memory: {e}")
 
-        return {"status": "complete", "returncode": process.returncode}
+        # Return failure status if there was an error
+        return_code = 0 if success else 1
+        return {"status": "complete", "returncode": return_code}

@@ -1,0 +1,21 @@
+{
+  "routing_strategy": "complexity_based",
+  "default_primary": "sonnet",
+  "default_backup": "glm5",
+  "routing_rules_enabled": true,
+  "phase_models": {
+    "CLASSIFY": "haiku",
+    "CLASSIFIER": "haiku",
+    "DECOMPOSE": "sonnet",
+    "DECOMPOSER": "sonnet",
+    "SUMMARIZE": "haiku",
+    "HEALTH_CHECK": "haiku"
+  },
+  "execution": {
+    "max_retries_per_story": 5,
+    "max_phase_retries": 10,
+    "use_worktree": false,
+    "enable_mediator": false,
+    "checkpoint_db": ".memory/checkpoints.db"
+  }
+}

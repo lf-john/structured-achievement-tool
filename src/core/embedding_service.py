@@ -3,11 +3,22 @@ EmbeddingService for generating text embeddings using Ollama.
 
 This service uses the local 'nomic-embed-text' model via Ollama
 to generate vector embeddings for text content.
+
+Handles text truncation to stay within the model's context window
+and checks Ollama health before making requests.
 """
 
 import json
-from typing import List
+import logging
+import subprocess
+from typing import List, Optional
 import ollama
+
+logger = logging.getLogger(__name__)
+
+# nomic-embed-text has a 2048-token context window.
+# Conservative character limit (~4 chars per token on average).
+MAX_CHARS = 7500
 
 
 class EmbeddingService:
@@ -16,6 +27,8 @@ class EmbeddingService:
 
     Uses the 'nomic-embed-text' model by default to generate
     numerical vector representations of text.
+    Automatically truncates long text to fit within the model's context window.
+    Checks Ollama availability and attempts auto-recovery on failure.
     """
 
     def __init__(self, model_name: str = "nomic-embed-text"):
@@ -28,12 +41,89 @@ class EmbeddingService:
         """
         self.model_name = model_name
 
+    @staticmethod
+    def _truncate(text: str, max_chars: int = MAX_CHARS) -> str:
+        """Truncate text to fit within the model's context window.
+
+        Tries to cut at a sentence boundary; falls back to hard truncation.
+        """
+        if len(text) <= max_chars:
+            return text
+
+        truncated = text[:max_chars]
+        # Try to cut at last sentence boundary
+        for sep in ("\n\n", "\n", ". ", "! ", "? "):
+            idx = truncated.rfind(sep)
+            if idx > max_chars // 2:
+                return truncated[:idx + len(sep)].rstrip()
+        return truncated
+
+    @staticmethod
+    def check_ollama_health() -> bool:
+        """Check if Ollama is running and responsive.
+
+        Returns:
+            True if Ollama is healthy, False otherwise.
+        """
+        try:
+            ollama.list()
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def restart_ollama() -> bool:
+        """Attempt to restart the Ollama service via systemctl.
+
+        Returns:
+            True if restart succeeded, False otherwise.
+        """
+        try:
+            result = subprocess.run(
+                ["sudo", "systemctl", "restart", "ollama"],
+                capture_output=True, timeout=30
+            )
+            if result.returncode == 0:
+                # Wait for service to become ready
+                import time
+                for _ in range(10):
+                    time.sleep(1)
+                    if EmbeddingService.check_ollama_health():
+                        logger.info("Ollama restarted successfully")
+                        return True
+            logger.warning("Ollama restart returned %d", result.returncode)
+            return False
+        except Exception as e:
+            logger.warning("Failed to restart Ollama: %s", e)
+            return False
+
+    def _call_ollama(self, text: str) -> dict:
+        """Call Ollama embeddings API with auto-recovery on failure.
+
+        Truncates input, checks health, and retries once after restarting
+        Ollama if the first attempt fails.
+        """
+        text = self._truncate(text)
+
+        try:
+            return ollama.embeddings(model=self.model_name, prompt=text)
+        except Exception as first_error:
+            logger.warning("Ollama embedding failed: %s — checking health", first_error)
+            if not self.check_ollama_health():
+                logger.info("Ollama is down, attempting restart")
+                if self.restart_ollama():
+                    try:
+                        return ollama.embeddings(model=self.model_name, prompt=text)
+                    except Exception as retry_error:
+                        raise Exception(f"Ollama embedding failed after restart: {retry_error}")
+            raise Exception(f"Ollama embedding failed: {first_error}")
+
     def embed_text(self, text: str) -> List[float]:
         """
         Generate an embedding vector for a single text string.
 
         Args:
-            text: The text to embed.
+            text: The text to embed. Automatically truncated if too long.
 
         Returns:
             A list of floats representing the embedding vector.
@@ -41,11 +131,8 @@ class EmbeddingService:
         Raises:
             Exception: If the Ollama command fails or returns an error.
         """
-        try:
-            response = ollama.embeddings(model=self.model_name, prompt=text)
-            return response.get('embedding', [])
-        except Exception as e:
-            raise Exception(f"Ollama embedding failed: {e}")
+        response = self._call_ollama(text)
+        return response.get('embedding', [])
 
     def generate_embedding(self, text: str) -> List[float]:
         """
@@ -55,7 +142,7 @@ class EmbeddingService:
         exactly 768 dimensions, as expected from the nomic-embed-text model.
 
         Args:
-            text: The text to embed.
+            text: The text to embed. Automatically truncated if too long.
 
         Returns:
             A list of exactly 768 floats representing the embedding vector.
@@ -68,7 +155,7 @@ class EmbeddingService:
             Exception: For other Ollama API errors.
         """
         try:
-            response = ollama.embeddings(model=self.model_name, prompt=text)
+            response = self._call_ollama(text)
 
             # Extract embedding from response
             if 'embedding' not in response:

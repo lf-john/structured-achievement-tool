@@ -222,8 +222,8 @@ class TestDocumentContent:
         assert user_request in document_text
 
     @pytest.mark.asyncio
-    async def test_document_includes_response_logs(self, temp_dirs, mock_vector_store):
-        """Test that the document includes the response logs from Ralph Pro."""
+    async def test_document_includes_result_message(self, temp_dirs, mock_vector_store):
+        """Test that the document includes the result message."""
         orchestrator = Orchestrator(project_path=temp_dirs["project"])
         orchestrator.vector_store = mock_vector_store
 
@@ -248,12 +248,10 @@ class TestDocumentContent:
         call_args = mock_vector_store.add_document.call_args
         document_text = call_args[0][0]
 
-        # Verify response logs are in the document
-        assert "Response:" in document_text
-        assert "Ralph Pro Execution Log" in document_text
-        assert stdout_output.decode() in document_text
-        assert stderr_output.decode() in document_text
-        assert "Exit Code:" in document_text
+        # Document is now a concise summary (request + result), not full logs
+        assert "Request:" in document_text
+        assert "Result:" in document_text
+        assert "completed successfully" in document_text
 
     @pytest.mark.asyncio
     async def test_document_includes_final_result(self, temp_dirs, mock_vector_store):
@@ -308,9 +306,10 @@ class TestDocumentContent:
         call_args = mock_vector_store.add_document.call_args
         document_text = call_args[0][0]
 
-        # Verify all sections exist and are in correct order
-        assert document_text.index("Request:") < document_text.index("Response:")
-        assert document_text.index("Response:") < document_text.index("Result:")
+        # Verify both sections exist and are in correct order
+        assert "Request:" in document_text
+        assert "Result:" in document_text
+        assert document_text.index("Request:") < document_text.index("Result:")
 
 
 class TestMetadataContent:
@@ -851,7 +850,6 @@ class TestIntegrationTests:
         metadata = call_args[0][1]
 
         assert user_request in document
-        assert ralph_output.decode() in document
         assert "completed successfully" in document
         assert metadata["success"] is True
 
@@ -1023,9 +1021,8 @@ class TestVectorStoreParameters:
         document = call_args[0][0]
         metadata = call_args[0][1]
 
-        # Verify document structure
+        # Verify document structure (concise: request + result only)
         assert "Request:" in document
-        assert "Response:" in document
         assert "Result:" in document
 
         # Verify metadata keys
@@ -1107,11 +1104,12 @@ class TestEdgeCasesAndAdditionalScenarios:
 
             await orchestrator.process_task_file(task_file)
 
-        # Should handle long output
+        # Should handle long output — document is now a concise summary
         assert mock_vector_store.add_document.called
         call_args = mock_vector_store.add_document.call_args
         document = call_args[0][0]
-        assert len(document) > 100000  # Should be very long
+        assert "Request:" in document
+        assert "Result:" in document
 
     @pytest.mark.asyncio
     async def test_unicode_characters_in_content(self, temp_dirs):
