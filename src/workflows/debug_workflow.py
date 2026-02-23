@@ -16,10 +16,28 @@ from src.llm.routing_engine import RoutingEngine
 
 logger = logging.getLogger(__name__)
 
+def simulate_reproduction(failure_context: str) -> dict:
+    """
+    Simulates an attempt to reproduce a failure based on the provided context.
+    This is a placeholder for actual reproduction logic.
+    """
+    if "Error" in failure_context or "Failure" in failure_context or "fault" in failure_context:
+        return {"status": "reproduced", "details": f"Simulated reproduction of: {failure_context[:50]}..."}
+    elif not failure_context.strip():
+        return {"status": "not_applicable", "details": "No failure context provided for reproduction attempt."}
+    else:
+        return {"status": "not_reproduced", "details": f"Could not reproduce failure with context: {failure_context[:50]}..."}
+
 # Placeholder node functions - these will contain actual logic later
 def reproduce(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
     logger.info("Entering REPRODUCE state.")
-    # Placeholder for actual reproduction logic
+    failure_context = state.get("failure_context", "")
+    reproduction_outcome = simulate_reproduction(failure_context)
+
+    state["reproduction_status"] = reproduction_outcome["status"]
+    state["reproduction_details"] = reproduction_outcome["details"]
+    logger.info(f"Reproduction attempt status: {reproduction_outcome['status']}")
+    logger.info(f"Reproduction attempt details: {reproduction_outcome['details']}")
     return state
 
 def diagnose(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
