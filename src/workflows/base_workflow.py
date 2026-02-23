@@ -150,6 +150,8 @@ def phase_node(
     elif phase_name == "PLAN":
         state["plan_output"] = output_text
 
+    logger.info(f"Phase {phase_name} completed: status={status.value}, duration={duration:.1f}s, provider={provider.name}")
+
     # Auto-commit after code-producing phases
     if status == PhaseStatus.COMPLETE and phase_name in ("TDD_RED", "CODE", "FIX", "VERIFY", "EXECUTE"):
         commit_hash = auto_commit(working_dir, story.get("id", "unknown"), phase_name)
