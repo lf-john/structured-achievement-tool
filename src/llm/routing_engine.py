@@ -14,7 +14,7 @@ import os
 import logging
 from typing import Optional, Tuple
 
-from src.llm.providers import ProviderConfig, PROVIDERS, get_provider
+from src.llm.providers import ProviderConfig, PROVIDERS, get_provider, is_provider_available
 
 logger = logging.getLogger(__name__)
 
