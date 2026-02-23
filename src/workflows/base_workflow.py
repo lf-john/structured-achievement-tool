@@ -36,6 +36,7 @@ from src.agents.mediator_agent import should_trigger, MediatorAgent, save_interv
 logger = logging.getLogger(__name__)
 
 MAX_PHASE_RETRIES = 10
+CHECK_RETRY_LIMIT = 3  # Max retries for test check loops before moving on
 
 # Thread pool for running async code from synchronous LangGraph nodes.
 # LangGraph's graph.invoke() is synchronous, but our CLI runner is async.
@@ -150,6 +151,10 @@ def phase_node(
     elif phase_name == "PLAN":
         state["plan_output"] = output_text
 
+    # Update verify_passed for phases that feed into verify_decision
+    if phase_name in ("VERIFY", "VERIFY_SCRIPT") and status == PhaseStatus.FAILED:
+        state["verify_passed"] = False
+
     logger.info(f"Phase {phase_name} completed: status={status.value}, duration={duration:.1f}s, provider={provider.name}")
 
     # Auto-commit after code-producing phases
@@ -216,7 +221,7 @@ def test_check_node(
     # Increment retry counter when check fails (used by check_test_decision to break loops)
     if not state["verify_passed"]:
         state["phase_retry_count"] = state.get("phase_retry_count", 0) + 1
-        logger.info(f"Test check {phase_name}: retry count now {state['phase_retry_count']}/{MAX_PHASE_RETRIES}")
+        logger.info(f"Test check {phase_name}: retry count now {state['phase_retry_count']}/{CHECK_RETRY_LIMIT}")
 
     phase_output = PhaseOutput(
         phase=phase_name,
@@ -311,7 +316,7 @@ def check_test_decision(state: StoryState) -> Literal["pass", "fail"]:
         return "pass"
     # Check retry limit (3 retries for checks, not the full MAX_PHASE_RETRIES)
     retry_count = state.get("phase_retry_count", 0)
-    if retry_count >= 3:
+    if retry_count >= CHECK_RETRY_LIMIT:
         logger.warning(f"Check failed {retry_count} times, moving on")
         return "pass"  # Give up on retrying, continue to next phase
     return "fail"
