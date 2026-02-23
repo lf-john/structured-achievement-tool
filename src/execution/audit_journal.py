@@ -38,10 +38,9 @@ class AuditJournal:
             for line in f.readlines():
                 try:
                     data = json.loads(line)
-                    print(f"DEBUG: Processing line: {line.strip()}")
-                    records.append(record)
+                    records.append(AuditRecord.model_validate(data))
                 except json.JSONDecodeError as e:
-                    print(f"Warning: Malformed JSON line in audit journal: {line.strip()} - {e}")
+                    print(f"Warning: Malformed JSON line in audit journal: {line.strip()} - {e}. Skipping record.")
                 except Exception as e:
                     print(f"Warning: Could not parse audit record: {line.strip()} - {e}")
         return records

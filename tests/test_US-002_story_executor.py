@@ -315,12 +315,12 @@ class TestStoryExecutorAuditJournal:
             }
         ]
 
-        with patch('src.execution.story_executor.classify_failure') as mock_classify_failure, 
-             patch('asyncio.sleep', new=AsyncMock()): # Mock sleep to speed up test
-            mock_classify_failure.side_effect = [
-                MagicMock(severity=MagicMock(value="TRANSIENT"), message="Transient error"),
-                MagicMock(severity=MagicMock(value="FATAL"), message="Fatal error")
-            ]
+        with patch('src.execution.story_executor.classify_failure') as mock_classify_failure:
+            with patch('asyncio.sleep', new=AsyncMock()): # Mock sleep to speed up test
+                mock_classify_failure.side_effect = [
+                    MagicMock(severity=MagicMock(value="TRANSIENT"), message="Transient error"),
+                    MagicMock(severity=MagicMock(value="FATAL"), message="Fatal error")
+                ]
 
             result = await execute_story(
                 story=MOCK_STORY,

@@ -27,6 +27,9 @@ from src.llm.routing_engine import RoutingEngine
 from src.agents.failure_classifier import classify_failure, FailureSeverity
 from src.execution.git_manager import get_current_commit, reset_to_commit
 from src.notifications.notifier import Notifier
+from src.execution.audit_journal import AuditJournal, AuditRecord
+from datetime import datetime
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +80,48 @@ def get_workflow_for_story(story: dict, routing_engine: RoutingEngine):
     return workflow.compile()
 
 
+def _create_and_log_audit_record(
+    audit_journal: AuditJournal,
+    story_id: str,
+    story_title: str,
+    task_id: str,
+    story_start_datetime: datetime, # The actual datetime when the story started
+    execution_start_monotonic_time: float, # The monotonic time when execute_story began
+    success: bool,
+    final_state: dict,
+    session_id_from_state: str,
+    error_summary: Optional[str] = None,
+    exit_code: int = 0,
+):
+    """Helper to create and log an AuditRecord."""
+    duration_seconds = time.monotonic() - execution_start_monotonic_time
+    phase_outputs = final_state.get("phase_outputs", []) if final_state else []
+    llm_provider_per_phase = {
+        p.get("phase"): p.get("llm_provider", "unknown")
+        for p in phase_outputs
+        if p.get("phase")
+    }
+    phases_completed = [p.get("phase") for p in phase_outputs if p.get("status") == "complete"]
+    total_turns = final_state.get("total_turns", 0) if final_state else 0
+
+
+    record = AuditRecord(
+        timestamp=story_start_datetime, # Use the actual story start datetime
+        task_file=task_id, # Using task_id for task_file
+        story_id=story_id,
+        story_title=story_title,
+        llm_provider_per_phase=llm_provider_per_phase,
+        session_id=session_id_from_state, # Use session_id from state
+        total_turns=total_turns,
+        exit_code=exit_code,
+        duration_seconds=duration_seconds,
+        success=success,
+        phases_completed=phases_completed,
+        error_summary=error_summary,
+    )
+    audit_journal.append_record(record)
+
+
 async def execute_story(
     story: dict,
     task_id: str,
@@ -108,6 +153,10 @@ async def execute_story(
     story_id = story.get("id", "unknown")
     story_title = story.get("title", "Untitled")
 
+    audit_journal_path = os.path.join(working_directory, ".memory", "audit_journal.jsonl")
+    audit_journal = AuditJournal(audit_journal_path)
+    start_time = time.monotonic()
+
     # Get compiled workflow
     graph = get_workflow_for_story(story, re)
 
@@ -116,18 +165,25 @@ async def execute_story(
 
     consecutive_env_failures = 0
     last_failure_reason = ""
+    state: Optional[StoryState] = None # Initialize state here
+
+    final_success: bool = False
+    final_reason: str = ""
+    final_exit_code: int = 1
+    final_story_state: Optional[dict] = None
+    story_completed_successfully_in_loop: bool = False # New flag
 
     for attempt in range(1, max_attempts + 1):
         logger.info(f"Story {story_id} attempt {attempt}/{max_attempts}")
 
         # Check for cancellation
         if cancellation_event and cancellation_event.is_set():
-            return StoryResult(
-                story_id=story_id,
-                success=False,
-                attempts=attempt,
-                reason="Cancelled by user",
-            )
+            logger.info(f"Story {story_id} cancelled by user.")
+            final_success = False
+            final_reason = "Cancelled by user"
+            final_exit_code = 1
+            final_story_state = state if state else {} # Use current state for cancellation, or an empty dict if state is None
+            break
 
         # Reset on retry (keep code for verify failures, full reset otherwise)
         if attempt > 1 and base_commit:
@@ -151,7 +207,7 @@ async def execute_story(
 
         # Execute the workflow
         try:
-            final_state = graph.invoke(state)
+            final_state = await graph.invoke(state) # ADDED AWAIT HERE
 
             # Check if workflow completed successfully
             phase_outputs = final_state.get("phase_outputs", [])
@@ -162,13 +218,12 @@ async def execute_story(
                 # Success
                 if notifier:
                     notifier.notify_story_complete(story_id, story_title)
-
-                return StoryResult(
-                    story_id=story_id,
-                    success=True,
-                    attempts=attempt,
-                    phase_outputs=phase_outputs,
-                )
+                final_success = True
+                final_reason = "Story completed successfully"
+                final_exit_code = 0
+                final_story_state = final_state
+                story_completed_successfully_in_loop = True # Set the flag here
+                break
 
             # Workflow completed but with failures
             failure_output = final_state.get("failure_context", "")
@@ -190,13 +245,12 @@ async def execute_story(
                 logger.error(f"Fatal failure for {story_id}: {classification.message}")
                 if notifier:
                     notifier.notify_story_failed(story_id, story_title, classification.message)
-                return StoryResult(
-                    story_id=story_id,
-                    success=False,
-                    attempts=attempt,
-                    reason=classification.message,
-                    phase_outputs=phase_outputs,
-                )
+                
+                final_success = False
+                final_reason = classification.message
+                final_exit_code = last_phase.get("exit_code", 1)
+                final_story_state = final_state
+                break
 
             else:
                 # Persistent failure — retry with context
@@ -212,6 +266,11 @@ async def execute_story(
             logger.error(f"Story {story_id} execution error: {e}")
 
             classification = classify_failure(exit_code=-1, output=str(e))
+            
+            final_story_state = state # Capture state at time of exception
+            final_success = False
+            final_reason = str(e)
+            final_exit_code = 1
 
             if classification.severity == FailureSeverity.TRANSIENT:
                 consecutive_env_failures += 1
@@ -221,24 +280,47 @@ async def execute_story(
             # Circuit breaker
             if consecutive_env_failures >= CIRCUIT_BREAKER_THRESHOLD:
                 logger.error(f"Circuit breaker triggered for {story_id} after {consecutive_env_failures} environmental failures")
-                return StoryResult(
-                    story_id=story_id,
-                    success=False,
-                    attempts=attempt,
-                    reason=f"Circuit breaker: {consecutive_env_failures} consecutive environmental failures",
-                )
+                
+                final_success = False
+                final_reason = f"Circuit breaker: {consecutive_env_failures} consecutive environmental failures"
+                final_exit_code = 1
+                final_story_state = state  # Use current state for circuit breaker
+                break # Break out of attempt loop
 
             last_failure_reason = str(e)
             delay = min(RETRY_BASE_DELAY * (2 ** (attempt - 1)), RETRY_MAX_DELAY)
             await asyncio.sleep(delay)
 
-    # Exhausted all attempts
-    if notifier:
-        notifier.notify_story_failed(story_id, story_title, f"Failed after {max_attempts} attempts")
+    # After the loop, determine the final outcome if not already set by a break
+    if not story_completed_successfully_in_loop:
+        if not final_success and final_reason == "": # Only update if not already set by cancellation or fatal error
+            if notifier:
+                notifier.notify_story_failed(story_id, story_title, f"Failed after {max_attempts} attempts")
+            final_success = False
+            final_reason = f"Exhausted {max_attempts} attempts. Last failure: {last_failure_reason}"
+            final_exit_code = 1
+        if final_story_state is None:
+            final_story_state = state # Fallback to last known state if not set
+
+    # Log audit record once at the end
+    _create_and_log_audit_record(
+        audit_journal=audit_journal,
+        story_id=story_id,
+        story_title=story_title,
+        task_id=task_id,
+        story_start_datetime=final_story_state.get("start_time", datetime.now()) if final_story_state else datetime.now(),
+        execution_start_monotonic_time=start_time,
+        success=final_success,
+        final_state=final_story_state or (state if state is not None else {}), # Ensure a state is always provided
+        session_id_from_state=final_story_state.get("session_id", "unknown") if final_story_state else (state.get("session_id", "unknown") if state is not None else "unknown"),
+        error_summary=final_reason if not final_success else None,
+        exit_code=final_exit_code,
+    )
 
     return StoryResult(
         story_id=story_id,
-        success=False,
-        attempts=max_attempts,
-        reason=f"Exhausted {max_attempts} attempts. Last failure: {last_failure_reason}",
+        success=final_success,
+        attempts=attempt,
+        reason=final_reason,
+        phase_outputs=final_story_state.get("phase_outputs", []) if final_story_state else [],
     )
