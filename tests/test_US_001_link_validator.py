@@ -502,4 +502,5 @@ Learn more at [documentation](docs.html).
 
 if __name__ == "__main__":
     # Run tests with pytest
-    pytest.main([__file__, "-v"])
+    import sys
+    sys.exit(pytest.main([__file__, "-v"]))
