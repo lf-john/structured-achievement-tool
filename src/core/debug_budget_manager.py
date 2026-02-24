@@ -29,3 +29,12 @@ class DebugBudgetManager:
 
     def get_debug_attempts(self, task_id: str) -> int:
         return self.budgets.get(task_id, 0)
+
+    def can_initiate_debug_session(self, task_id: str) -> bool:
+        """
+        Determines if a debug session can be initiated for a given task,
+        based on the maximum allowed attempts.
+        """
+        current_attempts = self.get_debug_attempts(task_id)
+        MAX_DEBUG_ATTEMPTS = 3
+        return current_attempts < MAX_DEBUG_ATTEMPTS
