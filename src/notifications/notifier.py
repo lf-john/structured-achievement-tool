@@ -144,18 +144,3 @@ class Notifier:
             priority="urgent",
             tags="warning",
         )
-
-    def notify_debug_budget_exhausted(self, task_id: str, attempts: int, last_error_summary: str):
-        """Notify that a task has exhausted its debug budget."""
-        error_summary = last_error_summary if last_error_summary else "(No summary provided)"
-        message = (
-            f"Task: {task_id}\n"
-            f"Attempts: {attempts}\n"
-            f"Last Error: {error_summary}"
-        )
-        self.send_ntfy(
-            title=f"SAT: Debug Budget Exhausted ({task_id})",
-            message=message,
-            priority="urgent",
-            tags="warning",
-        )

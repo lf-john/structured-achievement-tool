@@ -110,6 +110,9 @@ def phase_node(
         if result.is_api_error:
             status = PhaseStatus.FAILED
             state["failure_context"] = f"API error: {result.api_error_code}"
+            # Mark provider as rate-limited on 429 so routing picks a different one
+            if result.api_error_code == 429:
+                routing_engine.mark_rate_limited(provider.name)
         elif result.exit_code != 0 and not output_text.strip():
             status = PhaseStatus.FAILED
             state["failure_context"] = f"CLI error: exit_code={result.exit_code}, stderr={result.stderr[:500]}"

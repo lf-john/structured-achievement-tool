@@ -12,6 +12,7 @@ Config overrides via phase_models in config.json bypass these rules.
 import json
 import os
 import logging
+import time
 from typing import Optional, Tuple
 
 from src.llm.providers import ProviderConfig, PROVIDERS, get_provider, is_provider_available
@@ -63,14 +64,34 @@ AGENTIC_AGENTS = {
 class RoutingEngine:
     """Select the best LLM provider for an agent based on complexity rules."""
 
+    # Cooldown period (seconds) after a 429 before retrying the same provider
+    RATE_LIMIT_COOLDOWN = 120
+
     def __init__(self, config_path: Optional[str] = None):
         self.config = {}
         self.phase_overrides = {}
+        # Track rate-limited providers: {provider_name: timestamp_of_429}
+        self._rate_limited: dict[str, float] = {}
 
         if config_path and os.path.exists(config_path):
             with open(config_path, "r") as f:
                 self.config = json.load(f)
             self.phase_overrides = self.config.get("phase_models", {})
+
+    def mark_rate_limited(self, provider_name: str):
+        """Mark a provider as rate-limited. It will be deprioritized for RATE_LIMIT_COOLDOWN seconds."""
+        self._rate_limited[provider_name] = time.monotonic()
+        logger.info(f"Provider {provider_name} marked rate-limited for {self.RATE_LIMIT_COOLDOWN}s")
+
+    def _is_rate_limited(self, provider_name: str) -> bool:
+        """Check if a provider is currently in cooldown."""
+        if provider_name not in self._rate_limited:
+            return False
+        elapsed = time.monotonic() - self._rate_limited[provider_name]
+        if elapsed >= self.RATE_LIMIT_COOLDOWN:
+            del self._rate_limited[provider_name]
+            return False
+        return True
 
     def get_complexity(self, agent_name: str, story_complexity: Optional[int] = None) -> int:
         """Get the complexity rating for an agent.
@@ -159,19 +180,24 @@ class RoutingEngine:
             logger.warning(f"No eligible model for {agent_name} (complexity={complexity}), falling back to {default}")
             return get_provider(default)
 
-        # Sort by preference: local first, then by cost (cheapest first), then by power (highest first)
+        # Sort by preference: non-rate-limited first, local first, cheapest first, highest power first
         def sort_key(p: ProviderConfig):
             cost_order = {"free": 0, "minimal": 1, "low": 2, "medium": 3, "high": 4}
             power = p.code_power if is_code_task else p.power
+            rate_limited = 1 if self._is_rate_limited(p.name) else 0
             return (
-                0 if p.local else 1,           # Local first
-                cost_order.get(p.cost_tier, 5), # Cheapest first
-                -power,                          # Highest power first (within same tier)
+                rate_limited,                    # Non-rate-limited first
+                0 if p.local else 1,             # Local first
+                cost_order.get(p.cost_tier, 5),  # Cheapest first
+                -power,                           # Highest power first (within same tier)
             )
 
         eligible.sort(key=sort_key)
         selected = eligible[0]
-        logger.debug(f"Routing {agent_name} (complexity={complexity}) → {selected.name} (power={selected.power})")
+        if self._is_rate_limited(selected.name):
+            logger.warning(f"All eligible providers rate-limited for {agent_name}, using {selected.name} anyway")
+        else:
+            logger.debug(f"Routing {agent_name} (complexity={complexity}) → {selected.name} (power={selected.power})")
         return selected
 
     def select_with_fallback(
