@@ -1,12 +1,6 @@
-class DebugSessionManager:
-    _instance = None
-    _active_session_id: str = None  # Class-level to be accessed by classmethods
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(DebugSessionManager, cls).__new__(cls)
-            # We're using _active_session_id as a class variable, so no instance init needed here
-        return cls._instance
+class DebugSessionManager:
+    _active_session_id: str | None = None
 
     @classmethod
     def start_session(cls, session_id: str) -> bool:
