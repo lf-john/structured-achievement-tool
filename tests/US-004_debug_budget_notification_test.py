@@ -20,7 +20,7 @@ Edge Cases:
 import pytest
 import json
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 import logging
 
 # Assume Notifier will be in src/notifications/notifier.py
@@ -69,8 +69,8 @@ class TestDebugBudgetNotification:
         expected_url = f"{mock_notifier.ntfy_server}/johnlane-claude-tasks"
         mock_requests_post.assert_called_once_with(
             expected_url,
-            data=MagicMock(), # Data is checked in content test
-            headers=MagicMock(), # Headers are checked in content test
+            data=ANY, # Data is checked in content test
+            headers=ANY, # Headers are checked in content test
             timeout=5
         )
 
