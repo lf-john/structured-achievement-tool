@@ -65,8 +65,8 @@ class TestDebugBudgetManager:
         assert manager.get_debug_attempts(task_id_1) == 2
         assert manager.get_debug_attempts(task_id_2) == 1
 
-    @patch("builtins.open", new_callable=mock_open, read_data=json.dumps({"task-persisted": 5}))
-    @patch("os.path.exists", return_value=True)
+    @patch("src.core.debug_budget_manager.open", new_callable=mock_open, read_data=json.dumps({"task-persisted": 5}))
+    @patch("src.core.debug_budget_manager.os.path.exists", return_value=True)
     def test_should_persist_and_load_debug_budgets_correctly(self, mock_exists, mock_file_open, mock_storage_path):
         """Simulates application restart by re-initializing the manager and checking if counts are preserved."""
         # Initial manager state, not relevant for this test but for context
@@ -85,7 +85,8 @@ class TestDebugBudgetManager:
         written_data = json.loads(mock_file_open().write.call_args[0][0])
         assert written_data["task-persisted"] == 6
 
-    @patch("os.path.exists", return_value=False)
+    @patch("src.core.debug_budget_manager.os.makedirs")
+    @patch("src.core.debug_budget_manager.os.path.exists", return_value=False)
     def test_should_handle_missing_budget_file_on_startup(self, mock_exists, mock_storage_path):
         """Ensures the manager starts with no budgets if the file doesn't exist."""
         manager = DebugBudgetManager(mock_storage_path)
