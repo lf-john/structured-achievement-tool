@@ -121,7 +121,7 @@ async def async_main():
     logging.info("Starting Structured Achievement Tool (SAT) Daemon...")
     try:
         project_path = os.path.expanduser("~/projects/structured-achievement-tool")
-        watch_dir = os.path.expanduser("~/GoogleDrive/DriveSyncFiles/claude-tasks")
+        watch_dir = os.path.expanduser("~/GoogleDrive/DriveSyncFiles/sat-tasks")
         if not os.path.isdir(watch_dir):
             raise ValueError(f"Watch directory not found: {watch_dir}")
     except Exception as e:
@@ -139,6 +139,9 @@ async def async_main():
                     for filename in os.listdir(full_task_dir):
                         if filename.endswith('.md') and not filename.startswith('_') and '_response' not in filename:
                             file_path = os.path.join(full_task_dir, filename)
+                            # Skip response files written by Claude
+                            if '<!-- CLAUDE-RESPONSE -->' in open(os.path.join(full_task_dir, filename), 'r', encoding='utf-8').read(200):
+                                continue
                             if file_path not in active_tasks and file_path not in recently_completed and has_tag(file_path, '<Pending>'):
                                 logging.info(f"New ready task detected: {file_path}")
                                 # Launch task in background so we can continue monitoring other directories

@@ -114,8 +114,11 @@ class TestValidateResponse:
         assert result.stories[0].complexity == 5
 
     def test_story_schema_complexity_bounds(self):
+        # 0 is valid (research/config tasks)
+        s = StorySchema(id="x", title="x", description="x", complexity=0)
+        assert s.complexity == 0
         with pytest.raises(ValidationError):
-            StorySchema(id="x", title="x", description="x", complexity=0)
+            StorySchema(id="x", title="x", description="x", complexity=-1)
         with pytest.raises(ValidationError):
             StorySchema(id="x", title="x", description="x", complexity=11)
 

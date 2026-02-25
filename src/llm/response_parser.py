@@ -52,7 +52,9 @@ class StorySchema(BaseModel):
     status: str = "pending"
     dependsOn: List[str] = Field(default_factory=list)
     acceptanceCriteria: List[str] = Field(default_factory=list)
-    complexity: int = Field(default=5, ge=1, le=10)
+    complexity: int = Field(default=5, ge=0, le=10)
+    verification_agents: List[str] = Field(default_factory=list)
+    outcome_verification: bool = False
 
 
 class DecomposeResponse(BaseModel):

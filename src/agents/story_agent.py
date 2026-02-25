@@ -19,6 +19,10 @@ from src.execution.dag_executor import DAGExecutor, CircularDependencyError
 
 logger = logging.getLogger(__name__)
 
+# Valid story types (case-insensitive matching)
+STORY_TYPES = {"Dev", "Config", "Maintenance", "Debug", "Research", "Review"}
+_TYPE_MAP = {t.lower(): t for t in STORY_TYPES}
+
 
 class StoryAgent(BaseAgent):
 
@@ -72,10 +76,24 @@ class StoryAgent(BaseAgent):
             context=context,
         )
 
+        # Normalize story types (case-insensitive matching)
+        self._normalize_stories(result)
+
         # Validate dependency graph (topological sort, cycle detection)
         self._validate_dependencies(result)
 
         return result
+
+    def _normalize_stories(self, response: DecomposeResponse):
+        """Normalize story fields: fix case-insensitive types, set defaults."""
+        for story in response.stories:
+            # Case-insensitive type matching
+            matched = _TYPE_MAP.get(story.type.lower())
+            if matched:
+                story.type = matched
+            else:
+                logger.warning(f"Unknown story type '{story.type}' for {story.id}, defaulting to Dev")
+                story.type = "Dev"
 
     def _validate_dependencies(self, response: DecomposeResponse):
         """Validate the dependency graph: no cycles, all refs valid."""
