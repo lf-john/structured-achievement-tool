@@ -81,11 +81,4 @@ class TestDebugBudgetEnforcement:
 # The actual execution will be handled by the orchestrator.
 # For TDD-RED, we expect an import error or AttributeError because 'can_initiate_debug_session'
 # does not yet exist on DebugBudgetManager.
-import sys
-try:
-    pytest.main([__file__])
-    sys.exit(0)
-except Exception as e:
-    # A ModuleNotFoundError or AttributeError is expected here if the class/method doesn't exist
-    print(f"Expected failure during TDD-RED: {e}")
-    sys.exit(1)
+

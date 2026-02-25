@@ -82,18 +82,32 @@ async def monitor_cancellation(file_path, task):
             break
         await asyncio.sleep(2)
 
-async def process_task_wrapper(orchestrator, file_path):
+def detect_signal(file_path):
+    """Detect the trigger signal in a file. Returns 'pending', 'plan', or None."""
+    if has_tag(file_path, '<Pending>'):
+        return 'pending'
+    if has_tag(file_path, '<Plan>'):
+        return 'plan'
+    return None
+
+
+async def process_task_wrapper(orchestrator, file_path, signal='pending'):
     """Wraps the orchestrator call to handle cancellation and set the right tags."""
     if file_path in active_tasks:
         return
-    
+
     active_tasks.add(file_path)
-    logging.info(f"Locking task: {file_path}")
-    
+    logging.info(f"Locking task: {file_path} (signal={signal})")
+
     # Immediately mark as working
-    mark_file_status(file_path, '<Pending>', '<Working>')
-    
-    orchestrator_task = asyncio.create_task(orchestrator.process_task_file(file_path))
+    trigger_tag = '<Plan>' if signal == 'plan' else '<Pending>'
+    mark_file_status(file_path, trigger_tag, '<Working>')
+
+    # Route to the appropriate orchestrator method
+    if signal == 'plan':
+        orchestrator_task = asyncio.create_task(orchestrator.process_plan_request(file_path))
+    else:
+        orchestrator_task = asyncio.create_task(orchestrator.process_task_file(file_path))
     monitor_task = asyncio.create_task(monitor_cancellation(file_path, orchestrator_task))
     
     try:
@@ -142,10 +156,11 @@ async def async_main():
                             # Skip response files written by Claude
                             if '<!-- CLAUDE-RESPONSE -->' in open(os.path.join(full_task_dir, filename), 'r', encoding='utf-8').read(200):
                                 continue
-                            if file_path not in active_tasks and file_path not in recently_completed and has_tag(file_path, '<Pending>'):
-                                logging.info(f"New ready task detected: {file_path}")
-                                # Launch task in background so we can continue monitoring other directories
-                                asyncio.create_task(process_task_wrapper(orchestrator, file_path))
+                            if file_path not in active_tasks and file_path not in recently_completed:
+                                signal = detect_signal(file_path)
+                                if signal:
+                                    logging.info(f"New ready task detected: {file_path} (signal={signal})")
+                                    asyncio.create_task(process_task_wrapper(orchestrator, file_path, signal=signal))
             # Expire recently_completed entries after 60 seconds
             now = time.time()
             expired = [fp for fp, t in recently_completed.items() if now - t > 60]

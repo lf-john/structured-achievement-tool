@@ -36,6 +36,10 @@ PHASE_TEMPLATES: dict[str, str] = {
     "SYNTHESIZE": "synthesize.md",
     "REVIEW": "review.md",
     "REPORT": "report.md",
+    "PRD_DISCOVERY": "prd_discovery.md",
+    "PRD_REQUIREMENTS": "prd_requirements.md",
+    "PRD_ARCHITECTURE": "prd_architecture.md",
+    "PRD_IMPLEMENTATION": "prd_implementation.md",
 }
 
 # Progressive disclosure: what context each phase receives

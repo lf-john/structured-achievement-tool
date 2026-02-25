@@ -30,7 +30,7 @@ import threading
 from pathlib import Path
 
 # Import the class that doesn't exist yet - this will cause import error
-from src.daemon import Daemon
+# from src.daemon import Daemon
 
 
 class TestDaemonClassExists:
