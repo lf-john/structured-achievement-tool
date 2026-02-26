@@ -1,53 +1,67 @@
 {
   "systemAnalysis": {
     "filesToChange": [
-      "MAUTIC_SUITECRM_FIELD_MAPPING.md"
+      "mautic/app/config/local.php",
+      "mautic/app/config/suitecrm_field_mapping.json"
     ],
-    "systemImpact": "This change will activate and configure the data synchronization between Mautic and SuiteCRM. Incorrect mapping could lead to data inconsistency. A full data sync will be required after applying the changes, which may cause a temporary increase in server load.",
+    "systemImpact": "The changes will enable data synchronization from Mautic to SuiteCRM. A Mautic cache clear is required, which can cause a brief moment of slowness. No downtime is expected. Misconfiguration can lead to failed or incorrect data synchronization.",
     "externalDependencies": [
-      "Mautic Instance",
-      "SuiteCRM Instance",
-      "Mautic API credentials for SuiteCRM"
+      "A running SuiteCRM instance with API credentials.",
+      "The Mautic SuiteCRM integration plugin must be installed."
     ]
   },
   "executionSteps": [
     {
       "step": 1,
-      "description": "Create a comprehensive documentation file outlining the field mapping, custom field handling, and conflict resolution strategy. This file serves as the primary artifact for this configuration task.",
+      "description": "Create the field mapping configuration file. This file will define how Mautic contact fields map to SuiteCRM contact fields.",
       "commands": [],
       "files": [
         {
-          "path": "MAUTIC_SUITECRM_FIELD_MAPPING.md",
-          "change": "Create a new markdown file with the following content: Title, Overview, Step-by-step configuration guide for the Mautic UI, a table of field mappings, a section on custom fields, and a section on the conflict resolution strategy."
+          "path": "mautic/app/config/suitecrm_field_mapping.json",
+          "change": "Create this new file with the following content: \n```json\n{\n  \"mautic_field_to_suitecrm_field\": {\n    \"email\": \"email1\",\n    \"firstname\": \"first_name\",\n    \"lastname\": \"last_name\",\n    \"company\": \"account_name\",\n    \"score\": \"lead_score_c\"\n  }\n}\n```"
         }
       ]
     },
     {
       "step": 2,
-      "description": "Manually apply the configuration in the Mautic UI based on the created documentation. This involves navigating to the SuiteCRM plugin settings and entering the field mappings.",
+      "description": "Update the Mautic local configuration file to enable and configure the SuiteCRM plugin.",
+      "commands": [],
+      "files": [
+        {
+          "path": "mautic/app/config/local.php",
+          "change": "Append the following configuration to the return array in the file. Replace placeholders with actual SuiteCRM credentials."
+        }
+      ]
+    },
+    {
+      "step": 3,
+      "description": "Provide the content to be appended to `mautic/app/config/local.php`",
       "commands": [
-        "echo 'Navigate to Mautic > Settings > Plugins > SuiteCRM'",
-        "echo 'Go to the Feature tab, enable contact sync.'",
-        "echo 'Go to the Field Mapping tab and configure the mappings as per MAUTIC_SUITECRM_FIELD_MAPPING.md.'"
+        "MAUTIC_CONFIG_CONTENT='\n    \"plugin_suitecrm_enabled\" => true,\n    \"suitecrm_url\" => \"https://your-suitecrm-instance.com\",\n    \"suitecrm_username\" => \"admin\",\n    \"suitecrm_password\" => \"your-secret-password\",\n    \"suitecrm_field_mapping_file\" => \"/var/www/html/app/config/suitecrm_field_mapping.json\",\n    \"suitecrm_sync_email_opens\" => true,\n    \"suitecrm_sync_email_clicks\" => true,\n    \"suitecrm_sync_form_submissions\" => true,\n    \"suitecrm_sync_lead_score_changes\" => true,\n    \"suitecrm_sync_campaign_membership\" => true,\n'"
       ],
       "files": []
     },
     {
-      "step": 3,
-      "description": "After applying the settings in the UI, trigger a manual synchronization from the Mautic server's command line to ensure the new mappings are applied.",
+      "step": 4,
+      "description": "Append the configuration to `mautic/app/config/local.php`.",
       "commands": [
-        "php /var/www/mautic/bin/console mautic:integration:synccontacts --integration=SuiteCRM"
+        "docker-compose exec -T mautic bash -c \"sed -i '/^);/i '\"'\"$MAUTIC_CONFIG_CONTENT\"'\"'' /var/www/html/app/config/local.php\""
+      ],
+      "files": []
+    },
+    {
+      "step": 5,
+      "description": "Clear the Mautic cache to apply the configuration changes.",
+      "commands": [
+        "docker-compose exec -T mautic php /var/www/html/bin/console cache:clear"
       ],
       "files": []
     }
   ],
   "verificationScript": "verify_script.sh created and executable",
   "rollbackPlan": [
-    "Navigate to the Mautic UI > Settings > Plugins > SuiteCRM.",
-    "Go to the Field Mapping tab and remove the mappings configured in this story.",
-    "Disable the contact sync feature if it was not previously enabled.",
-    "Save the plugin configuration.",
-    "Delete the MAUTIC_SUITECRM_FIELD_MAPPING.md file."
+    "Step 1: Revert the changes in `mautic/app/config/local.php` by removing the added lines.",
+    "Step 2: Delete the `mautic/app/config/suitecrm_field_mapping.json` file.",
+    "Step 3: Run `docker-compose exec -T mautic php /var/www/html/bin/console cache:clear` to clear the cache."
   ]
 }
-<promise>COMPLETE</promise>
