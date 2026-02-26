@@ -1,75 +1,61 @@
 {
   "systemAnalysis": {
     "filesToChange": [
-      "src/workflows/icp_matching_workflow.py",
-      "config/icp_criteria.json",
-      "run_icp_matcher.py",
-      "verify_script.sh"
+      "src/workflows/engagement_scorer.py",
+      "tests/workflows/test_engagement_scorer.py"
     ],
-    "systemImpact": "This is a new, additive feature. It will not impact any existing running services. It will introduce additional load on the local Ollama service when the workflow is executed.",
+    "systemImpact": "This is a new, isolated workflow. No impact on existing system functionality is anticipated. It adds a new capability for engagement scoring.",
     "externalDependencies": [
-      "A running Ollama service",
-      "The 'nomic-embed-text' model available in Ollama for embeddings",
-      "A generative model (e.g., 'llama3', 'mistral') available in Ollama for reasoning"
+      "Ollama (for LLM classification)"
     ]
   },
   "executionSteps": [
     {
       "step": 1,
-      "description": "Create the configuration directory if it doesn't exist.",
-      "commands": ["mkdir -p config"],
-      "files": []
-    },
-    {
-      "step": 2,
-      "description": "Define the Ideal Customer Profile (ICP) criteria in a configuration file. This file will serve as the baseline for matching.",
+      "description": "Create the core workflow logic for the Engagement Scorer.",
       "commands": [],
       "files": [
         {
-          "path": "config/icp_criteria.json",
-          "change": "Create a new file with the ICP definition.",
-          "content": "{\n  \"ideal_customer_profile\": {\n    \"industries\": [\"Technology\", \"SaaS\", \"Artificial Intelligence\"],\n    \"company_size\": {\n      \"min\": 50,\n      \"max\": 5000\n    },\n    \"description_keywords\": [\"AI-driven\", \"automation\", \"enterprise solutions\", \"data analytics\", \"B2B\"]\n  }\n}"
+          "path": "src/workflows/engagement_scorer.py",
+          "change": "Create a new file to house the `EngagementScorer` class. This class will contain the logic to interact with an Ollama model to classify Mautic engagement history into 'hot', 'warm', or 'cold'."
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "description": "Create TDD tests for the Engagement Scorer workflow.",
+      "commands": [],
+      "files": [
+        {
+          "path": "tests/workflows/test_engagement_scorer.py",
+          "change": "Create a new test file with unit tests for the `EngagementScorer`. It will use 'unittest.mock.patch' to mock calls to the Ollama service, ensuring tests are independent and reliable."
         }
       ]
     },
     {
       "step": 3,
-      "description": "Create the Python package structure for the new workflow.",
-      "commands": ["mkdir -p src/workflows", "touch src/workflows/__init__.py"],
-      "files": []
+      "description": "Create the verification script.",
+      "commands": [],
+      "files": [
+        {
+          "path": "verify_script.sh",
+          "change": "Create a bash script that runs the unit tests for the new workflow to verify its correctness."
+        }
+      ]
     },
     {
       "step": 4,
-      "description": "Create the core ICP matching workflow script. This initial version will contain placeholder logic that returns a mocked result, allowing the interface to be tested and verified independently of the final Ollama integration.",
-      "commands": [],
-      "files": [
-        {
-          "path": "src/workflows/icp_matching_workflow.py",
-          "change": "Create a new Python module for the workflow logic.",
-          "content": "import json\n\ndef get_icp_fit(company_data: dict, icp_criteria: dict) -> dict:\n    \"\"\"\n    Analyzes company data against ICP criteria and returns a fit score and reasoning.\n\n    Args:\n        company_data: A dictionary containing details about the company.\n        icp_criteria: A dictionary defining the ideal customer profile.\n\n    Returns:\n        A dictionary with 'score' (float) and 'reasoning' (str).\n    \"\"\"\n    # Placeholder logic. In the real implementation, this will involve calls to\n    # Ollama for embedding similarity and generative reasoning.\n    score = 0.75\n    reasoning = (\n        f\"The company '{company_data.get('name', 'N/A')}' is a good fit. \"\n        f\"It operates in the '{company_data.get('industry', 'N/A')}' industry, which aligns with our target sectors. \"\n        f\"The description mentions several relevant keywords.\"\n    )\n\n    return {\n        \"score\": score,\n        \"reasoning\": reasoning\n    }\n"
-        }
-      ]
-    },
-    {
-      "step": 5,
-      "description": "Create a command-line runner script to execute the workflow. This provides an entry point for manual execution and for the verification script.",
-      "commands": [],
-      "files": [
-        {
-          "path": "run_icp_matcher.py",
-          "change": "Create a new CLI script to run the ICP matching workflow.",
-          "content": "import sys\nimport json\nfrom pathlib import Path\n\n# Add src to the Python path to allow for absolute imports\nsys.path.insert(0, str(Path(__file__).resolve().parent / 'src'))\n\nfrom workflows.icp_matching_workflow import get_icp_fit\n\ndef main():\n    \"\"\"\n    CLI entry point to run the ICP matching workflow.\n    \"\"\"\n    if len(sys.argv) != 2:\n        print(\"Usage: python run_icp_matcher.py <path_to_company_data_json>\", file=sys.stderr)\n        sys.exit(1)\n\n    company_data_path = Path(sys.argv[1])\n    if not company_data_path.is_file():\n        print(f\"Error: File not found at '{company_data_path}'\", file=sys.stderr)\n        sys.exit(1)\n\n    icp_criteria_path = Path('config/icp_criteria.json')\n    if not icp_criteria_path.is_file():\n        print(f\"Error: ICP criteria file not found at '{icp_criteria_path}'\", file=sys.stderr)\n        sys.exit(1)\n\n    try:\n        with open(company_data_path, 'r') as f:\n            company_data = json.load(f)\n        with open(icp_criteria_path, 'r') as f:\n            icp_criteria = json.load(f)\n    except json.JSONDecodeError as e:\n        print(f\"Error decoding JSON: {e}\", file=sys.stderr)\n        sys.exit(1)\n\n    result = get_icp_fit(company_data, icp_criteria)\n    \n    # Print the JSON result to stdout for verification\n    print(json.dumps(result, indent=2))\n\nif __name__ == \"__main__\":\n    main()\n"
-        }
-      ]
+      "description": "Make the verification script executable.",
+      "commands": [
+        "chmod +x verify_script.sh"
+      ],
+      "files": []
     }
   ],
-  "verificationScript": "The verification script 'verify_script.sh' has been created and made executable. It runs the workflow with sample data and validates the output format.",
+  "verificationScript": "A script named `verify_script.sh` will be created and made executable. It activates the Python virtual environment and runs the newly created tests (`pytest tests/workflows/test_engagement_scorer.py`). A successful test run (exit code 0) verifies the change.",
   "rollbackPlan": [
-    "git rm run_icp_matcher.py",
-    "git rm src/workflows/icp_matching_workflow.py",
-    "git rm config/icp_criteria.json",
-    "git rm verify_script.sh",
-    "rmdir src/workflows || true",
-    "rmdir config || true"
+    "Remove the created Python files: `rm src/workflows/engagement_scorer.py tests/workflows/test_engagement_scorer.py`.",
+    "Remove the verification script: `rm verify_script.sh`.",
+    "If any other files were modified, revert them using `git checkout -- <file_path>`."
   ]
 }
