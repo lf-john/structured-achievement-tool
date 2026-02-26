@@ -14,6 +14,11 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
+
+class LLMCLIExecutionError(Exception):
+    """Custom exception for LLM CLI execution failures."""
+    pass
+
 from src.llm.providers import ProviderConfig, get_env_for_provider
 from src.execution.stream_parser import StreamParser
 from src.execution.session_continuator import SessionContinuator
@@ -315,3 +320,40 @@ async def health_check(provider: ProviderConfig) -> bool:
         and not result.is_api_error
         and "HEALTHY" in result.stdout.upper()
     )
+
+def execute_llm_command(
+    provider_config: ProviderConfig,
+    prompt: Optional[str] = None,
+    prompt_file: Optional[str] = None,
+    working_directory: Optional[str] = None,
+    timeout: int = DEFAULT_TIMEOUT,
+    stream_output_file: Optional[str] = None,
+    task_id: Optional[str] = None,
+    session_continuator: Optional[SessionContinuator] = None,
+    agentic: bool = True,
+) -> str:
+    """Synchronous wrapper to invoke an LLM via CLI subprocess."""
+    try:
+        result = asyncio.run(
+            invoke(
+                provider=provider_config,
+                prompt=prompt,
+                prompt_file=prompt_file,
+                working_directory=working_directory,
+                timeout=timeout,
+                stream_output_file=stream_output_file,
+                task_id=task_id,
+                session_continuator=session_continuator,
+                agentic=agentic,
+            )
+        )
+
+        if result.exit_code != 0 or result.is_api_error or result.is_environmental:
+            error_details = f"Exit Code: {result.exit_code}, API Error: {result.is_api_error}, Environmental Error: {result.is_environmental}"
+            full_error_message = f"LLM CLI command failed for {provider_config.name}. {error_details}\nStderr: {result.stderr}\nStdout: {result.stdout}"
+            raise LLMCLIExecutionError(full_error_message)
+
+        return result.stdout
+    except Exception as e:
+        raise LLMCLIExecutionError(f"Failed to execute LLM command: {e}") from e
+
