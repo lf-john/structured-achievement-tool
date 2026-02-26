@@ -95,6 +95,96 @@ def check_dashboard():
     except:
         return False
 
+
+def maintain_checkpoint_db():
+    """Expire old checkpoint entries (>24h) and VACUUM the DB (Failure State 8).
+
+    The checkpoint DB stores LangGraph workflow state for resume capability.
+    Old entries serve no purpose and grow the DB file over time.
+    """
+    import sqlite3
+
+    db_path = os.path.join(PROJECT_PATH, ".memory", "checkpoints.db")
+    if not os.path.isfile(db_path):
+        return
+
+    try:
+        conn = sqlite3.connect(db_path, timeout=5)
+        cursor = conn.cursor()
+
+        # List tables so we can handle any schema
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [row[0] for row in cursor.fetchall()]
+
+        # Delete rows older than 24 hours from any table with a timestamp column
+        for table in tables:
+            cursor.execute(f"PRAGMA table_info({table})")
+            columns = [col[1] for col in cursor.fetchall()]
+            for ts_col in ("created_at", "timestamp", "updated_at"):
+                if ts_col in columns:
+                    try:
+                        cursor.execute(
+                            f"DELETE FROM {table} WHERE {ts_col} < datetime('now', '-24 hours')"
+                        )
+                        deleted = cursor.rowcount
+                        if deleted:
+                            print(f"  Checkpoint DB: pruned {deleted} rows from {table}")
+                    except sqlite3.OperationalError:
+                        pass
+                    break
+
+        conn.commit()
+
+        # VACUUM to reclaim disk space (only if DB > 1MB to avoid unnecessary I/O)
+        db_size = os.path.getsize(db_path)
+        if db_size > 1024 * 1024:
+            cursor.execute("VACUUM")
+            new_size = os.path.getsize(db_path)
+            print(f"  Checkpoint DB: VACUUM {db_size // 1024}KB -> {new_size // 1024}KB")
+
+        conn.close()
+    except Exception as e:
+        print(f"  Checkpoint DB maintenance failed: {e}")
+
+def cleanup_orphan_worktrees():
+    """Remove git worktrees that are older than 24 hours (Failure State 12).
+
+    SAT creates worktrees under PROJECT_PATH/worktrees/ for isolated task
+    execution.  If a task crashes without cleanup, the worktree is left behind.
+    This function prunes worktrees whose last modification was >24h ago.
+    """
+    worktree_dir = os.path.join(PROJECT_PATH, "worktrees")
+    if not os.path.isdir(worktree_dir):
+        return
+
+    cutoff = time.time() - 86400  # 24 hours
+
+    try:
+        for name in os.listdir(worktree_dir):
+            wt_path = os.path.join(worktree_dir, name)
+            if not os.path.isdir(wt_path):
+                continue
+            mtime = os.path.getmtime(wt_path)
+            if mtime < cutoff:
+                try:
+                    result = subprocess.run(
+                        ["git", "worktree", "remove", wt_path, "--force"],
+                        cwd=PROJECT_PATH,
+                        capture_output=True, text=True, timeout=15,
+                    )
+                    if result.returncode == 0:
+                        print(f"  Cleaned orphan worktree: {name}")
+                    else:
+                        # Fallback: remove directory manually
+                        import shutil
+                        shutil.rmtree(wt_path, ignore_errors=True)
+                        print(f"  Removed orphan worktree dir: {name}")
+                except Exception as e:
+                    print(f"  Failed to clean worktree {name}: {e}")
+    except Exception as e:
+        print(f"  Worktree cleanup error: {e}")
+
+
 def scan_tasks():
     """Scan task directories for status.
 
@@ -194,6 +284,12 @@ def main():
     # 5. Check Dashboard
     if not check_dashboard():
         problems.append("SAT Dashboard not responding")
+
+    # 5b. Checkpoint DB maintenance (Failure State 8)
+    maintain_checkpoint_db()
+
+    # 5c. Git worktree cleanup (Failure State 12)
+    cleanup_orphan_worktrees()
 
     # 6. Scan tasks
     task_status, task_issues = scan_tasks()

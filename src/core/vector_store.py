@@ -5,11 +5,14 @@ This module uses sqlite-vec for efficient similarity search on
 document embeddings.
 """
 
+import logging
 import sqlite3
 import json
 from typing import List, Dict, Any, Optional
 import sqlite_vec
-from src.core.embedding_service import EmbeddingService
+from src.core.embedding_service import EmbeddingService, MAX_CHARS
+
+logger = logging.getLogger(__name__)
 
 
 class VectorStore:
@@ -86,6 +89,16 @@ class VectorStore:
         Returns:
             The ID of the inserted document.
         """
+        # Truncate before embedding AND before storage (Failure State 11).
+        # EmbeddingService._truncate handles the embedding side, but the raw
+        # text stored in the DB should also be capped to avoid bloat.
+        if len(text) > MAX_CHARS:
+            logger.debug(
+                "Truncating document from %d to %d chars before embedding",
+                len(text), MAX_CHARS,
+            )
+            text = EmbeddingService._truncate(text, MAX_CHARS)
+
         # Generate embedding for the text
         embedding = self.embedding_service.embed_text(text)
 
@@ -154,6 +167,10 @@ class VectorStore:
         # Handle empty query text
         if not query_text or not query_text.strip():
             return []
+
+        # Truncate query text before embedding (Failure State 11)
+        if len(query_text) > MAX_CHARS:
+            query_text = EmbeddingService._truncate(query_text, MAX_CHARS)
 
         # Generate embedding for the query
         query_embedding = self.embedding_service.embed_text(query_text)
