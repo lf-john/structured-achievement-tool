@@ -75,8 +75,17 @@ def check_ollama():
         return False
 
 def check_gdrive():
-    """Check if Google Drive mount is accessible."""
-    return os.path.exists("/home/johnlane/GoogleDrive/DriveSyncFiles/sat-tasks")
+    """Check if Google Drive mount is accessible.
+
+    Verifies a known file exists (not just the directory) to detect stale
+    FUSE mounts where the mountpoint directory exists but reads hang or
+    return empty results.
+    """
+    sentinel = "/home/johnlane/GoogleDrive/DriveSyncFiles/sat-tasks/CLAUDE.md"
+    try:
+        return os.path.isfile(sentinel) and os.path.getsize(sentinel) > 0
+    except OSError:
+        return False
 
 def check_dashboard():
     """Check if the SAT dashboard is responding."""

@@ -103,8 +103,18 @@ class FailureMonitor:
     def create_debug_story(self, context: FailureContext) -> Optional[str]:
         """Create a debug story file from *context*.
 
-        Returns the file path on success, or ``None`` if rate-limited.
+        Returns the file path on success, or ``None`` if rate-limited or if
+        the failing task is itself a debug story (prevents recursive debug
+        story creation).
         """
+        # Guard against debug stories creating debug stories (Failure State 9)
+        if "debug" in context.task_name.lower():
+            logger.warning(
+                "Skipping debug story creation for '%s' — task is itself a debug story",
+                context.task_name,
+            )
+            return None
+
         if self.is_rate_limited(context.task_name):
             logger.info(
                 "Rate limited: skipping debug story for %s", context.task_name

@@ -40,30 +40,57 @@ class CLIResult:
 # Patterns that indicate API errors (from Ralph Pro)
 API_ERROR_PATTERN = re.compile(r'API Error:\s*(\d{3})')
 AUTH_ERROR_PATTERN = re.compile(r'authentication_error|invalid.*api.*key|unauthorized', re.IGNORECASE)
-RATE_LIMIT_PATTERN = re.compile(r'rate.?limit|429|too many requests', re.IGNORECASE)
+# Note: bare "429" was removed — it caused false positives when LLM output
+# contained "429" in content (e.g., HTTP status codes in documentation).
+# Only match explicit rate-limit phrases or "error 429" / "status 429" patterns.
+RATE_LIMIT_PATTERN = re.compile(
+    r'rate.?limit|too many requests|error[:\s]+429|status[:\s]+429|code[:\s]+429|HTTP/\S+\s+429',
+    re.IGNORECASE,
+)
 
 
-def _detect_api_error(output: str) -> tuple[bool, Optional[int]]:
-    """Check if output contains API error indicators."""
-    match = API_ERROR_PATTERN.search(output)
+def _detect_api_error(stdout: str, stderr: str) -> tuple[bool, Optional[int]]:
+    """Check if output contains API error indicators.
+
+    Checks stderr for all patterns (API errors, auth, rate limits).
+    Only checks stdout for explicit 'API Error: NNN' pattern — NOT rate
+    limit patterns, which would false-positive on LLM content containing
+    '429', 'rate limit', etc.
+    """
+    # Check stderr (reliable — contains actual API/CLI errors)
+    combined_stderr = stderr
+    match = API_ERROR_PATTERN.search(combined_stderr)
     if match:
         return True, int(match.group(1))
-    if AUTH_ERROR_PATTERN.search(output):
+    if AUTH_ERROR_PATTERN.search(combined_stderr):
         return True, 401
-    if RATE_LIMIT_PATTERN.search(output):
+    if RATE_LIMIT_PATTERN.search(combined_stderr):
         return True, 429
+
+    # Check stdout only for explicit API error format (not rate-limit patterns)
+    match = API_ERROR_PATTERN.search(stdout)
+    if match:
+        return True, int(match.group(1))
+
     return False, None
 
 
-def _build_command(provider: ProviderConfig, prompt_file: Optional[str] = None, prompt: Optional[str] = None) -> list[str]:
-    """Build the CLI command for a provider."""
+def _build_command(provider: ProviderConfig, prompt_file: Optional[str] = None, prompt: Optional[str] = None, agentic: bool = True) -> list[str]:
+    """Build the CLI command for a provider.
+
+    Args:
+        agentic: If True, use agentic flags (--yolo, --dangerously-skip-permissions).
+                 Set False for simple prompt-response phases (classify, decompose)
+                 to avoid burning through API rate limits with tool calls.
+    """
     if provider.cli_command == "claude":
         cmd = ["claude"]
         if prompt_file:
             cmd.extend(["-p", f"@{prompt_file}"])
         elif prompt:
             cmd.extend(["-p", prompt])
-        cmd.append("--dangerously-skip-permissions")
+        if agentic:
+            cmd.append("--dangerously-skip-permissions")
         # Add model override
         if provider.model_id:
             cmd.extend(["--model", provider.model_id])
@@ -75,7 +102,8 @@ def _build_command(provider: ProviderConfig, prompt_file: Optional[str] = None, 
             cmd.extend(["-p", f"@{prompt_file}"])
         elif prompt:
             cmd.extend(["-p", prompt])
-        cmd.append("--yolo")  # Auto-accept all actions (headless mode)
+        if agentic:
+            cmd.append("--yolo")  # Auto-accept all actions (headless mode)
         if provider.model_id:
             cmd.extend(["-m", provider.model_id])
         return cmd
@@ -98,6 +126,7 @@ async def invoke(
     stream_output_file: Optional[str] = None,
     task_id: Optional[str] = None,
     session_continuator: Optional[SessionContinuator] = None,
+    agentic: bool = True,
 ) -> CLIResult:
     """Invoke an LLM via CLI subprocess.
 
@@ -110,11 +139,12 @@ async def invoke(
         stream_output_file: If provided, stream output incrementally to this file
         task_id: Task identifier for session continuation tracking
         session_continuator: If provided, auto-continue on max turns detection
+        agentic: If True, use agentic flags. False for simple prompt-response.
 
     Returns:
         CLIResult with stdout, stderr, exit code, and error classification
     """
-    cmd = _build_command(provider, prompt_file, prompt)
+    cmd = _build_command(provider, prompt_file, prompt, agentic=agentic)
     env = get_env_for_provider(provider)
     cwd = working_directory or os.getcwd()
 
@@ -182,7 +212,7 @@ async def invoke(
         duration = time.monotonic() - start_time
 
         # Check for API errors in output
-        is_api_error, error_code = _detect_api_error(stdout + stderr)
+        is_api_error, error_code = _detect_api_error(stdout, stderr)
 
         result = CLIResult(
             stdout=stdout,
@@ -196,6 +226,8 @@ async def invoke(
 
         if is_api_error:
             logger.warning(f"API error from {provider.name}: code={error_code}")
+            logger.warning(f"API error stdout (first 500): {stdout[:500]}")
+            logger.warning(f"API error stderr (first 500): {stderr[:500]}")
         elif process.returncode != 0:
             logger.warning(f"CLI failed for {provider.name}: exit_code={process.returncode}")
 

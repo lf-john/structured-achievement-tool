@@ -6,6 +6,7 @@ Supports 5 verification types: command, file_exists, manual, test, tdd_test.
 """
 
 import os
+import sys
 import subprocess
 import re
 import logging
@@ -51,8 +52,16 @@ def run_tests(
         TestResult with pass/fail status and output
     """
     try:
+        # Resolve bare 'pytest' to the venv's python -m pytest so it works
+        # even when the venv's bin/ directory isn't on PATH
+        resolved_command = test_command
+        if test_command.startswith("pytest ") or test_command == "pytest":
+            venv_pytest = os.path.join(os.path.dirname(sys.executable), "pytest")
+            if os.path.isfile(venv_pytest):
+                resolved_command = test_command.replace("pytest", venv_pytest, 1)
+
         result = subprocess.run(
-            test_command,
+            resolved_command,
             shell=True,
             cwd=working_directory,
             capture_output=True,

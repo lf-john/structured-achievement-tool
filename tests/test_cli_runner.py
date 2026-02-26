@@ -15,22 +15,40 @@ from src.llm.providers import get_provider
 
 class TestDetectApiError:
     def test_api_error_with_code(self):
-        is_error, code = _detect_api_error("API Error: 500")
+        is_error, code = _detect_api_error("", "API Error: 500")
+        assert is_error
+        assert code == 500
+
+    def test_api_error_in_stdout(self):
+        is_error, code = _detect_api_error("API Error: 500", "")
         assert is_error
         assert code == 500
 
     def test_auth_error(self):
-        is_error, code = _detect_api_error("authentication_error: invalid key")
+        is_error, code = _detect_api_error("", "authentication_error: invalid key")
         assert is_error
         assert code == 401
 
     def test_rate_limit(self):
-        is_error, code = _detect_api_error("rate limit exceeded")
+        is_error, code = _detect_api_error("", "rate limit exceeded")
+        assert is_error
+        assert code == 429
+
+    def test_rate_limit_in_stderr_with_error_429(self):
+        is_error, code = _detect_api_error("", "error: 429")
         assert is_error
         assert code == 429
 
     def test_no_error(self):
-        is_error, code = _detect_api_error("Everything is fine, task completed.")
+        is_error, code = _detect_api_error("Everything is fine, task completed.", "")
+        assert not is_error
+        assert code is None
+
+    def test_429_in_stdout_not_false_positive(self):
+        """LLM output containing '429' should NOT trigger rate limit detection."""
+        is_error, code = _detect_api_error(
+            '{"stories": [{"description": "Handle HTTP 429 status codes"}]}', ""
+        )
         assert not is_error
         assert code is None
 

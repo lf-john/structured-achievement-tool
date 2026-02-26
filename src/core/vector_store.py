@@ -34,6 +34,7 @@ class VectorStore:
         self.embedding_service = embedding_service
         self.dimension = dimension
         self.conn = sqlite3.connect(db_path)
+        self.conn.execute("PRAGMA journal_mode=WAL")
 
         # Enable sqlite-vec extension
         self.conn.enable_load_extension(True)

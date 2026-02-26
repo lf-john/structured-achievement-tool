@@ -1,4 +1,4 @@
-import time, logging, os, asyncio, traceback, re, json
+import time, logging, os, asyncio, traceback, re, json, signal, atexit, sys
 from src.orchestrator_v2 import OrchestratorV2 as Orchestrator
 from src.execution.stability_timeout import StabilityTimeout
 from src.execution.slot_manager import SlotManager
@@ -11,6 +11,53 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Recently completed tasks: {file_path: completion_time} — prevents re-detection
 # on slow FUSE mounts where tag writes may not propagate immediately
 recently_completed = {}
+
+# Per-task attempt counter: {file_path: int} — prevents infinite retry loops.
+# If a task has been attempted MAX_TASK_ATTEMPTS times without success, it is
+# marked <Failed> and skipped.  The monitor handles manual retries.
+processing_attempts: dict[str, int] = {}
+MAX_TASK_ATTEMPTS = 3
+
+# --- PID file lock (Failure State 14) ---
+PID_FILE = "/tmp/sat-daemon.pid"
+
+
+def _acquire_pid_lock():
+    """Ensure only one daemon instance is running.  Exit if another is alive."""
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE, "r") as f:
+                old_pid = int(f.read().strip())
+            # Signal 0 checks existence without actually sending a signal
+            os.kill(old_pid, 0)
+            # If we reach here the process is still alive
+            logging.error(
+                "Another SAT daemon is already running (PID %d). Exiting.", old_pid
+            )
+            sys.exit(1)
+        except (ValueError, ProcessLookupError, PermissionError):
+            # Stale PID file — previous process is gone
+            logging.info("Removing stale PID file (old PID no longer running)")
+        except OSError:
+            pass
+
+    # Write our PID
+    with open(PID_FILE, "w") as f:
+        f.write(str(os.getpid()))
+    logging.info("PID lock acquired: %s (PID %d)", PID_FILE, os.getpid())
+
+
+def _release_pid_lock():
+    """Remove the PID file on exit."""
+    try:
+        if os.path.exists(PID_FILE):
+            with open(PID_FILE, "r") as f:
+                stored_pid = int(f.read().strip())
+            if stored_pid == os.getpid():
+                os.remove(PID_FILE)
+                logging.info("PID lock released: %s", PID_FILE)
+    except Exception as e:
+        logging.warning("Failed to release PID lock: %s", e)
 
 def has_tag(file_path, tag):
     """Check if the file contains the specific tag on its own line."""
@@ -142,7 +189,26 @@ async def process_task_wrapper(orchestrator, file_path, signal='pending',
                                slot_manager=None, slot_id=None,
                                rate_limit_handler=None):
     """Wraps the orchestrator call to handle cancellation and set the right tags."""
-    logging.info(f"Locking task: {file_path} (signal={signal}, slot={slot_id})")
+
+    # --- Per-task attempt guard (Failure State 1) ---
+    processing_attempts[file_path] = processing_attempts.get(file_path, 0) + 1
+    attempt = processing_attempts[file_path]
+
+    if attempt > MAX_TASK_ATTEMPTS:
+        logging.error(
+            "Task %s has been attempted %d times (max %d). Marking <Failed> to break retry loop.",
+            file_path, attempt, MAX_TASK_ATTEMPTS,
+        )
+        # Try to mark whatever current tag is present as <Failed>
+        for tag in ('<Pending>', '<Working>'):
+            if mark_file_status(file_path, tag, '<Failed>'):
+                break
+        recently_completed[file_path] = time.time()
+        if slot_manager and slot_id is not None:
+            slot_manager.release_slot(slot_id)
+        return
+
+    logging.info(f"Locking task: {file_path} (signal={signal}, slot={slot_id}, attempt={attempt}/{MAX_TASK_ATTEMPTS})")
 
     # Immediately mark as working
     trigger_tag = SIGNAL_TAGS.get(signal, '<Pending>')
@@ -170,9 +236,11 @@ async def process_task_wrapper(orchestrator, file_path, signal='pending',
             # PRD phases: orchestrator already wrote output + tags to the file
             # Don't overwrite with <Finished>/<Failed>
             logging.info(f"PRD phase complete for {file_path}")
+            processing_attempts.pop(file_path, None)  # Clear on success
         elif result and result.get("returncode") == 0:
             tagged = mark_file_status(file_path, '<Working>', '<Finished>')
             logging.info(f"Marked {file_path} as <Finished>: {tagged}")
+            processing_attempts.pop(file_path, None)  # Clear on success
             # Remove from rate limit retry queue on success
             if rate_limit_handler:
                 rate_limit_handler.remove_from_queue(file_path)
@@ -205,6 +273,8 @@ async def process_task_wrapper(orchestrator, file_path, signal='pending',
         logging.info(f"Unlocking task: {file_path}")
 
 async def async_main():
+    _acquire_pid_lock()
+    atexit.register(_release_pid_lock)
     logging.info("Starting Structured Achievement Tool (SAT) Daemon...")
     try:
         project_path = os.path.expanduser("~/projects/structured-achievement-tool")
@@ -327,6 +397,8 @@ def main():
         asyncio.run(async_main())
     except KeyboardInterrupt:
         pass
+    finally:
+        _release_pid_lock()
 
 if __name__ == "__main__":
     main()

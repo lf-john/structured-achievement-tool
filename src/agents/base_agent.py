@@ -138,11 +138,79 @@ class BaseAgent(ABC):
         prompt: str,
         working_directory: str,
     ) -> CLIResult:
-        """Invoke the LLM via CLI.
+        """Invoke the LLM via CLI with full provider cascade on 429.
 
-        For large prompts, writes to a temp file to avoid shell argument limits.
+        On rate limit (429), marks the provider, waits with exponential backoff,
+        and tries the next eligible provider. Cascades through all available
+        providers before giving up.
         """
-        # Use temp file for prompts > 10KB (shell arg limits)
+        providers = self.routing_engine.select_all(self.agent_name)
+        # Ensure the initially-selected provider is tried first
+        if provider.name not in [p.name for p in providers]:
+            providers.insert(0, provider)
+
+        backoff = 5  # Initial backoff in seconds
+        last_result = None
+        tried = set()
+
+        for candidate in providers:
+            if candidate.name in tried:
+                continue
+            tried.add(candidate.name)
+
+            if candidate.name != provider.name:
+                logger.info(f"{self.agent_name}: trying {candidate.name}")
+
+            result = await self._invoke_raw(candidate, prompt, working_directory)
+
+            if result.is_api_error and result.api_error_code == 429:
+                self.routing_engine.mark_rate_limited(candidate.name)
+                logger.warning(
+                    f"{self.agent_name}: {candidate.name} rate-limited (429), "
+                    f"backoff {backoff}s before next provider"
+                )
+                last_result = result
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 120)
+                continue
+
+            # Non-429 result (success or other error) — return it
+            if result.is_api_error:
+                raise RuntimeError(
+                    f"API error from {candidate.name}: code={result.api_error_code}, "
+                    f"stderr={result.stderr[:500]}"
+                )
+
+            if result.is_environmental:
+                raise RuntimeError(
+                    f"Environmental error from {candidate.name}: {result.stderr[:500]}"
+                )
+
+            if result.exit_code != 0 and not result.stdout.strip():
+                raise RuntimeError(
+                    f"CLI failed for {candidate.name}: exit_code={result.exit_code}, "
+                    f"stderr={result.stderr[:500]}"
+                )
+
+            return result
+
+        # All providers exhausted — raise with last result info
+        raise RuntimeError(
+            f"All providers rate-limited for {self.agent_name}. "
+            f"Tried: {', '.join(tried)}. Last error: 429"
+        )
+
+    async def _invoke_raw(
+        self,
+        provider: ProviderConfig,
+        prompt: str,
+        working_directory: str,
+    ) -> CLIResult:
+        """Raw CLI invocation in non-agentic mode (prompt-response only).
+
+        Agents are used for classify/decompose — simple text-in/JSON-out.
+        No tool access needed, so agentic=False avoids burning API calls.
+        """
         if len(prompt) > 10_000:
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".md", delete=False, dir=working_directory
@@ -151,38 +219,21 @@ class BaseAgent(ABC):
                 prompt_file = f.name
 
             try:
-                result = await cli_invoke(
+                return await cli_invoke(
                     provider=provider,
                     prompt_file=prompt_file,
                     working_directory=working_directory,
+                    agentic=False,
                 )
             finally:
                 os.unlink(prompt_file)
         else:
-            result = await cli_invoke(
+            return await cli_invoke(
                 provider=provider,
                 prompt=prompt,
                 working_directory=working_directory,
+                agentic=False,
             )
-
-        if result.is_api_error:
-            raise RuntimeError(
-                f"API error from {provider.name}: code={result.api_error_code}, "
-                f"stderr={result.stderr[:500]}"
-            )
-
-        if result.is_environmental:
-            raise RuntimeError(
-                f"Environmental error from {provider.name}: {result.stderr[:500]}"
-            )
-
-        if result.exit_code != 0 and not result.stdout.strip():
-            raise RuntimeError(
-                f"CLI failed for {provider.name}: exit_code={result.exit_code}, "
-                f"stderr={result.stderr[:500]}"
-            )
-
-        return result
 
     def _parse_and_validate(self, text: str) -> BaseModel:
         """Extract JSON and validate against the response model."""

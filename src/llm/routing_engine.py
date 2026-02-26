@@ -235,3 +235,71 @@ class RoutingEngine:
             fallback = get_provider(self.config.get("default_primary", "sonnet"))
 
         return primary, fallback
+
+    def select_all(
+        self,
+        agent_name: str,
+        story_complexity: Optional[int] = None,
+        is_code_task: bool = False,
+    ) -> list[ProviderConfig]:
+        """Return all eligible providers in priority order (best first).
+
+        Same eligibility rules as select(), but returns the full sorted list
+        so callers can cascade through providers on failure.
+        """
+        # Check config override first — if set, that's the only option
+        phase_key = agent_name.upper()
+        if phase_key in self.phase_overrides:
+            override_name = self.phase_overrides[phase_key]
+            if override_name in PROVIDERS:
+                return [PROVIDERS[override_name]]
+
+        complexity = self.get_complexity(agent_name, story_complexity)
+
+        if complexity <= 2:
+            return [PROVIDERS["nemotron"]]
+
+        eligible = []
+        needs_agentic = agent_name in AGENTIC_AGENTS
+
+        min_adequate_power = max(complexity - 1, 1)
+
+        for name, provider in PROVIDERS.items():
+            power = provider.code_power if is_code_task else provider.power
+
+            if not is_provider_available(provider):
+                continue
+            if needs_agentic and not provider.agentic:
+                continue
+            if power < min_adequate_power:
+                continue
+
+            if provider.name in CLAUDE_MODELS:
+                if complexity >= power:
+                    eligible.append(provider)
+            elif provider.local:
+                if complexity <= 6 and power >= complexity:
+                    eligible.append(provider)
+                elif provider.name == "nemotron" and complexity <= 3:
+                    eligible.append(provider)
+            else:
+                if complexity >= power - 2:
+                    eligible.append(provider)
+
+        if not eligible:
+            default = self.config.get("default_primary", "sonnet")
+            return [get_provider(default)]
+
+        def sort_key(p: ProviderConfig):
+            cost_order = {"free": 0, "minimal": 1, "low": 2, "medium": 3, "high": 4}
+            power = p.code_power if is_code_task else p.power
+            rate_limited = 1 if self._is_rate_limited(p.name) else 0
+            return (
+                rate_limited,
+                0 if p.local else 1,
+                cost_order.get(p.cost_tier, 5),
+                -power,
+            )
+
+        eligible.sort(key=sort_key)
+        return eligible
