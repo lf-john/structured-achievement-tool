@@ -1,31 +1,35 @@
 {
-  "status": "success",
-  "summary": "PLAN_CODE phase completed successfully for story US-002.",
-  "actions": [
+  "systemAnalysis": {
+    "filesToChange": ["docs/SES_SANDBOX_EXIT_PROCESS.md"],
+    "systemImpact": "None. This is a documentation-only change and has no impact on the running system.",
+    "externalDependencies": []
+  },
+  "executionSteps": [
     {
-      "action": "write_file",
-      "file_path": "tests/test_formatters.py",
-      "status": "success",
-      "summary": "Created new test file with pytest tests for the `format_duration` utility function."
+      "step": 1,
+      "description": "Create a new markdown file to document the SES sandbox exit process.",
+      "commands": [],
+      "files": [
+        {
+          "path": "docs/SES_SANDBOX_EXIT_PROCESS.md",
+          "change": "Create a new file and add the documentation content."
+        }
+      ]
     },
     {
-      "action": "run_shell_command",
-      "command": "./.venv/bin/pytest tests/test_formatters.py -v",
-      "status": "failure",
-      "summary": "Initial test run failed due to incorrect logic for negative numbers in the `format_duration` function."
-    },
-    {
-      "action": "replace",
-      "file_path": "src/utils/formatters.py",
-      "status": "success",
-      "summary": "Corrected the logic in the `format_duration` function to handle negative inputs correctly."
-    },
-    {
-      "action": "run_shell_command",
-      "command": "./.venv/bin/pytest tests/test_formatters.py -v",
-      "status": "success",
-      "summary": "All 6 tests for `format_duration` passed after fixing the implementation."
+      "step": 2,
+      "description": "Populate the document with the required information about the SES sandbox exit process.",
+      "commands": [],
+      "files": [
+        {
+          "path": "docs/SES_SANDBOX_EXIT_PROCESS.md",
+          "change": "Add sections covering: 1. How to request production access. 2. AWS review criteria (bounce/complaint rates, use case). 3. Expected timeline. 4. Differences between sandbox and production limits."
+        }
+      ]
     }
   ],
-  "next_phase": "TDD_GREEN"
+  "verificationScript": "verify_script.sh created and executable",
+  "rollbackPlan": [
+    "rm docs/SES_SANDBOX_EXIT_PROCESS.md"
+  ]
 }
