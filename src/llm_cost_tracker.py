@@ -30,6 +30,11 @@ class LLMCostTracker:
         self.logger.info("Mocked get_cost_per_lead called.")
         return {"scored": 0.0, "emailed": 0.0}
 
+    def can_afford_claude(self, requested_budget: float) -> bool:
+        # Placeholder for actual budget check. Assume always affordable for now.
+        self.logger.info(f"Mocked can_afford_claude called with budget: {requested_budget}")
+        return True
+
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 

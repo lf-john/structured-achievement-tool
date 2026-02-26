@@ -60,22 +60,23 @@ from src.llm.llm_generation_service import LLMGenerationService
 from src.llm.providers import get_provider
 from src.notifications.notifier import Notifier # To mock
 from src.llm_cost_tracker import LLMCostTracker # To mock
-from src.llm.cli_runner import LLMCLIExecutionError # To simulate Claude API failure
+from src.llm.cli_runner import CLIRunner, LLMCLIExecutionError # To simulate Claude API failure
 
 class TestLLMGenerationFallback:
 
     @pytest.fixture
     def mock_cli_runner(self):
-        # Mock cli_runner.py's execute_llm_command (or similar)
-        with patch('src.llm.cli_runner.execute_llm_command') as mock_exec:
-            yield mock_exec
+        mock_runner = MagicMock(spec=CLIRunner)
+        # Mock the execute_llm_command method of the mock_runner instance
+        mock_runner.execute_llm_command.return_value = "Mocked LLM response"
+        yield mock_runner
 
     @pytest.fixture
     def mock_llm_cost_tracker(self):
         with patch('src.llm_cost_tracker.LLMCostTracker') as mock_tracker_cls:
             mock_tracker_instance = mock_tracker_cls.return_value
             # Default to sufficient budget
-            mock_tracker_instance.has_budget_for_model.return_value = True
+            mock_tracker_instance.can_afford_claude.return_value = True
             yield mock_tracker_instance
 
     @pytest.fixture
@@ -97,63 +98,68 @@ class TestLLMGenerationFallback:
         with patch('src.llm.llm_generation_service.get_provider', side_effect=get_provider):
             return LLMGenerationService(
                 llm_cost_tracker=mock_llm_cost_tracker,
-                notifier=mock_notifier
+                notifier=mock_notifier,
+                cli_runner=mock_cli_runner # Pass the mocked cli_runner instance
             )
 
     # --- AC 1: Fallback to Qwen3 8B operational when Claude API unavailable/budget exhausted. ---
 
     def test_should_fallback_to_qwen3_when_claude_cli_fails(self, service, mock_cli_runner, mock_logging, mock_notifier):
-        # Simulate Claude CLI failing (e.g., connection error, CLI not found, generic error)
-        mock_cli_runner.side_effect = LLMCLIExecutionError("Claude CLI failed") # Custom exception to simulate CLI failure
-
-        # Mock Qwen3 to return expected content
-        # We need to ensure that the mocked call specifically targets qwen3:8b
-        def cli_runner_side_effect(*args, **kwargs):
-            if 'qwen3:8b' in kwargs.get('model_id', ''):
-                return "Generated email content by Qwen3."
-            raise LLMCLIExecutionError("Claude CLI failed")
-
-        mock_cli_runner.side_effect = cli_runner_side_effect
+        mock_cli_runner.execute_llm_command.side_effect = [
+            LLMCLIExecutionError("Claude CLI failed"), # First call (Claude) fails
+            "Generated email content by Qwen3."         # Second call (Qwen3) succeeds
+        ]
 
         task_description = "Generate a personalized email body."
-        generated_content = service.generate_email("test_agent", task_description)
+        generated_content, requires_review = service.generate_email("test_agent", task_description)
 
+        # Assert execute_llm_command was called at least twice (once for Claude, once for Qwen3)
+        assert mock_cli_runner.execute_llm_command.call_count == 2
         # Assert Claude was attempted and failed
-        assert mock_cli_runner.call_count >= 1 # At least one attempt for Claude
-        # Check that Qwen3 was called (implicitly through the side_effect for mock_cli_runner)
+        mock_cli_runner.execute_llm_command.assert_any_call(
+            provider_config=get_provider("opus"),
+            prompt=task_description
+        )
+        # Assert Qwen3 was called
+        mock_cli_runner.execute_llm_command.assert_any_call(
+            provider_config=get_provider("qwen3_8b"),
+            prompt=task_description
+        )
         assert "Generated email content by Qwen3." in generated_content
         assert "[HUMAN REVIEW REQUIRED]" in generated_content # AC 3
+        assert requires_review is True
 
         # AC 2: Fallback logged
         mock_logging.assert_called_with(
-            "Claude API unavailable or failed. Falling back to Qwen3 8B for email generation. Reason: Claude CLI failed."
+            "Claude API unavailable or failed for test_agent. Reason: Claude CLI failed. Falling back to Qwen3 8B for email generation."
         )
         # AC 4: Notification sent
         mock_notifier.send_ntfy.assert_called_with(
             title="SAT: LLM Fallback Triggered",
-            message="Claude API unavailable or failed for test_agent. Falling back to Qwen3 8B.",
+            message="Claude API unavailable or failed for test_agent. Reason: Claude CLI failed. Falling back to Qwen3 8B.",
             priority="high",
             tags="warning"
         )
 
     def test_should_fallback_to_qwen3_when_claude_budget_exhausted(self, service, mock_cli_runner, mock_llm_cost_tracker, mock_logging, mock_notifier):
         # Simulate Claude budget exhausted
-        mock_llm_cost_tracker.has_budget_for_model.return_value = False
+        mock_llm_cost_tracker.can_afford_claude.return_value = False
 
-        # Mock Qwen3 to return expected content
-        mock_cli_runner.return_value = "Generated email content by Qwen3."
+        # Mock Qwen3 to return expected content when called by execute_llm_command
+        mock_cli_runner.execute_llm_command.return_value = "Generated email content by Qwen3."
 
         task_description = "Generate a personalized email body."
-        generated_content = service.generate_email("test_agent", task_description)
+        generated_content, requires_review = service.generate_email("test_agent", task_description)
 
         # Assert Claude was not called due to budget, but budget check happened
-        mock_llm_cost_tracker.has_budget_for_model.assert_called_with("claude", pytest.approx(service.CLAUDE_EMAIL_COST_ESTIMATE))
-        # Assert Qwen3 was called
-        mock_cli_runner.assert_called_with(
+        mock_llm_cost_tracker.can_afford_claude.assert_called_with(pytest.approx(service.CLAUDE_EMAIL_COST_ESTIMATE))
+        # Assert only Qwen3 was called
+        mock_cli_runner.execute_llm_command.assert_called_once_with(
             provider_config=get_provider("qwen3_8b"),
             prompt=task_description
         )
         assert "[HUMAN REVIEW REQUIRED]" in generated_content # AC 3
+        assert requires_review is True
 
         # AC 2: Fallback logged
         mock_logging.assert_called_with(
@@ -169,31 +175,32 @@ class TestLLMGenerationFallback:
 
     def test_should_fallback_to_qwen3_when_claude_budget_insufficient_for_request(self, service, mock_cli_runner, mock_llm_cost_tracker, mock_logging, mock_notifier):
         # Simulate Claude budget insufficient for this request
-        mock_llm_cost_tracker.has_budget_for_model.side_effect = lambda model_name, cost: False if model_name == "claude" and cost > 0 else True
+        mock_llm_cost_tracker.can_afford_claude.side_effect = lambda cost: False if cost > 0 else True
 
-        # Mock Qwen3 to return expected content
-        mock_cli_runner.return_value = "Generated email content by Qwen3."
+        # Mock Qwen3 to return expected content when called by execute_llm_command
+        mock_cli_runner.execute_llm_command.return_value = "Generated email content by Qwen3."
 
         task_description = "Generate a personalized email body."
-        generated_content = service.generate_email("test_agent", task_description)
+        generated_content, requires_review = service.generate_email("test_agent", task_description)
 
         # Assert Claude budget check happened
-        mock_llm_cost_tracker.has_budget_for_model.assert_called_with("claude", pytest.approx(service.CLAUDE_EMAIL_COST_ESTIMATE))
-        # Assert Qwen3 was called
-        mock_cli_runner.assert_called_with(
+        mock_llm_cost_tracker.can_afford_claude.assert_called_with(pytest.approx(service.CLAUDE_EMAIL_COST_ESTIMATE))
+        # Assert only Qwen3 was called
+        mock_cli_runner.execute_llm_command.assert_called_once_with(
             provider_config=get_provider("qwen3_8b"),
             prompt=task_description
         )
         assert "[HUMAN REVIEW REQUIRED]" in generated_content # AC 3
+        assert requires_review is True
 
         # AC 2: Fallback logged
         mock_logging.assert_called_with(
-            f"Claude budget insufficient for current request for test_agent. Falling back to Qwen3 8B for email generation."
+            f"Claude budget exhausted for test_agent. Falling back to Qwen3 8B for email generation."
         )
         # AC 4: Notification sent
         mock_notifier.send_ntfy.assert_called_with(
             title="SAT: LLM Fallback Triggered",
-            message="Claude budget insufficient for current request for test_agent. Falling back to Qwen3 8B.",
+            message="Claude budget exhausted for test_agent. Falling back to Qwen3 8B.",
             priority="high",
             tags="warning"
         )
@@ -202,17 +209,18 @@ class TestLLMGenerationFallback:
 
     def test_should_use_claude_if_available_and_budget_sufficient(self, service, mock_cli_runner, mock_llm_cost_tracker, mock_notifier, mock_logging):
         # Default mocks are set to allow Claude to succeed
-        mock_cli_runner.return_value = "Generated email content by Claude."
+        mock_cli_runner.execute_llm_command.return_value = "Generated email content by Claude."
 
         task_description = "Generate a personalized email body."
-        generated_content = service.generate_email("test_agent", task_description)
+        generated_content, requires_review = service.generate_email("test_agent", task_description)
 
-        # Assert Claude was called
-        mock_cli_runner.assert_called_with(
+        # Assert Claude was called once
+        mock_cli_runner.execute_llm_command.assert_called_once_with(
             provider_config=get_provider("opus"), # Assuming opus is the default Claude
             prompt=task_description
         )
         assert "Generated email content by Claude." == generated_content
+        assert requires_review is False
         assert "[HUMAN REVIEW REQUIRED]" not in generated_content # Should not be flagged
 
         # Assert no fallback logging or notification
@@ -221,25 +229,21 @@ class TestLLMGenerationFallback:
 
     # --- Edge Case: Notification failure does not stop generation ---
     def test_notification_failure_does_not_stop_generation(self, service, mock_cli_runner, mock_llm_cost_tracker, mock_notifier, mock_logging):
-        # Simulate Claude CLI failing to trigger fallback
-        mock_cli_runner.side_effect = LLMCLIExecutionError("Claude CLI failed")
-
-        # Mock Qwen3 to return expected content
-        def cli_runner_side_effect(*args, **kwargs):
-            if 'qwen3:8b' in kwargs.get('model_id', ''):
-                return "Generated email content by Qwen3."
-            raise LLMCLIExecutionError("Claude CLI failed")
-        mock_cli_runner.side_effect = cli_runner_side_effect
+        mock_cli_runner.execute_llm_command.side_effect = [
+            LLMCLIExecutionError("Claude CLI failed"), # First call (Claude) fails
+            "Generated email content by Qwen3."         # Second call (Qwen3) succeeds
+        ]
 
         # Simulate ntfy failure
         mock_notifier.send_ntfy.return_value = False
 
         task_description = "Generate a personalized email body."
-        generated_content = service.generate_email("test_agent", task_description)
+        generated_content, requires_review = service.generate_email("test_agent", task_description)
 
         # Assert generation still happened and content is flagged
         assert "Generated email content by Qwen3." in generated_content
         assert "[HUMAN REVIEW REQUIRED]" in generated_content
+        assert requires_review is True
         mock_logging.assert_called() # Fallback logging should still happen
         mock_notifier.send_ntfy.assert_called_once() # Ntfy was attempted
 
