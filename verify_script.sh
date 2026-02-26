@@ -1,48 +1,54 @@
 #!/bin/bash
-set -e
 
-# Services to check directly
-services=("sat.service" "rclone-gdrive.service")
+# List of expected models (we will check if the model name contains these strings)
+# From story: Qwen3 8B, Qwen2.5-Coder 7B, DeepSeek R1 8B, Nemotron Mini, nomic-embed-text
+EXPECTED_MODELS=(
+  "qwen"
+  "deepseek"
+  "nemotron"
+  "nomic-embed-text"
+)
 
-# Service patterns to check
-service_patterns=("sat-monitor" "sat-web" "sat-tunnel")
+# Query Ollama API for available models
+response=$(curl -s http://localhost:11434/api/tags)
 
-all_ok=true
+if [ $? -ne 0 ]; then
+  echo "Error: Failed to connect to Ollama API at http://localhost:11434."
+  exit 1
+fi
 
-echo "Checking specific services..."
-for service in "${services[@]}"; do
-    if systemctl --user is-active --quiet "$service"; then
-        echo "✅ $service is active."
-    else
-        echo "❌ $service is not active."
-        all_ok=false
-    fi
+# Extract model names from the JSON response
+# The jq query '.models[].name' extracts the "name" field from each object in the "models" array.
+available_models=$(echo "$response" | jq -r '.models[].name')
+
+if [ $? -ne 0 ] || [ -z "$available_models" ]; then
+  echo "Error: Failed to parse JSON response or no models found. Is jq installed and are models pulled?"
+  echo "Response was: $response"
+  exit 1
+fi
+
+echo "Available Ollama models:"
+echo "$available_models"
+echo "-------------------------"
+echo "Verifying expected models..."
+
+all_found=true
+# Loop through the list of expected model substrings
+for model in "${EXPECTED_MODELS[@]}"; do
+  # Check if any of the available model names contain the expected substring
+  if echo "$available_models" | grep -q "$model"; then
+    echo "✔ Found model containing: $model"
+  else
+    echo "✖ Missing model containing: $model"
+    all_found=false
+  fi
 done
 
-echo "Checking service patterns..."
-for pattern in "${service_patterns[@]}"; do
-    # Find services matching the pattern
-    mapfile -t matching_services < <(systemctl --user list-units --type=service --all 2>/dev/null | awk "/$pattern/ {print \$1}")
-
-    if [ ${#matching_services[@]} -eq 0 ]; then
-        echo "ℹ️ No services found matching pattern: $pattern"
-        continue
-    fi
-
-    for service in "${matching_services[@]}"; do
-        if systemctl --user is-active --quiet "$service"; then
-            echo "✅ $service is active."
-        else
-            echo "❌ $service is not active."
-            all_ok=false
-        fi
-    done
-done
-
-if $all_ok; then
-    echo "All checked services are running."
-    exit 0
+echo "-------------------------"
+if [ "$all_found" = true ]; then
+  echo "Success: All expected Ollama models are available."
+  exit 0
 else
-    echo "Some services are not running."
-    exit 1
+  echo "Failure: One or more expected Ollama models are missing."
+  exit 1
 fi
