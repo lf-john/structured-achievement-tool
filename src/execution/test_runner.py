@@ -157,58 +157,62 @@ def get_test_command(
     import time
     recent_cutoff = time.time() - 300  # 5 minutes ago
 
+    candidates = []
     for test_dir in test_dirs:
         full_dir = os.path.join(working_directory, test_dir)
         if not os.path.isdir(full_dir):
             continue
 
-        candidates = []
-        for f in os.listdir(full_dir):
-            if not (f.endswith(".py") and f.startswith("test_")):
-                continue
+        # Walk subdirectories too (tests may be in tests/utils/, tests/unit/, etc.)
+        for dirpath, _dirnames, filenames in os.walk(full_dir):
+            for f in filenames:
+                if not (f.endswith(".py") and f.startswith("test_")):
+                    continue
 
-            filepath = os.path.join(full_dir, f)
-            f_lower = f.lower()
+                filepath = os.path.join(dirpath, f)
+                # Relative path from working directory for pytest command
+                rel_path = os.path.relpath(filepath, working_directory)
+                f_lower = f.lower()
 
-            # Check story ID match (e.g., "US-001" in filename)
-            id_match = story_id.lower().replace("-", "_") in f_lower or story_id.lower() in f_lower if story_id else False
+                # Check story ID match (e.g., "US-001" in filename)
+                id_match = story_id.lower().replace("-", "_") in f_lower or story_id.lower() in f_lower if story_id else False
 
-            # Check title keyword match
-            title_match = any(term in f_lower for term in title_terms) if title_terms else False
+                # Check title keyword match
+                title_match = any(term in f_lower for term in title_terms) if title_terms else False
 
-            # Check recency
-            try:
-                mtime = os.path.getmtime(filepath)
-                is_recent = mtime > recent_cutoff
-            except OSError:
-                is_recent = False
+                # Check recency
+                try:
+                    mtime = os.path.getmtime(filepath)
+                    is_recent = mtime > recent_cutoff
+                except OSError:
+                    is_recent = False
 
-            # Priority (lower = better):
-            # 0: ID + title + recent — ideal match, definitely our file
-            # 1: ID + title (not recent) — strong match from a prior run
-            # 2: ID + recent (no title match) — likely our file, just named differently
-            # 3: title + recent — newly created file matching topic
-            # 4: title only (not recent) — topical but could be from different task
-            # 5: recent only — just created but no name correlation
-            # Note: ID-only without title or recency is EXCLUDED — story IDs are
-            # generic (US-001, US-002) and match unrelated old test files
-            if id_match and title_match and is_recent:
-                candidates.append((0, f, test_dir))
-            elif id_match and title_match:
-                candidates.append((1, f, test_dir))
-            elif id_match and is_recent:
-                candidates.append((2, f, test_dir))
-            elif title_match and is_recent:
-                candidates.append((3, f, test_dir))
-            elif title_match:
-                candidates.append((4, f, test_dir))
-            elif is_recent:
-                candidates.append((5, f, test_dir))
+                # Priority (lower = better):
+                # 0: ID + title + recent — ideal match, definitely our file
+                # 1: ID + title (not recent) — strong match from a prior run
+                # 2: ID + recent (no title match) — likely our file, just named differently
+                # 3: title + recent — newly created file matching topic
+                # 4: title only (not recent) — topical but could be from different task
+                # 5: recent only — just created but no name correlation
+                # Note: ID-only without title or recency is EXCLUDED — story IDs are
+                # generic (US-001, US-002) and match unrelated old test files
+                if id_match and title_match and is_recent:
+                    candidates.append((0, rel_path))
+                elif id_match and title_match:
+                    candidates.append((1, rel_path))
+                elif id_match and is_recent:
+                    candidates.append((2, rel_path))
+                elif title_match and is_recent:
+                    candidates.append((3, rel_path))
+                elif title_match:
+                    candidates.append((4, rel_path))
+                elif is_recent:
+                    candidates.append((5, rel_path))
 
-        if candidates:
-            candidates.sort()
-            _, best_file, best_dir = candidates[0]
-            return f"pytest {os.path.join(best_dir, best_file)} -v"
+    if candidates:
+        candidates.sort()
+        _, best_path = candidates[0]
+        return f"pytest {best_path} -v"
 
     # Project-level command
     if project_test_command:

@@ -44,6 +44,10 @@ PHASE_TEMPLATES: dict[str, str] = {
     "PRD_REQUIREMENTS": "prd_requirements.md",
     "PRD_ARCHITECTURE": "prd_architecture.md",
     "PRD_IMPLEMENTATION": "prd_implementation.md",
+    "VERIFY_LINT": "verify.md",
+    "VERIFY_TEST": "verify.md",
+    "VERIFY_SECURITY": "verify.md",
+    "VERIFY_ARCH": "verify.md",
 }
 
 # Progressive disclosure: what context each phase receives
@@ -68,6 +72,10 @@ PHASE_CONTEXT: dict[str, list[str]] = {
     "SYNTHESIZE": ["analyze_output"],
     "REVIEW": ["task_description"],
     "REPORT": ["review_output"],
+    "VERIFY_LINT": ["diff", "test_results", "acceptance_criteria"],
+    "VERIFY_TEST": ["diff", "test_results", "acceptance_criteria"],
+    "VERIFY_SECURITY": ["diff", "test_results", "acceptance_criteria"],
+    "VERIFY_ARCH": ["diff", "test_results", "acceptance_criteria"],
 }
 
 
