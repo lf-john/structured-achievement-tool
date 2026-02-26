@@ -183,7 +183,10 @@ async def execute_story(
             last_phase = phase_outputs[-1] if phase_outputs else {}
             last_status = last_phase.get("status", "failed")
 
-            if last_status == "complete" and final_state.get("verify_passed", True):
+            # verify_passed is None when workflow has no verification phase (e.g., research).
+            # Treat None as "no verification needed" (success), only False means failure.
+            verify_passed = final_state.get("verify_passed")
+            if last_status == "complete" and verify_passed is not False:
                 # Success
                 if notifier:
                     notifier.notify_story_complete(story_id, story_title)
