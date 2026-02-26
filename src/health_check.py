@@ -7,7 +7,7 @@ Checks:
 3. Ollama is healthy
 4. No tasks stuck in <Working> or <Failed>
 5. Google Drive mount is accessible
-6. Ralph Pro is available
+6. Dashboard is responding
 
 Outputs a status report and takes corrective action where possible.
 Sends ntfy notification on failures.
@@ -21,8 +21,7 @@ os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{UID}")
 os.environ.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{UID}/bus")
 
 WATCH_DIRS = [
-    "/home/johnlane/GoogleDrive/DriveSyncFiles/claude-tasks/sat-enhancements",
-    "/home/johnlane/GoogleDrive/DriveSyncFiles/claude-tasks/marketing-automation"
+    "/home/johnlane/GoogleDrive/DriveSyncFiles/sat-tasks",
 ]
 NTFY_TOPIC = "johnlane-claude-tasks"
 NTFY_SERVER = "https://ntfy.sh"
@@ -77,41 +76,59 @@ def check_ollama():
 
 def check_gdrive():
     """Check if Google Drive mount is accessible."""
-    return os.path.exists("/home/johnlane/GoogleDrive/DriveSyncFiles/claude-tasks")
+    return os.path.exists("/home/johnlane/GoogleDrive/DriveSyncFiles/sat-tasks")
 
-def check_ralph_pro():
-    """Check if Ralph Pro CLI exists."""
-    return os.path.exists("/home/johnlane/ralph-pro/cli/ralph-pro.js")
+def check_dashboard():
+    """Check if the SAT dashboard is responding."""
+    try:
+        res = requests.get("http://localhost:8765/api/status", timeout=5)
+        return res.status_code == 200
+    except:
+        return False
 
 def scan_tasks():
-    """Scan task directories for status."""
+    """Scan task directories for status.
+
+    Handles the sat-tasks subdirectory structure:
+    sat-tasks/
+      dynamond/
+        001.md
+      another-task/
+        001.md
+    """
     status = {"finished": 0, "working": 0, "failed": 0, "queued": 0, "waiting": 0}
     issues = []
 
-    for d in WATCH_DIRS:
-        if not os.path.exists(d):
+    for watch_dir in WATCH_DIRS:
+        if not os.path.exists(watch_dir):
             continue
-        for f in sorted(os.listdir(d)):
-            if not f.endswith('.md') or f.startswith('_') or '_response' in f:
+        for task_dir_name in sorted(os.listdir(watch_dir)):
+            task_dir = os.path.join(watch_dir, task_dir_name)
+            if not os.path.isdir(task_dir) or task_dir_name.startswith('_') or task_dir_name.startswith('tmp'):
                 continue
-            path = os.path.join(d, f)
-            try:
-                with open(path, 'r') as file:
-                    content = file.read()
-                if "<Finished>" in content:
-                    status["finished"] += 1
-                elif "<Working>" in content:
-                    status["working"] += 1
-                    issues.append(f"WORKING: {os.path.basename(d)}/{f}")
-                elif "<Failed>" in content:
-                    status["failed"] += 1
-                    issues.append(f"FAILED: {os.path.basename(d)}/{f}")
-                elif "<User>" in content and "# <User>" not in content:
-                    status["queued"] += 1
-                elif "# <User>" in content:
-                    status["waiting"] += 1
-            except:
-                pass
+            for f in sorted(os.listdir(task_dir)):
+                if not f.endswith('.md') or f.startswith('_') or '_response' in f:
+                    continue
+                path = os.path.join(task_dir, f)
+                try:
+                    with open(path, 'r') as file:
+                        content = file.read()
+                    if '<!-- CLAUDE-RESPONSE -->' in content[:200]:
+                        continue
+                    if "<Finished>" in content:
+                        status["finished"] += 1
+                    elif "<Working>" in content:
+                        status["working"] += 1
+                        issues.append(f"WORKING: {task_dir_name}/{f}")
+                    elif "<Failed>" in content:
+                        status["failed"] += 1
+                        issues.append(f"FAILED: {task_dir_name}/{f}")
+                    elif "<Pending>" in content and "# <Pending>" not in content:
+                        status["queued"] += 1
+                    elif "# <Pending>" in content:
+                        status["waiting"] += 1
+                except:
+                    pass
 
     return status, issues
 
@@ -161,9 +178,9 @@ def main():
         except:
             actions.append("Could not restart rclone-gdrive")
 
-    # 5. Check Ralph Pro
-    if not check_ralph_pro():
-        problems.append("Ralph Pro CLI not found")
+    # 5. Check Dashboard
+    if not check_dashboard():
+        problems.append("SAT Dashboard not responding")
 
     # 6. Scan tasks
     task_status, task_issues = scan_tasks()
@@ -214,5 +231,190 @@ def main():
 
     return 0 if not problems else 1
 
+## --- Proactive Agency ---
+
+PROACTIVE_STATE_FILE = os.path.join(PROJECT_PATH, ".memory", "proactive_state.json")
+
+def _load_proactive_state():
+    """Load last-run timestamps for proactive checks."""
+    if os.path.exists(PROACTIVE_STATE_FILE):
+        try:
+            with open(PROACTIVE_STATE_FILE, "r") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+def _save_proactive_state(state):
+    os.makedirs(os.path.dirname(PROACTIVE_STATE_FILE), exist_ok=True)
+    with open(PROACTIVE_STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+def _hours_since(timestamp_str):
+    """Return hours since a timestamp string, or float('inf') if missing."""
+    if not timestamp_str:
+        return float("inf")
+    try:
+        import datetime
+        last = datetime.datetime.fromisoformat(timestamp_str)
+        now = datetime.datetime.now()
+        return (now - last).total_seconds() / 3600
+    except (ValueError, TypeError):
+        return float("inf")
+
+def _create_maintenance_story(title, description, story_type="maintenance", output_dir=None):
+    """Create a story file for proactive maintenance."""
+    import datetime
+    if output_dir is None:
+        output_dir = os.path.expanduser("~/GoogleDrive/DriveSyncFiles/sat-tasks/maintenance")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Generate story filename
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+    safe_title = title.lower().replace(" ", "-")[:30]
+    filename = f"proactive_{safe_title}_{timestamp}.md"
+    filepath = os.path.join(output_dir, filename)
+
+    content = (
+        f"# {title}\n\n"
+        f"{description}\n\n"
+        f"**Type:** {story_type}\n"
+        f"**Source:** Proactive Agency (auto-generated)\n"
+        f"**Generated:** {datetime.datetime.now().isoformat()}\n\n"
+        f"<Pending>\n"
+    )
+
+    with open(filepath, "w") as f:
+        f.write(content)
+    return filepath
+
+def run_proactive_checks():
+    """Run proactive checks and create maintenance stories if needed.
+
+    Called with --proactive flag. Checks intervals and creates stories
+    for overdue maintenance tasks.
+    """
+    import datetime
+
+    # Load config
+    config = {}
+    config_path = os.path.join(PROJECT_PATH, "config.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r") as f:
+                config = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    pa_config = config.get("proactive_agency", {})
+    if not pa_config.get("enabled", False):
+        return []
+
+    output_dir = os.path.expanduser(pa_config.get(
+        "story_output_dir",
+        "~/GoogleDrive/DriveSyncFiles/sat-tasks/maintenance"
+    ))
+
+    state = _load_proactive_state()
+    created = []
+    now_iso = datetime.datetime.now().isoformat()
+
+    # 1. Config validation
+    config_interval = pa_config.get("config_validation_interval_hours", 24)
+    if _hours_since(state.get("last_config_check")) >= config_interval:
+        # Check for common config issues
+        issues = []
+        if not os.path.exists(config_path):
+            issues.append("config.json is missing")
+        else:
+            try:
+                with open(config_path) as f:
+                    cfg = json.load(f)
+                if not cfg.get("routing_rules_enabled"):
+                    issues.append("routing_rules_enabled is not set")
+                if not cfg.get("execution", {}).get("checkpoint_db"):
+                    issues.append("checkpoint_db path is not configured")
+            except json.JSONDecodeError:
+                issues.append("config.json has invalid JSON")
+
+        if issues:
+            filepath = _create_maintenance_story(
+                "Config Validation Issues",
+                "Proactive check found configuration issues:\n\n" +
+                "\n".join(f"- {i}" for i in issues),
+                output_dir=output_dir,
+            )
+            created.append(filepath)
+
+        state["last_config_check"] = now_iso
+
+    # 2. Dependency check
+    dep_interval = pa_config.get("dependency_check_interval_hours", 336)
+    if _hours_since(state.get("last_dependency_check")) >= dep_interval:
+        # Check if requirements.txt exists and has content
+        req_path = os.path.join(PROJECT_PATH, "requirements.txt")
+        if os.path.exists(req_path):
+            filepath = _create_maintenance_story(
+                "Dependency Update Review",
+                "Scheduled dependency review.\n\n"
+                "Check for outdated packages, security vulnerabilities, "
+                "and compatibility issues.",
+                output_dir=output_dir,
+            )
+            created.append(filepath)
+
+        state["last_dependency_check"] = now_iso
+
+    # 3. General maintenance
+    maint_interval = pa_config.get("maintenance_interval_hours", 168)
+    if _hours_since(state.get("last_maintenance")) >= maint_interval:
+        # Check for cleanup opportunities
+        cleanup_items = []
+        log_dir = os.path.join(PROJECT_PATH, "logs")
+        if os.path.exists(log_dir):
+            log_files = [f for f in os.listdir(log_dir) if f.endswith(".log")]
+            if len(log_files) > 10:
+                cleanup_items.append(f"{len(log_files)} log files in logs/ — consider rotation")
+
+        memory_dir = os.path.join(PROJECT_PATH, ".memory")
+        if os.path.exists(memory_dir):
+            journal_path = os.path.join(memory_dir, "audit_journal.jsonl")
+            if os.path.exists(journal_path):
+                size_mb = os.path.getsize(journal_path) / (1024 * 1024)
+                if size_mb > 10:
+                    cleanup_items.append(f"Audit journal is {size_mb:.1f}MB — consider archiving")
+
+        if cleanup_items:
+            filepath = _create_maintenance_story(
+                "Scheduled Maintenance",
+                "Scheduled maintenance review:\n\n" +
+                "\n".join(f"- {i}" for i in cleanup_items),
+                output_dir=output_dir,
+            )
+            created.append(filepath)
+
+        state["last_maintenance"] = now_iso
+
+    _save_proactive_state(state)
+
+    if created:
+        notify(
+            "SAT: Proactive Maintenance",
+            f"Created {len(created)} maintenance stories.",
+            tags="wrench,robot",
+        )
+
+    return created
+
+
 if __name__ == "__main__":
+    if "--proactive" in sys.argv:
+        created = run_proactive_checks()
+        if created:
+            print(f"Created {len(created)} proactive stories:")
+            for f in created:
+                print(f"  - {f}")
+        else:
+            print("No proactive actions needed.")
+        sys.exit(0)
     sys.exit(main())

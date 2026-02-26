@@ -1,9 +1,17 @@
 import json
 import os
+import fcntl
+import logging
+
+logger = logging.getLogger(__name__)
+
+MAX_DEBUG_ATTEMPTS = 3
+
 
 class DebugBudgetManager:
     def __init__(self, budget_file_path=".memory/debug_budgets.json"):
-        self.budget_file_path = budget_file_path
+        self.budget_file_path = str(budget_file_path)
+        self._lock_path = self.budget_file_path + ".lock"
         self.budgets = self._load_budgets()
 
     def _load_budgets(self):
@@ -31,10 +39,35 @@ class DebugBudgetManager:
         return self.budgets.get(task_id, 0)
 
     def can_initiate_debug_session(self, task_id: str) -> bool:
-        """
-        Determines if a debug session can be initiated for a given task,
-        based on the maximum allowed attempts.
-        """
-        current_attempts = self.get_debug_attempts(task_id)
-        MAX_DEBUG_ATTEMPTS = 3
-        return current_attempts < MAX_DEBUG_ATTEMPTS
+        """Check if a debug session can be initiated (budget not exhausted)."""
+        return self.get_debug_attempts(task_id) < MAX_DEBUG_ATTEMPTS
+
+    def acquire_debug_lock(self) -> bool:
+        """Acquire exclusive debug session lock. Returns True if acquired, False if another session is active."""
+        os.makedirs(os.path.dirname(self._lock_path), exist_ok=True)
+        try:
+            self._lock_fd = open(self._lock_path, 'w')
+            fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self._lock_fd.write(str(os.getpid()))
+            self._lock_fd.flush()
+            return True
+        except (IOError, OSError):
+            logger.warning("Another debug session is already active")
+            if hasattr(self, '_lock_fd'):
+                self._lock_fd.close()
+                self._lock_fd = None
+            return False
+
+    def release_debug_lock(self):
+        """Release the debug session lock."""
+        if hasattr(self, '_lock_fd') and self._lock_fd:
+            try:
+                fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+                self._lock_fd.close()
+            except (IOError, OSError):
+                pass
+            self._lock_fd = None
+            try:
+                os.unlink(self._lock_path)
+            except OSError:
+                pass

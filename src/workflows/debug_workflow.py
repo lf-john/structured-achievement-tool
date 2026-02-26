@@ -2,7 +2,7 @@
 DebugWorkflow — LangGraph state machine for debugging tasks.
 
 Defines the core states: REPRODUCE, DIAGNOSE, ROUTING,
-and outcome branches: Dev, Config, Maint, Report.
+and outcome branches: dev, config, maint, report.
 """
 
 import logging
@@ -32,7 +32,7 @@ def simulate_reproduction(failure_context: str) -> dict:
 
 def categorize_diagnosis(reproduction_details: str) -> dict:
     """
-    Categorizes a diagnosed issue into one of four outcomes: Dev, Config, Maint, or Report.
+    Categorizes a diagnosed issue into one of four outcomes: development, config, maintenance, or review.
 
     Returns:
         dict with "category" and "reasoning" keys
@@ -42,27 +42,27 @@ def categorize_diagnosis(reproduction_details: str) -> dict:
     # Check for maintenance issues (system resource/infrastructure problems)
     if any(term in details_lower for term in ["disk", "space", "memory", "permissions", "service", "restart"]):
         return {
-            "category": "Maint",
+            "category": "maintenance",
             "reasoning": "System resource or infrastructure issue requiring maintenance"
         }
 
     # Check for configuration issues
     if any(term in details_lower for term in ["config", "parameter", "port", "invalid"]):
         return {
-            "category": "Config",
+            "category": "config",
             "reasoning": "Configuration parameter or setting issue"
         }
 
     # Check for non-reproducible/informational issues
     if "not reproduced" in details_lower or "not_reproduced" in details_lower:
         return {
-            "category": "Report",
+            "category": "review",
             "reasoning": "Non-reproducible issue - informational only"
         }
 
-    # Default to Dev (code-level issues)
+    # Default to development (code-level issues)
     return {
-        "category": "Dev",
+        "category": "development",
         "reasoning": "Code-level issue requiring development fix"
     }
 
@@ -134,13 +134,16 @@ class DebugWorkflow(BaseWorkflow):
         Routes the debugging task to the appropriate specialized workflow
         based on the output of the DIAGNOSE phase.
         """
-        # In a real scenario, this would use the routing_engine to decide
-        # For now, it's a placeholder. The test implies the routing_engine will be mocked.
-        # We need to ensure the routing_engine has a method for this.
-        # Let's assume the routing_engine has a method called route_debug_issue that returns the decision.
-        # The test will mock this.
-        decision = self.routing_engine.route_debug_issue(state)
-        logger.info(f"Routing decision: {decision}")
+        # Use the diagnosis category computed by the diagnose node
+        category = state.get("diagnosis_category", "development")
+        category_map = {
+            "development": "dev",
+            "config": "config",
+            "maintenance": "maint",
+            "review": "report",
+        }
+        decision = category_map.get(category, "dev")
+        logger.info(f"Routing decision: {decision} (from diagnosis: {category})")
         return decision
 
     def run(self, state: StoryState) -> StoryState:

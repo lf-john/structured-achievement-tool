@@ -35,18 +35,16 @@ class AuditJournal:
             return records
         with open(str(self.journal_file_path), "r", encoding="utf-8") as f:
             for line in f:
-                print(f"DEBUG: Reading line: {line.strip()}") # Re-enabled debug print
+                line = line.strip()
+                if not line:
+                    continue
                 try:
                     record_data = json.loads(line)
-                    print(f"DEBUG: Parsed record_data: {record_data}") # Re-enabled debug print
                     record = AuditRecord(**record_data)
-                    
-                    # Apply filters
                     if (success is None or record.success == success) and \
                        (task_file is None or record.task_file == task_file):
                         records.append(record)
-                except json.JSONDecodeError:
-                    print(f"DEBUG: Malformed JSON line skipped: {line.strip()}") # Added debug print
+                except (json.JSONDecodeError, Exception):
                     continue
         return records
 

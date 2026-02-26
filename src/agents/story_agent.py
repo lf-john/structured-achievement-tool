@@ -19,9 +19,32 @@ from src.execution.dag_executor import DAGExecutor, CircularDependencyError
 
 logger = logging.getLogger(__name__)
 
-# Valid story types (case-insensitive matching)
-STORY_TYPES = {"Dev", "Config", "Maintenance", "Debug", "Research", "Review"}
-_TYPE_MAP = {t.lower(): t for t in STORY_TYPES}
+# Valid story types — canonical lowercase names matching classify.md and WORKFLOW_MAP
+STORY_TYPES = {
+    "development", "config", "maintenance", "debug", "research", "review",
+    "conversation",
+    # Human story types (Phase 5 — not yet implemented)
+    "assignment", "approval", "qa_feedback", "escalation",
+}
+
+# Map common aliases/variants to canonical names
+_TYPE_MAP = {t: t for t in STORY_TYPES}
+_TYPE_MAP.update({
+    "dev": "development",
+    "Dev": "development",
+    "Development": "development",
+    "Config": "config",
+    "Maintenance": "maintenance",
+    "Debug": "debug",
+    "Research": "research",
+    "Review": "review",
+    "Conversation": "conversation",
+    "Assignment": "assignment",
+    "Approval": "approval",
+    "QA_Feedback": "qa_feedback",
+    "qa feedback": "qa_feedback",
+    "Escalation": "escalation",
+})
 
 
 class StoryAgent(BaseAgent):
@@ -85,38 +108,38 @@ class StoryAgent(BaseAgent):
         return result
 
     def _normalize_stories(self, response: DecomposeResponse):
-        """Normalize story fields: fix case-insensitive types, set defaults."""
+        """Normalize story fields: map type aliases to canonical lowercase names."""
         for story in response.stories:
-            # Case-insensitive type matching
-            matched = _TYPE_MAP.get(story.type.lower())
+            # Try exact match first, then case-insensitive
+            matched = _TYPE_MAP.get(story.type) or _TYPE_MAP.get(story.type.lower())
             if matched:
                 story.type = matched
             else:
-                logger.warning(f"Unknown story type '{story.type}' for {story.id}, defaulting to Dev")
-                story.type = "Dev"
+                logger.warning(f"Unknown story type '{story.type}' for {story.id}, defaulting to development")
+                story.type = "development"
 
     def _validate_dependencies(self, response: DecomposeResponse):
         """Validate the dependency graph: no cycles, all refs valid."""
-        stories = [s.model_dump() for s in response.stories]
-        story_ids = {s["id"] for s in stories}
+        story_ids = {s.id for s in response.stories}
 
-        # Check all dependsOn references exist
-        for story in stories:
-            for dep_id in story.get("dependsOn", []):
-                if dep_id not in story_ids:
-                    logger.warning(
-                        f"Story {story['id']} depends on unknown story {dep_id}, removing"
-                    )
-                    story["dependsOn"] = [d for d in story["dependsOn"] if d in story_ids]
+        # Check all dependsOn references exist — fix on the Pydantic models directly
+        for story in response.stories:
+            invalid = [d for d in story.dependsOn if d not in story_ids]
+            if invalid:
+                logger.warning(
+                    f"Story {story.id} depends on unknown stories {invalid}, removing"
+                )
+                story.dependsOn = [d for d in story.dependsOn if d in story_ids]
 
         # Check for circular dependencies
         try:
-            executor = DAGExecutor(stories)
+            stories_dicts = [s.model_dump() for s in response.stories]
+            executor = DAGExecutor(stories_dicts)
             executor.topological_sort()
         except CircularDependencyError as e:
             logger.error(f"Circular dependency detected: {e}")
-            # Break the cycle by removing the last dependency
+            # Break the cycle by removing all dependencies
             # This is a fallback — the LLM should produce valid graphs
-            for story in stories:
-                story["dependsOn"] = []
+            for story in response.stories:
+                story.dependsOn = []
             logger.warning("Cleared all dependencies to break cycle")

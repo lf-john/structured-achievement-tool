@@ -1,10 +1,11 @@
-import os, time, subprocess, logging, re, json
+import os, time, subprocess, logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 WATCH_DIRS = [
-    "/home/johnlane/GoogleDrive/DriveSyncFiles/claude-tasks/sat-enhancements",
-    "/home/johnlane/GoogleDrive/DriveSyncFiles/claude-tasks/marketing-automation"
+    "/home/johnlane/GoogleDrive/DriveSyncFiles/sat-tasks/sat-enhancements",
+    "/home/johnlane/GoogleDrive/DriveSyncFiles/sat-tasks/marketing-automation",
+    "/home/johnlane/GoogleDrive/DriveSyncFiles/sat-tasks/other",
 ]
 
 # How long a task can be in <Working> before we consider it stuck (seconds)
@@ -30,10 +31,6 @@ def is_service_active(service_name):
 
 def is_sat_busy():
     """Check if SAT is actively processing a task."""
-    # Check for ralph-pro processes
-    res = subprocess.run(["pgrep", "-f", "ralph-pro.js"], capture_output=True)
-    if res.returncode == 0:
-        return True
     # Check for any file in <Working> state
     for d in WATCH_DIRS:
         if not os.path.exists(d):

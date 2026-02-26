@@ -91,6 +91,26 @@ class StoryState(TypedDict):
     diagnosis_category: Optional[str]  # Category from DIAGNOSE phase (Dev, Config, Maint, Report)
     diagnosis_reasoning: Optional[str]  # Reasoning for diagnosis categorization
 
+    # Parallel gather/verify results (Phase 3 enhancements)
+    gather_results: Optional[dict]  # Merged results from parallel gather channels
+    verify_check_results: Optional[dict]  # Results from parallel verification checks
+    config_validation_result: Optional[dict]  # Config syntax validation result
+    dependency_check_result: Optional[dict]  # Dependency verification result
+
+    # Approval workflow state
+    pause_response: Optional[str]  # Human response text from approval
+    pause_escalated: Optional[bool]  # Whether escalation was triggered
+    approval_status: Optional[str]  # responded, waiting, timeout, auto_approved
+    approval_signal_path: Optional[str]  # Path to the approval signal file
+    approval_elapsed: Optional[int]  # Total elapsed time in approval
+
+    # Human workflow state (Phase 5)
+    human_summary: Optional[str]  # Prepared human-readable brief from PREPARE node
+    human_deliverables: Optional[str]  # Human's work output from INTEGRATE node
+    qa_feedback_parsed: Optional[dict]  # Parsed QA feedback (verdict, bugs, suggestions)
+    escalation_package: Optional[dict]  # Diagnostic package for escalation stories
+    validation_result: Optional[dict]  # Result from VALIDATE node (passed, reason)
+
 
 def create_initial_state(
     story: dict,
@@ -124,4 +144,18 @@ def create_initial_state(
         reproduction_details=None,
         diagnosis_category=None,
         diagnosis_reasoning=None,
+        gather_results=None,
+        verify_check_results=None,
+        config_validation_result=None,
+        dependency_check_result=None,
+        pause_response=None,
+        pause_escalated=None,
+        approval_status=None,
+        approval_signal_path=None,
+        approval_elapsed=None,
+        human_summary=None,
+        human_deliverables=None,
+        qa_feedback_parsed=None,
+        escalation_package=None,
+        validation_result=None,
     )

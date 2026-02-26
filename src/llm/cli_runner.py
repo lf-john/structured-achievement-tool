@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from src.llm.providers import ProviderConfig, get_env_for_provider
+from src.execution.stream_parser import StreamParser
+from src.execution.session_continuator import SessionContinuator
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +95,9 @@ async def invoke(
     prompt_file: Optional[str] = None,
     working_directory: Optional[str] = None,
     timeout: int = DEFAULT_TIMEOUT,
+    stream_output_file: Optional[str] = None,
+    task_id: Optional[str] = None,
+    session_continuator: Optional[SessionContinuator] = None,
 ) -> CLIResult:
     """Invoke an LLM via CLI subprocess.
 
@@ -102,6 +107,9 @@ async def invoke(
         prompt_file: Path to prompt file (preferred over inline prompt for large prompts)
         working_directory: CWD for the subprocess
         timeout: Timeout in seconds
+        stream_output_file: If provided, stream output incrementally to this file
+        task_id: Task identifier for session continuation tracking
+        session_continuator: If provided, auto-continue on max turns detection
 
     Returns:
         CLIResult with stdout, stderr, exit code, and error classification
@@ -111,6 +119,11 @@ async def invoke(
     cwd = working_directory or os.getcwd()
 
     start_time = time.monotonic()
+
+    # Set up optional streaming
+    stream_parser = None
+    if stream_output_file:
+        stream_parser = StreamParser(output_file=stream_output_file)
 
     try:
         if provider.cli_command == "ollama" and prompt and not prompt_file:
@@ -123,10 +136,25 @@ async def invoke(
                 cwd=cwd,
                 env=env,
             )
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                process.communicate(input=prompt.encode()),
-                timeout=timeout,
-            )
+            if stream_parser:
+                # Stream output while feeding stdin
+                process.stdin.write(prompt.encode())
+                await process.stdin.drain()
+                process.stdin.close()
+                stdout = await asyncio.wait_for(
+                    stream_parser.stream_process(process),
+                    timeout=timeout,
+                )
+                stderr_bytes = await process.stderr.read()
+                stderr = stderr_bytes.decode(errors="replace")
+                await process.wait()
+            else:
+                stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                    process.communicate(input=prompt.encode()),
+                    timeout=timeout,
+                )
+                stdout = stdout_bytes.decode(errors="replace")
+                stderr = stderr_bytes.decode(errors="replace")
         else:
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -135,14 +163,23 @@ async def invoke(
                 cwd=cwd,
                 env=env,
             )
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                process.communicate(),
-                timeout=timeout,
-            )
+            if stream_parser:
+                stdout = await asyncio.wait_for(
+                    stream_parser.stream_process(process),
+                    timeout=timeout,
+                )
+                stderr_bytes = await process.stderr.read()
+                stderr = stderr_bytes.decode(errors="replace")
+                await process.wait()
+            else:
+                stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=timeout,
+                )
+                stdout = stdout_bytes.decode(errors="replace")
+                stderr = stderr_bytes.decode(errors="replace")
 
         duration = time.monotonic() - start_time
-        stdout = stdout_bytes.decode(errors="replace")
-        stderr = stderr_bytes.decode(errors="replace")
 
         # Check for API errors in output
         is_api_error, error_code = _detect_api_error(stdout + stderr)
@@ -162,11 +199,31 @@ async def invoke(
         elif process.returncode != 0:
             logger.warning(f"CLI failed for {provider.name}: exit_code={process.returncode}")
 
+        # Auto-continue on max turns if continuator is provided
+        if (session_continuator and task_id
+                and session_continuator.detect_max_turns(stdout, result.exit_code)
+                and session_continuator.can_continue(task_id)):
+            session_id = session_continuator.extract_session_id(stdout)
+            if session_id:
+                logger.info(f"Max turns detected for {task_id}, auto-continuing session {session_id}")
+                cont_result = session_continuator.continue_session(
+                    session_id=session_id,
+                    task_id=task_id,
+                    working_dir=cwd,
+                )
+                if cont_result.success:
+                    result.stdout += "\n" + cont_result.output
+                    result.exit_code = 0
+                else:
+                    logger.warning(f"Session continuation failed: {cont_result.error}")
+
         return result
 
     except asyncio.TimeoutError:
         duration = time.monotonic() - start_time
         logger.error(f"Timeout after {timeout}s for {provider.name}")
+        if stream_parser:
+            stream_parser.finalize()
         # Try to kill the process
         try:
             process.terminate()

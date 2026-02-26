@@ -206,11 +206,28 @@ class RoutingEngine:
         story_complexity: Optional[int] = None,
         is_code_task: bool = False,
     ) -> Tuple[ProviderConfig, ProviderConfig]:
-        """Select primary + fallback provider."""
-        primary = self.select(agent_name, story_complexity, is_code_task)
+        """Select primary + fallback provider.
 
-        # Fallback: next best eligible that isn't the primary
-        fallback_name = self.config.get("default_backup", "glm5")
+        Uses routing_preferences from config to select appropriate backups:
+        - reasoning_backup for high-complexity agents (7+)
+        - code_backup for code-producing agents
+        - classification_backup for low-complexity agents (<=3)
+        - default_backup as final fallback
+        """
+        primary = self.select(agent_name, story_complexity, is_code_task)
+        complexity = self.get_complexity(agent_name, story_complexity)
+        prefs = self.config.get("routing_preferences", {})
+
+        # Select appropriate backup based on task characteristics
+        if complexity >= 7:
+            fallback_name = prefs.get("reasoning_backup", self.config.get("default_backup", "deepseek_r1"))
+        elif is_code_task or agent_name in ("coder", "test_writer", "executor"):
+            fallback_name = prefs.get("code_backup", self.config.get("default_backup", "qwen25_coder"))
+        elif complexity <= 3:
+            fallback_name = prefs.get("classification_backup", self.config.get("default_backup", "nemotron"))
+        else:
+            fallback_name = self.config.get("default_backup", "deepseek_r1")
+
         fallback = get_provider(fallback_name)
 
         # If primary and fallback are the same, try to find an alternative

@@ -32,6 +32,7 @@ from src.llm.providers import get_env_for_provider
 from src.execution.git_manager import auto_commit, get_diff, get_diff_stat, get_modified_files
 from src.execution.test_runner import run_tests, get_test_command, TestResult as TRTestResult
 from src.agents.mediator_agent import should_trigger, MediatorAgent, save_intervention
+from src.execution.verification_sdk import ConfigValidator, VerifyResult
 
 logger = logging.getLogger(__name__)
 
@@ -148,11 +149,11 @@ def phase_node(
     state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
 
     # Update progressive disclosure context
-    if phase_name == "DESIGN":
+    if phase_name in ("DESIGN", "ARCHITECT_CODE"):
         state["design_output"] = output_text
-    elif phase_name == "TDD_RED":
+    elif phase_name in ("TDD_RED", "TEST_WRITER"):
         state["test_files"] = output_text
-    elif phase_name == "PLAN":
+    elif phase_name in ("PLAN", "PLAN_CODE"):
         state["plan_output"] = output_text
 
     # Update verify_passed for VERIFY phases to feed verify_decision
@@ -309,6 +310,372 @@ def mediator_gate_node(
         state["mediator_verdict"] = MediatorVerdict(decision="ACCEPT", reasoning=f"Error: {e}").model_dump()
 
     return state
+
+
+# --- Enhanced Node Factories (Phase 3) ---
+
+def parallel_verify_node(
+    state: StoryState,
+    routing_engine: RoutingEngine,
+) -> StoryState:
+    """Run 4 verification checks in parallel and merge results.
+
+    Checks: linter, test_runner (automated), security, arch_review.
+    Each check is an LLM call with a specialized prompt. Results are
+    synthesized into a single verify verdict stored in verify_check_results.
+    """
+    state = dict(state)
+    state["current_phase"] = "PARALLEL_VERIFY"
+
+    story = state["story"]
+    working_dir = state["working_directory"]
+    story_complexity = story.get("complexity", 5)
+
+    check_agents = [
+        ("linter", "VERIFY_LINT"),
+        ("test_runner", "VERIFY_TEST"),
+        ("security_checker", "VERIFY_SECURITY"),
+        ("arch_reviewer", "VERIFY_ARCH"),
+    ]
+
+    results = {}
+    futures = {}
+
+    # Submit all 4 checks in parallel using thread pool
+    for agent_name, check_phase in check_agents:
+        provider = routing_engine.select(agent_name, story_complexity=story_complexity, is_code_task=False)
+        context = _build_phase_context(state, "VERIFY")
+        prompt = build_prompt(
+            story=story,
+            phase=check_phase,
+            working_directory=working_dir,
+            context=context,
+        )
+
+        def _make_check(p, pr, wd):
+            return _run_async(cli_invoke(provider=p, prompt=pr, working_directory=wd))
+
+        future = _thread_pool.submit(_make_check, provider, prompt, working_dir)
+        futures[agent_name] = (future, provider.name)
+
+    # Collect results
+    all_passed = True
+    failure_reasons = []
+    for agent_name, (future, provider_name) in futures.items():
+        try:
+            result = future.result(timeout=660)
+            output_text = result.stdout if result else ""
+            check_passed = result.exit_code == 0 if result else False
+
+            # Try to parse structured response
+            try:
+                parsed = extract_json(output_text)
+                if parsed.get("status") == "blocked" or parsed.get("passed") is False:
+                    check_passed = False
+            except (ValueError, Exception):
+                pass
+
+            results[agent_name] = {
+                "passed": check_passed,
+                "output": output_text[:1000],
+                "provider": provider_name,
+            }
+            if not check_passed:
+                all_passed = False
+                failure_reasons.append(f"{agent_name}: {output_text[:200]}")
+
+        except Exception as e:
+            logger.error(f"Parallel verify check {agent_name} failed: {e}")
+            results[agent_name] = {
+                "passed": False,
+                "output": str(e)[:500],
+                "provider": provider_name,
+            }
+            all_passed = False
+            failure_reasons.append(f"{agent_name}: error — {e}")
+
+    # Synthesize results
+    state["verify_check_results"] = results
+    state["verify_passed"] = all_passed
+
+    if not all_passed:
+        state["failure_context"] = (
+            f"Parallel verification failed. "
+            f"{len(failure_reasons)} check(s) failed:\n" +
+            "\n".join(failure_reasons)
+        )
+        # Track verify retry count
+        state["verify_retry_count"] = state.get("verify_retry_count", 0) + 1
+
+    status = PhaseStatus.COMPLETE if all_passed else PhaseStatus.FAILED
+    phase_output = PhaseOutput(
+        phase="PARALLEL_VERIFY",
+        status=status,
+        output=f"Checks: {len(results)}, Passed: {sum(1 for r in results.values() if r['passed'])}/{len(results)}",
+        exit_code=0 if all_passed else 1,
+    )
+    state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
+
+    # Reset check retry counter for any subsequent loops
+    state["phase_retry_count"] = 0
+
+    logger.info(f"Parallel verify: {sum(1 for r in results.values() if r['passed'])}/{len(results)} checks passed")
+    return state
+
+
+def config_validate_node(
+    state: StoryState,
+) -> StoryState:
+    """Validate config file syntax using the VerificationSDK ConfigValidator.
+
+    Runs after EXECUTE in config workflows to catch syntax errors before
+    the heavier VERIFY_SCRIPT phase. Checks JSON, YAML, INI, and env files
+    found in the working directory's recent changes.
+    """
+    state = dict(state)
+    state["current_phase"] = "CONFIG_VALIDATE"
+
+    working_dir = state["working_directory"]
+    validator = ConfigValidator()
+
+    # Detect config files from git changes
+    modified = get_modified_files(working_dir)
+    config_extensions = {
+        ".json": validator.check_json,
+        ".yaml": validator.check_yaml,
+        ".yml": validator.check_yaml,
+        ".ini": validator.check_ini,
+        ".env": validator.check_env_file,
+        ".conf": validator.check_ini,  # best-effort INI parse
+    }
+
+    check_results = []
+    all_passed = True
+    for filepath in modified:
+        _, ext = os.path.splitext(filepath)
+        ext = ext.lower()
+        if ext in config_extensions:
+            full_path = os.path.join(working_dir, filepath) if not os.path.isabs(filepath) else filepath
+            result = config_extensions[ext](full_path)
+            check_results.append({
+                "file": filepath,
+                "passed": result.passed,
+                "message": result.message,
+            })
+            if not result.passed:
+                all_passed = False
+
+    # If no config files found, pass through
+    if not check_results:
+        logger.info("CONFIG_VALIDATE: no config files in changes, skipping")
+        state["config_validation_result"] = {"skipped": True, "reason": "no config files modified"}
+        state["verify_passed"] = True
+    else:
+        state["config_validation_result"] = {
+            "checks": check_results,
+            "all_passed": all_passed,
+        }
+        state["verify_passed"] = all_passed
+        if not all_passed:
+            failed = [c for c in check_results if not c["passed"]]
+            state["failure_context"] = (
+                f"Config validation failed for {len(failed)} file(s): " +
+                "; ".join(f"{c['file']}: {c['message']}" for c in failed)
+            )
+
+    status = PhaseStatus.COMPLETE if state["verify_passed"] else PhaseStatus.FAILED
+    phase_output = PhaseOutput(
+        phase="CONFIG_VALIDATE",
+        status=status,
+        output=f"Validated {len(check_results)} config file(s), all_passed={all_passed}" if check_results else "No config files to validate",
+        exit_code=0 if state["verify_passed"] else 1,
+    )
+    state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
+
+    logger.info(f"CONFIG_VALIDATE: {len(check_results)} files checked, all_passed={all_passed}")
+    return state
+
+
+def dependency_check_node(
+    state: StoryState,
+    routing_engine: RoutingEngine,
+) -> StoryState:
+    """Verify that maintenance changes don't break related components.
+
+    After EXECUTE in maintenance workflows, this node asks an LLM to review
+    the changes and identify any dependency or compatibility issues.
+    """
+    state = dict(state)
+    state["current_phase"] = "DEPENDENCY_CHECK"
+
+    story = state["story"]
+    working_dir = state["working_directory"]
+    story_complexity = story.get("complexity", 5)
+
+    # Get diff of what changed
+    diff = get_diff(working_dir)
+    diff_stat = get_diff_stat(working_dir)
+
+    if not diff.strip():
+        logger.info("DEPENDENCY_CHECK: no changes detected, skipping")
+        state["dependency_check_result"] = {"skipped": True, "reason": "no changes"}
+        state["verify_passed"] = True
+        phase_output = PhaseOutput(
+            phase="DEPENDENCY_CHECK",
+            status=PhaseStatus.COMPLETE,
+            output="No changes to check",
+            exit_code=0,
+        )
+        state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
+        return state
+
+    # Build context with diff info
+    context = _build_phase_context(state, "VERIFY")
+    context["diff"] = diff
+    context["diff_stat"] = diff_stat
+
+    provider = routing_engine.select("dependency_checker", story_complexity=story_complexity, is_code_task=False)
+
+    prompt = build_prompt(
+        story=story,
+        phase="DEPENDENCY_CHECK",
+        working_directory=working_dir,
+        context=context,
+    )
+
+    try:
+        result = _run_async(cli_invoke(provider=provider, prompt=prompt, working_directory=working_dir))
+        output_text = result.stdout if result else ""
+        check_passed = True
+
+        # Try to parse structured response
+        try:
+            parsed = extract_json(output_text)
+            if parsed.get("status") == "blocked" or parsed.get("dependencies_broken"):
+                check_passed = False
+        except (ValueError, Exception):
+            pass
+
+        state["dependency_check_result"] = {
+            "passed": check_passed,
+            "output": output_text[:2000],
+            "provider": provider.name,
+        }
+        state["verify_passed"] = check_passed
+
+        if not check_passed:
+            state["failure_context"] = f"Dependency check failed: {output_text[:500]}"
+
+    except Exception as e:
+        logger.error(f"DEPENDENCY_CHECK failed: {e}")
+        state["dependency_check_result"] = {"passed": False, "error": str(e)}
+        state["verify_passed"] = False
+        state["failure_context"] = f"Dependency check error: {e}"
+        output_text = str(e)
+
+    status = PhaseStatus.COMPLETE if state.get("verify_passed", False) else PhaseStatus.FAILED
+    phase_output = PhaseOutput(
+        phase="DEPENDENCY_CHECK",
+        status=status,
+        output=output_text[:2000] if 'output_text' in dir() else "",
+        exit_code=0 if state.get("verify_passed", False) else 1,
+        provider_used=provider.name,
+    )
+    state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
+
+    logger.info(f"DEPENDENCY_CHECK: passed={state.get('verify_passed', False)}")
+    return state
+
+
+def parallel_gather_node(
+    state: StoryState,
+    routing_engine: RoutingEngine,
+) -> StoryState:
+    """Run 3 parallel gather channels for research workflows.
+
+    Channels:
+    - gather_web: web/documentation research
+    - gather_code: code analysis
+    - gather_docs: documentation review
+
+    Results are merged into gather_results before ANALYZE.
+    """
+    state = dict(state)
+    state["current_phase"] = "PARALLEL_GATHER"
+
+    story = state["story"]
+    working_dir = state["working_directory"]
+    story_complexity = story.get("complexity", 5)
+
+    gather_channels = [
+        ("gatherer_web", "GATHER_WEB"),
+        ("gatherer_code", "GATHER_CODE"),
+        ("gatherer_docs", "GATHER_DOCS"),
+    ]
+
+    results = {}
+    futures = {}
+
+    for agent_name, gather_phase in gather_channels:
+        provider = routing_engine.select(agent_name, story_complexity=story_complexity, is_code_task=False)
+        context = _build_phase_context(state, "GATHER")
+        prompt = build_prompt(
+            story=story,
+            phase=gather_phase,
+            working_directory=working_dir,
+            context=context,
+        )
+
+        def _make_gather(p, pr, wd):
+            return _run_async(cli_invoke(provider=p, prompt=pr, working_directory=wd))
+
+        future = _thread_pool.submit(_make_gather, provider, prompt, working_dir)
+        futures[agent_name] = (future, provider.name)
+
+    # Collect results
+    all_outputs = []
+    for agent_name, (future, provider_name) in futures.items():
+        try:
+            result = future.result(timeout=660)
+            output_text = result.stdout if result else ""
+            results[agent_name] = {
+                "output": output_text[:3000],
+                "provider": provider_name,
+                "exit_code": result.exit_code if result else -1,
+            }
+            all_outputs.append(f"=== {agent_name} ===\n{output_text[:2000]}")
+        except Exception as e:
+            logger.error(f"Parallel gather channel {agent_name} failed: {e}")
+            results[agent_name] = {
+                "output": f"Error: {e}",
+                "provider": provider_name,
+                "exit_code": -1,
+            }
+            all_outputs.append(f"=== {agent_name} ===\nError: {e}")
+
+    # Merge into state
+    state["gather_results"] = results
+    # Also put merged output into design_output for downstream consumption
+    merged_output = "\n\n".join(all_outputs)
+    state["design_output"] = merged_output
+
+    phase_output = PhaseOutput(
+        phase="PARALLEL_GATHER",
+        status=PhaseStatus.COMPLETE,
+        output=f"Gathered from {len(results)} channels",
+        exit_code=0,
+    )
+    state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
+
+    logger.info(f"PARALLEL_GATHER: {len(results)} channels completed")
+    return state
+
+
+def config_validate_decision(state: StoryState) -> Literal["pass", "fail"]:
+    """Route after CONFIG_VALIDATE: pass -> verify_script, fail -> execute."""
+    if state.get("verify_passed", True):
+        return "pass"
+    return "fail"
 
 
 # --- Decision Functions ---

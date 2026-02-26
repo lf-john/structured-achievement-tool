@@ -223,7 +223,7 @@ class DatabaseManager:
     # --- Stories ---
 
     def create_story(
-        self, task_id: str, title: str, story_type: str = "Dev",
+        self, task_id: str, title: str, story_type: str = "development",
         complexity: int = 5, depends_on: List[str] = None,
         acceptance_criteria: List[str] = None,
         verification_agents: List[str] = None,

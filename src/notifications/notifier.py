@@ -58,16 +58,30 @@ class Notifier:
             logger.warning(f"Failed to send ntfy notification: {e}")
             return False
 
-    def send_email(self, subject: str, body_html: str, body_text: Optional[str] = None) -> bool:
-        """Send an email notification via SMTP (SES-ready)."""
-        if not all([self.smtp_host, self.smtp_user, self.notify_email]):
+    def send_email(
+        self,
+        subject: str,
+        body_html: str,
+        body_text: Optional[str] = None,
+        recipient: Optional[str] = None,
+    ) -> bool:
+        """Send an email notification via SMTP (SES-ready).
+
+        Args:
+            subject: Email subject line.
+            body_html: HTML body content.
+            body_text: Plain text body (optional fallback).
+            recipient: Override recipient address. Defaults to self.notify_email.
+        """
+        to_addr = recipient or self.notify_email
+        if not all([self.smtp_host, self.smtp_user, to_addr]):
             logger.debug("Email not configured, skipping")
             return False
 
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = self.smtp_user
-        msg["To"] = self.notify_email
+        msg["To"] = to_addr
 
         if body_text:
             msg.attach(MIMEText(body_text, "plain"))
@@ -77,17 +91,22 @@ class Notifier:
             with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=10) as server:
                 server.starttls()
                 server.login(self.smtp_user, self.smtp_password)
-                server.sendmail(self.smtp_user, self.notify_email, msg.as_string())
+                server.sendmail(self.smtp_user, to_addr, msg.as_string())
             return True
         except Exception as e:
             logger.warning(f"Failed to send email: {e}")
             return False
 
     def notify_task_start(self, task_id: str, story_count: int):
-        """Notify that a task has been decomposed and is starting execution."""
+        """Notify that a task has been decomposed and is starting execution.
+
+        Silently skips notification if story_count is 0 (decomposition failure).
+        """
+        if story_count == 0:
+            return
         self.send_ntfy(
-            title=f"SAT: Task Decomposed ({task_id})",
-            message=f"Decomposed into {story_count} stories. Beginning execution.",
+            title=f"SAT: {task_id} - {story_count} stories",
+            message=f"Task decomposed and beginning execution.",
             tags="memo,robot",
         )
 
@@ -129,6 +148,108 @@ class Notifier:
                 body_html=html,
                 body_text=f"SAT Task {status}: {task_id}\n{completed}/{total} stories completed.",
             )
+
+    def notify_human_action_required(
+        self, story_id: str, story_title: str, story_type: str, signal_path: str,
+    ):
+        """Notify that a human story requires action."""
+        type_tags = {
+            "assignment": "clipboard,hand",
+            "approval": "hand,warning",
+            "qa_feedback": "mag,clipboard",
+            "escalation": "rotating_light,warning",
+        }
+        self.send_ntfy(
+            title=f"SAT: {story_type.title()} Required ({story_id})",
+            message=f"Story: {story_title}\nSignal file: {signal_path}",
+            priority="high" if story_type != "escalation" else "urgent",
+            tags=type_tags.get(story_type, "hand"),
+        )
+
+    def notify_human_response_received(self, story_id: str, story_type: str):
+        """Notify that a human response was received and processing continues."""
+        self.send_ntfy(
+            title=f"SAT: Response Received ({story_id})",
+            message=f"{story_type.title()} response received. Processing continues.",
+            tags="white_check_mark",
+        )
+
+    def notify_escalation(
+        self,
+        story_id: str,
+        story_title: str,
+        failure_summary: str,
+        recipient: Optional[str] = None,
+    ):
+        """Send escalation notification via ntfy and optionally email."""
+        self.send_ntfy(
+            title=f"SAT: ESCALATION ({story_id})",
+            message=f"Story: {story_title}\n{failure_summary}",
+            priority="urgent",
+            tags="rotating_light,warning",
+        )
+        if self.smtp_host:
+            html = (
+                f"<h2>Escalation: {story_id}</h2>"
+                f"<p><strong>Story:</strong> {story_title}</p>"
+                f"<p>{failure_summary}</p>"
+            )
+            self.send_email(
+                subject=f"SAT: ESCALATION - {story_id}",
+                body_html=html,
+                body_text=f"Escalation: {story_id}\n{story_title}\n{failure_summary}",
+                recipient=recipient,
+            )
+
+    # --- Progress Bar ---
+
+    def send_progress(
+        self,
+        task_id: str,
+        completed: int,
+        total: int,
+        current_story: str = "",
+        current_phase: str = "",
+    ) -> bool:
+        """Send a single updating progress notification for a task.
+
+        Uses ntfy's message update feature (same topic + tag combination)
+        to show a visual progress bar that updates in place.
+
+        Format:
+            SAT: task-id [████████░░] 8/10
+            Current: story-title (PHASE)
+        """
+        if total == 0:
+            return False
+
+        # Build progress bar (10 chars wide)
+        filled = round(completed / total * 10)
+        bar = "█" * filled + "░" * (10 - filled)
+
+        message_parts = [f"[{bar}] {completed}/{total} stories"]
+        if current_story:
+            phase_str = f" ({current_phase})" if current_phase else ""
+            message_parts.append(f"Current: {current_story}{phase_str}")
+
+        message = "\n".join(message_parts)
+
+        if completed == total:
+            tags = "white_check_mark"
+            priority = "default"
+        elif completed == 0:
+            tags = "hourglass"
+            priority = "default"
+        else:
+            tags = "rocket"
+            priority = "default"
+
+        return self.send_ntfy(
+            title=f"SAT: {task_id} [{completed}/{total}]",
+            message=message,
+            priority=priority,
+            tags=tags,
+        )
 
     def notify_debug_budget_exhausted(self, task_id: str, attempts: int, last_error_summary: str):
         """Notify that a task has exhausted its debug budget."""

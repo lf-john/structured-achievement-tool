@@ -19,12 +19,14 @@ class TestDevTDDWorkflowStructure:
 
     def test_has_all_required_nodes(self):
         nodes = set(self.graph.nodes)
-        expected = {"design", "tdd_red", "code", "verify", "learn",
-                    "tdd_red_check", "tdd_green_check", "mediator"}
+        expected = {"architect_code", "plan_code", "test_writer", "code",
+                    "parallel_verify", "learn",
+                    "tdd_red_check", "tdd_green_check",
+                    "mediator_code", "mediator_verify"}
         assert expected.issubset(nodes)
 
-    def test_entry_point_is_design(self):
-        # The compiled graph should start at design
+    def test_entry_point_is_architect_code(self):
+        # The compiled graph should start at architect_code
         compiled = self.graph.compile()
         assert compiled is not None
 

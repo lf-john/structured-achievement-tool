@@ -23,6 +23,9 @@ from src.workflows.maintenance_workflow import MaintenanceWorkflow
 from src.workflows.debug_workflow import DebugWorkflow
 from src.workflows.research_workflow import ResearchWorkflow
 from src.workflows.review_workflow import ReviewWorkflow
+from src.workflows.assignment_workflow import AssignmentWorkflow
+from src.workflows.qa_feedback_workflow import QAFeedbackWorkflow
+from src.workflows.escalation_workflow import EscalationWorkflow
 from src.llm.routing_engine import RoutingEngine
 from src.agents.failure_classifier import classify_failure, FailureSeverity
 from src.execution.git_manager import get_current_commit, reset_to_commit
@@ -56,10 +59,21 @@ WORKFLOW_MAP = {
     "debug": DebugWorkflow,
     "research": ResearchWorkflow,
     "review": ReviewWorkflow,
+    "assignment": AssignmentWorkflow,
+    "qa_feedback": QAFeedbackWorkflow,
+    "escalation": EscalationWorkflow,
 }
 
 
-def get_workflow_for_story(story: dict, routing_engine: RoutingEngine):
+# Human story types that require a notifier
+HUMAN_STORY_TYPES = {"assignment", "qa_feedback", "escalation"}
+
+
+def get_workflow_for_story(
+    story: dict,
+    routing_engine: RoutingEngine,
+    notifier: Optional[Notifier] = None,
+):
     """Select and compile the appropriate workflow for a story type."""
     story_type = story.get("type", "development")
 
@@ -73,7 +87,15 @@ def get_workflow_for_story(story: dict, routing_engine: RoutingEngine):
     else:
         workflow_cls = WORKFLOW_MAP.get(story_type, DevTDDWorkflow)
 
-    workflow = workflow_cls(routing_engine=routing_engine)
+    # Human workflows need notifier in addition to routing_engine
+    if story_type in HUMAN_STORY_TYPES:
+        workflow = workflow_cls(
+            routing_engine=routing_engine,
+            notifier=notifier or Notifier(),
+        )
+    else:
+        workflow = workflow_cls(routing_engine=routing_engine)
+
     return workflow.compile()
 
 
@@ -109,7 +131,7 @@ async def execute_story(
     story_title = story.get("title", "Untitled")
 
     # Get compiled workflow
-    graph = get_workflow_for_story(story, re)
+    graph = get_workflow_for_story(story, re, notifier=notifier)
 
     # Capture base commit for reset on retry
     base_commit = get_current_commit(working_directory)

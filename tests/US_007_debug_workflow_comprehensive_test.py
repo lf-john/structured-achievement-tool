@@ -178,14 +178,14 @@ class TestDiagnoseStage:
 
         with patch('src.workflows.debug_workflow.categorize_diagnosis') as mock_categorize:
             mock_categorize.return_value = {
-                "category": "Dev",
+                "category": "development",
                 "reasoning": "Null pointer indicates code bug"
             }
 
             result = diagnose(initial_story_state, mock_routing_engine)
 
             assert 'diagnosis_category' in result
-            assert result['diagnosis_category'] == "Dev"
+            assert result['diagnosis_category'] == "development"
 
     def test_diagnose_categorizes_config_issues(self, initial_story_state, mock_routing_engine):
         """DIAGNOSE stage should categorize configuration issues"""
@@ -194,13 +194,13 @@ class TestDiagnoseStage:
 
         with patch('src.workflows.debug_workflow.categorize_diagnosis') as mock_categorize:
             mock_categorize.return_value = {
-                "category": "Config",
+                "category": "config",
                 "reasoning": "Invalid configuration parameter"
             }
 
             result = diagnose(initial_story_state, mock_routing_engine)
 
-            assert result['diagnosis_category'] == "Config"
+            assert result['diagnosis_category'] == "config"
 
     def test_diagnose_categorizes_maintenance_issues(self, initial_story_state, mock_routing_engine):
         """DIAGNOSE stage should categorize maintenance issues"""
@@ -209,13 +209,13 @@ class TestDiagnoseStage:
 
         with patch('src.workflows.debug_workflow.categorize_diagnosis') as mock_categorize:
             mock_categorize.return_value = {
-                "category": "Maint",
+                "category": "maintenance",
                 "reasoning": "System resource issue - disk space"
             }
 
             result = diagnose(initial_story_state, mock_routing_engine)
 
-            assert result['diagnosis_category'] == "Maint"
+            assert result['diagnosis_category'] == "maintenance"
 
     def test_diagnose_categorizes_informational_issues(self, initial_story_state, mock_routing_engine):
         """DIAGNOSE stage should categorize informational/non-actionable issues"""
@@ -224,13 +224,13 @@ class TestDiagnoseStage:
 
         with patch('src.workflows.debug_workflow.categorize_diagnosis') as mock_categorize:
             mock_categorize.return_value = {
-                "category": "Report",
+                "category": "review",
                 "reasoning": "Non-reproducible issue - informational only"
             }
 
             result = diagnose(initial_story_state, mock_routing_engine)
 
-            assert result['diagnosis_category'] == "Report"
+            assert result['diagnosis_category'] == "review"
 
     def test_diagnose_adds_reasoning(self, initial_story_state, mock_routing_engine):
         """DIAGNOSE stage should include reasoning for categorization"""
@@ -254,7 +254,7 @@ class TestDiagnoseStage:
         initial_story_state['reproduction_details'] = "Test failure"
 
         with patch('src.workflows.debug_workflow.categorize_diagnosis') as mock_categorize:
-            mock_categorize.return_value = {"category": "Dev", "reasoning": "Code issue"}
+            mock_categorize.return_value = {"category": "development", "reasoning": "Code issue"}
 
             result = diagnose(initial_story_state, mock_routing_engine)
 
@@ -267,57 +267,49 @@ class TestRoutingStage:
 
     def test_routing_to_dev(self, initial_story_state, mock_routing_engine):
         """ROUTING should correctly route to Dev workflow"""
-        initial_story_state['diagnosis_category'] = "Dev"
+        initial_story_state['diagnosis_category'] = "development"
         workflow = DebugWorkflow(routing_engine=mock_routing_engine)
 
-        mock_routing_engine.route_debug_issue.return_value = "dev"
         decision = workflow.routing_decision(initial_story_state)
-
         assert decision == "dev"
-        mock_routing_engine.route_debug_issue.assert_called_once()
 
     def test_routing_to_config(self, initial_story_state, mock_routing_engine):
         """ROUTING should correctly route to Config workflow"""
-        initial_story_state['diagnosis_category'] = "Config"
+        initial_story_state['diagnosis_category'] = "config"
         workflow = DebugWorkflow(routing_engine=mock_routing_engine)
 
-        mock_routing_engine.route_debug_issue.return_value = "config"
         decision = workflow.routing_decision(initial_story_state)
-
         assert decision == "config"
 
     def test_routing_to_maint(self, initial_story_state, mock_routing_engine):
         """ROUTING should correctly route to Maint workflow"""
-        initial_story_state['diagnosis_category'] = "Maint"
+        initial_story_state['diagnosis_category'] = "maintenance"
         workflow = DebugWorkflow(routing_engine=mock_routing_engine)
 
-        mock_routing_engine.route_debug_issue.return_value = "maint"
         decision = workflow.routing_decision(initial_story_state)
-
         assert decision == "maint"
 
     def test_routing_to_report(self, initial_story_state, mock_routing_engine):
         """ROUTING should correctly route to Report workflow"""
-        initial_story_state['diagnosis_category'] = "Report"
+        initial_story_state['diagnosis_category'] = "review"
         workflow = DebugWorkflow(routing_engine=mock_routing_engine)
 
-        mock_routing_engine.route_debug_issue.return_value = "report"
         decision = workflow.routing_decision(initial_story_state)
-
         assert decision == "report"
 
     def test_routing_decision_uses_state_information(self, initial_story_state, mock_routing_engine):
-        """ROUTING decision should consider state information"""
-        initial_story_state['diagnosis_category'] = "Dev"
+        """ROUTING decision should use diagnosis_category from state"""
+        initial_story_state['diagnosis_category'] = "development"
         initial_story_state['reproduction_details'] = "Specific error"
 
         workflow = DebugWorkflow(routing_engine=mock_routing_engine)
-        mock_routing_engine.route_debug_issue.return_value = "dev"
-
         decision = workflow.routing_decision(initial_story_state)
+        assert decision == "dev"
 
-        # Verify that routing_engine.route_debug_issue was called with the state
-        mock_routing_engine.route_debug_issue.assert_called_once_with(initial_story_state)
+    def test_routing_defaults_to_dev(self, initial_story_state, mock_routing_engine):
+        """ROUTING should default to dev when no diagnosis_category"""
+        workflow = DebugWorkflow(routing_engine=mock_routing_engine)
+        decision = workflow.routing_decision(initial_story_state)
         assert decision == "dev"
 
 
@@ -345,7 +337,7 @@ class TestTransitionLogging:
 
         with caplog.at_level(logging.INFO):
             with patch('src.workflows.debug_workflow.categorize_diagnosis') as mock_cat:
-                mock_cat.return_value = {"category": "Dev", "reasoning": "Test"}
+                mock_cat.return_value = {"category": "development", "reasoning": "Test"}
                 diagnose(initial_story_state, mock_routing_engine)
 
         log_messages = [record.message for record in caplog.records]
@@ -354,7 +346,7 @@ class TestTransitionLogging:
 
     def test_routing_logs_decision(self, initial_story_state, mock_routing_engine, caplog):
         """ROUTING stage should log its decision"""
-        initial_story_state['diagnosis_category'] = "Dev"
+        initial_story_state['diagnosis_category'] = "development"
 
         with caplog.at_level(logging.INFO):
             with patch('src.workflows.debug_workflow.simulate_reproduction') as mock_sim:

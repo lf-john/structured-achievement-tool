@@ -18,6 +18,9 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 # Phase-to-template mapping
 PHASE_TEMPLATES: dict[str, str] = {
     "DESIGN": "design.md",
+    "ARCHITECT_CODE": "design.md",
+    "PLAN_CODE": "plan.md",
+    "TEST_WRITER": "tdd_red.md",
     "TDD_RED": "tdd_red.md",
     "CODE": "code.md",
     "VERIFY": "verify.md",
@@ -37,6 +40,7 @@ PHASE_TEMPLATES: dict[str, str] = {
     "REVIEW": "review.md",
     "REPORT": "report.md",
     "PRD_DISCOVERY": "prd_discovery.md",
+    "PRD_SINGLE_PHASE": "prd_single_phase.md",
     "PRD_REQUIREMENTS": "prd_requirements.md",
     "PRD_ARCHITECTURE": "prd_architecture.md",
     "PRD_IMPLEMENTATION": "prd_implementation.md",
@@ -46,6 +50,9 @@ PHASE_TEMPLATES: dict[str, str] = {
 # Keys are phase names, values are lists of state fields to include
 PHASE_CONTEXT: dict[str, list[str]] = {
     "DESIGN": ["task_description", "acceptance_criteria", "rag_context"],
+    "ARCHITECT_CODE": ["task_description", "acceptance_criteria", "rag_context"],
+    "PLAN_CODE": ["design_output", "acceptance_criteria"],
+    "TEST_WRITER": ["design_output", "acceptance_criteria"],
     "TDD_RED": ["design_output", "acceptance_criteria"],
     "CODE": ["design_output", "test_files", "acceptance_criteria", "failure_context"],
     "VERIFY": ["diff", "test_results", "acceptance_criteria"],
