@@ -1,25 +1,12 @@
 #!/bin/bash
-# US-009 Verification Script
-# Runs the pytest test case for the Claude API fallback logic.
+# Verify that the documentation file was created and is not empty.
 
-# Exit immediately if a command exits with a non-zero status.
-set -e
+FILE_PATH="output/llm-routing-system.md"
 
-# Define the test file path
-TEST_FILE="tests/test_us_009_agent_fallback.py"
-
-# Check if the test file exists
-if [ ! -f "$TEST_FILE" ]; then
-    echo "ERROR: Test file not found at $TEST_FILE"
-    exit 1
+if [ -s "$FILE_PATH" ]; then
+  echo "Verification successful: $FILE_PATH exists and is not empty."
+  exit 0
+else
+  echo "Verification failed: $FILE_PATH does not exist or is empty."
+  exit 1
 fi
-
-# Run pytest on the specific test file
-# The test will simulate an API failure and verify the fallback,
-# notification, and content flagging mechanisms.
-echo "Running verification test for US-009..."
-pytest "$TEST_FILE" -v
-
-# If pytest exits with 0, the test passed.
-echo "Verification successful: Fallback logic is working as expected."
-exit 0

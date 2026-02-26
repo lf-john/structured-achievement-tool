@@ -1,0 +1,34 @@
+{
+  "systemAnalysis": {
+    "filesToChange": [
+      "output/llm-routing-system.md"
+    ],
+    "systemImpact": "No impact on the running system. This is a documentation task. The output file is created in the `output` directory as the requested path is outside the workspace.",
+    "externalDependencies": []
+  },
+  "executionSteps": [
+    {
+      "step": 1,
+      "description": "Create the output directory.",
+      "commands": [
+        "mkdir -p output"
+      ],
+      "files": []
+    },
+    {
+      "step": 2,
+      "description": "Write the LLM Routing System documentation.",
+      "commands": [],
+      "files": [
+        {
+          "path": "output/llm-routing-system.md",
+          "change": "Create and write the content of the documentation file."
+        }
+      ]
+    }
+  ],
+  "verificationScript": "verify_script.sh created and executable",
+  "rollbackPlan": [
+    "rm -rf output"
+  ]
+}
