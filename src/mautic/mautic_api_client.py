@@ -11,10 +11,46 @@ class MauticApiClient:
             "Accept": "application/json"
         }
 
-    def update_contact_lead_score(self, contact_id: int, score: int):
-        # Placeholder for Mautic API call
-        print(f"Would update contact {contact_id} lead score to {score}")
-        pass
+    def create_contact(self, payload: dict) -> dict:
+        endpoint = f"{self.base_url}/api/contacts/new"
+        print(f"Simulating POST request to {endpoint} with payload: {payload}")
+        try:
+            # response = requests.post(endpoint, headers=self.headers, json=payload)
+            # response.raise_for_status()
+            # return response.json()
+            dummy_id = os.urandom(4).hex()
+            print(f"Simulated Mautic contact created with ID: {dummy_id}")
+            return {"contact": {"id": dummy_id, **payload}, "status": "success"}
+        except requests.exceptions.RequestException as e:
+            print(f"Error creating Mautic contact: {e}")
+            raise
+
+    def update_contact(self, contact_id: int, payload: dict) -> dict:
+        endpoint = f"{self.base_url}/api/contacts/{contact_id}/edit"
+        print(f"Simulating PATCH/PUT request to {endpoint} for contact {contact_id} with payload: {payload}")
+        try:
+            # response = requests.patch(endpoint, headers=self.headers, json=payload)
+            # response.raise_for_status()
+            # return response.json()
+            print(f"Simulated Mautic contact {contact_id} updated.")
+            return {"contact": {"id": contact_id, **payload}, "status": "success"}
+        except requests.exceptions.RequestException as e:
+            print(f"Error updating Mautic contact {contact_id}: {e}")
+            raise
+
+    def get_recent_contact_activity(self, since_datetime=None) -> list:
+        """
+        Simulates fetching recent contact activity from Mautic.
+        In a real scenario, this would call a Mautic API endpoint to retrieve recent events/activity.
+        """
+        print(f"Simulating fetching recent Mautic contact activity since {since_datetime}")
+        # Placeholder for actual API call. Return mock data for now.
+        return [
+            {'event_type': 'email.open', 'contact_id': 1, 'details': {'email': 'test@example.com'}},
+            {'event_type': 'email.click', 'contact_id': 2, 'details': {'url': 'http://example.com/link'}},
+            {'event_type': 'form.submit', 'contact_id': 3, 'details': {'form_name': 'Contact Us', 'fields': {'name': 'John Doe'}}},
+            {'event_type': 'email.open', 'contact_id': 101, 'details': {'email': 'new.contact@example.com'}} # New contact activity
+        ]
 
     def create_segment(self, name: str, description: str, filters: list) -> dict:
         endpoint = f"{self.base_url}/api/segments"

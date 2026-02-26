@@ -1,26 +1,41 @@
-
 {
   "systemAnalysis": {
-    "filesToChange": ["docs/lead-import-guide.md"],
-    "systemImpact": "No impact on the running system. This is a documentation-only task. The plan outlines manual steps to be performed in the Mautic UI.",
-    "externalDependencies": ["Mautic"]
+    "filesToChange": [
+      "lead-import-guide.md"
+    ],
+    "systemImpact": "This is a documentation-only task. There is no impact on the running system, services, or configurations. A new markdown file will be created.",
+    "externalDependencies": []
   },
   "executionSteps": [
     {
       "step": 1,
-      "description": "Create the lead import guide and add documentation for creating Mautic contact segments.",
+      "description": "Create the Mautic CSV import documentation file.",
       "commands": [],
       "files": [
         {
-          "path": "docs/lead-import-guide.md",
-          "change": "Create a new file and add detailed instructions for creating all specified contact segments (`industry-*`, `geo-*`, `size-*`, `engaged-*`, `icp-*`, and `warmup-safe`) via the Mautic UI. Include the specific filter criteria for each segment and a section on how to verify membership counts."
+          "path": "lead-import-guide.md",
+          "change": "Create a new file and add the full documentation for the Mautic CSV import process, covering all acceptance criteria."
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "description": "Create the verification script to ensure the documentation has been created correctly.",
+      "commands": [
+        "chmod +x verify_script.sh"
+      ],
+      "files": [
+        {
+          "path": "verify_script.sh",
+          "change": "Create a bash script that checks for the existence of 'lead-import-guide.md' and verifies that it contains all the required sections as per the acceptance criteria."
         }
       ]
     }
   ],
   "verificationScript": "verify_script.sh created and executable",
   "rollbackPlan": [
-    "git restore docs/lead-import-guide.md",
-    "rm docs/lead-import-guide.md"
+    "If the verification script fails, the rollback procedure is to delete the generated documentation file:",
+    "rm lead-import-guide.md",
+    "rm verify_script.sh"
   ]
 }

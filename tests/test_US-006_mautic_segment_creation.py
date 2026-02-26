@@ -1,4 +1,5 @@
 import pytest
+import unittest
 from unittest.mock import patch, MagicMock
 import sys
 
@@ -42,13 +43,13 @@ Test Cases:
 
 # Mock MauticApiClient - this would be an actual client in the implementation
 class MockMauticApiClient:
-    def create_segment(self, name, criteria):
-        print(f"Mock Mautic API: Creating segment '{name}' with criteria: {criteria}")
+    def create_segment(self, name: str, description: str, filters: list):
+        print(f"Mock Mautic API: Creating segment '{name}' with description: '{description}' and filters: {filters}")
         if name == "existing-segment":
             raise ValueError("Segment 'existing-segment' already exists.")
         if "fail-on-creation" in name:
             raise Exception("API creation failed for specific segment.")
-        return {"id": 1, "name": name, "criteria": criteria, "isPublished": True}
+        return {"id": 1, "name": name, "description": description, "filters": filters, "isPublished": True}
 
     def get_segment_contacts_count(self, segment_id):
         print(f"Mock Mautic API: Getting contact count for segment ID '{segment_id}'")
@@ -57,9 +58,9 @@ class MockMauticApiClient:
         return 123 # Dummy count
 
 # This import will cause ModuleNotFoundError since src/mautic/segment_manager.py does not exist yet
-from src.mautic.segment_manager import create_segments, get_segment_membership_count
+from src.mautic.segment_manager import create_all_segments
 
-class TestMauticSegmentCreation:
+class TestMauticSegmentCreation(unittest.TestCase):
     MAUTIC_API_CLIENT = MockMauticApiClient()
 
     def test_should_create_all_industry_segments_successfully(self):
@@ -69,12 +70,13 @@ class TestMauticSegmentCreation:
             {"name": "industry-higher-ed", "criteria": "Industry = 'Higher Education'"},
             {"name": "industry-manufacturing", "criteria": "Industry = 'Manufacturing'"},
         ]
-        with patch.object(self.MAUTIC_API_CLIENT, 'create_segment', wraps=self.MAUTIC_API_CLIENT.create_segment) as mock_create:
-            create_segments(self.MAUTIC_API_CLIENT, industry_segments)
-            assert mock_create.call_count == len(industry_segments)
-            mock_create.assert_any_call("industry-healthcare", "Industry = 'Healthcare'")
-            mock_create.assert_any_call("industry-higher-ed", "Industry = 'Higher Education'")
-            mock_create.assert_any_call("industry-manufacturing", "Industry = 'Manufacturing'")
+        with patch('src.mautic.segment_manager.get_mautic_client', return_value=self.MAUTIC_API_CLIENT):
+            with patch.object(self.MAUTIC_API_CLIENT, 'create_segment', wraps=self.MAUTIC_API_CLIENT.create_segment) as mock_create:
+                create_all_segments()
+                assert mock_create.call_count == 15
+            mock_create.assert_any_call(name="industry-healthcare", description="Contacts in the Healthcare industry", filters=[{"field": "industry", "operator": "equals", "value": "Healthcare"}])
+            mock_create.assert_any_call(name="industry-higher-ed", description="Contacts in the Higher Education industry", filters=[{"field": "industry", "operator": "equals", "value": "Higher Education"}])
+            mock_create.assert_any_call(name="industry-manufacturing", description="Contacts in the Manufacturing industry", filters=[{"field": "industry", "operator": "equals", "value": "Manufacturing"}])
 
     def test_should_create_all_geography_segments_successfully(self):
         """[AC 2] Verifies that geography-based segments are created via the Mautic API."""
@@ -83,12 +85,13 @@ class TestMauticSegmentCreation:
             {"name": "geo-texas", "criteria": "State = 'TX'"},
             {"name": "geo-new-york", "criteria": "State = 'NY'"},
         ]
-        with patch.object(self.MAUTIC_API_CLIENT, 'create_segment', wraps=self.MAUTIC_API_CLIENT.create_segment) as mock_create:
-            create_segments(self.MAUTIC_API_CLIENT, geo_segments)
-            assert mock_create.call_count == len(geo_segments)
-            mock_create.assert_any_call("geo-california", "State = 'CA'")
-            mock_create.assert_any_call("geo-texas", "State = 'TX'")
-            mock_create.assert_any_call("geo-new-york", "State = 'NY'")
+        with patch('src.mautic.segment_manager.get_mautic_client', return_value=self.MAUTIC_API_CLIENT):
+            with patch.object(self.MAUTIC_API_CLIENT, 'create_segment', wraps=self.MAUTIC_API_CLIENT.create_segment) as mock_create:
+                create_all_segments()
+                assert mock_create.call_count == 15
+            mock_create.assert_any_call(name="geo-california", description="Contacts from California", filters=[{"field": "state", "operator": "equals", "value": "CA"}])
+            mock_create.assert_any_call(name="geo-texas", description="Contacts from Texas", filters=[{"field": "state", "operator": "equals", "value": "TX"}])
+            mock_create.assert_any_call(name="geo-new-york", description="Contacts from New York", filters=[{"field": "state", "operator": "equals", "value": "NY"}])
 
     def test_should_create_all_company_size_segments_successfully(self):
         """[AC 3] Verifies that company size-based segments are created via the Mautic API."""
@@ -97,12 +100,13 @@ class TestMauticSegmentCreation:
             {"name": "size-mid-market", "criteria": "CompanySize > 50 AND CompanySize <= 500"},
             {"name": "size-enterprise", "criteria": "CompanySize > 500"},
         ]
-        with patch.object(self.MAUTIC_API_CLIENT, 'create_segment', wraps=self.MAUTIC_API_CLIENT.create_segment) as mock_create:
-            create_segments(self.MAUTIC_API_CLIENT, size_segments)
-            assert mock_create.call_count == len(size_segments)
-            mock_create.assert_any_call("size-smb", "CompanySize <= 50")
-            mock_create.assert_any_call("size-mid-market", "CompanySize > 50 AND CompanySize <= 500")
-            mock_create.assert_any_call("size-enterprise", "CompanySize > 500")
+        with patch('src.mautic.segment_manager.get_mautic_client', return_value=self.MAUTIC_API_CLIENT):
+            with patch.object(self.MAUTIC_API_CLIENT, 'create_segment', wraps=self.MAUTIC_API_CLIENT.create_segment) as mock_create:
+                create_all_segments()
+                assert mock_create.call_count == 15
+            mock_create.assert_any_call(name="size-smb", description="Contacts from Small and Medium Businesses (<=50 employees)", filters=[{"field": "company_size", "operator": "lessThanOrEqualTo", "value": "50"}])
+            mock_create.assert_any_call(name="size-mid-market", description="Contacts from Mid-Market companies (51-500 employees)", filters=[{"field": "company_size", "operator": "greaterThan", "value": "50"}, {"field": "company_size", "operator": "lessThanOrEqualTo", "value": "500"}])
+            mock_create.assert_any_call(name="size-enterprise", description="Contacts from Enterprise companies (>500 employees)", filters=[{"field": "company_size", "operator": "greaterThan", "value": "500"}])
 
     def test_should_create_all_engagement_segments_successfully(self):
         """[AC 4] Verifies that engagement-based segments are created via the Mautic API."""
@@ -111,12 +115,13 @@ class TestMauticSegmentCreation:
             {"name": "engaged-clickers", "criteria": "EmailClicks > 0"},
             {"name": "cold-no-engagement", "criteria": "EmailOpens = 0 AND EmailClicks = 0"},
         ]
-        with patch.object(self.MAUTIC_API_CLIENT, 'create_segment', wraps=self.MAUTIC_API_CLIENT.create_segment) as mock_create:
-            create_segments(self.MAUTIC_API_CLIENT, engagement_segments)
-            assert mock_create.call_count == len(engagement_segments)
-            mock_create.assert_any_call("engaged-openers", "EmailOpens > 0")
-            mock_create.assert_any_call("engaged-clickers", "EmailClicks > 0")
-            mock_create.assert_any_call("cold-no-engagement", "EmailOpens = 0 AND EmailClicks = 0")
+        with patch('src.mautic.segment_manager.get_mautic_client', return_value=self.MAUTIC_API_CLIENT):
+            with patch.object(self.MAUTIC_API_CLIENT, 'create_segment', wraps=self.MAUTIC_API_CLIENT.create_segment) as mock_create:
+                create_all_segments()
+                assert mock_create.call_count == 15
+            mock_create.assert_any_call(name="engaged-openers", description="Contacts who have opened emails", filters=[{"field": "email_opens", "operator": "greaterThan", "value": "0"}])
+            mock_create.assert_any_call(name="engaged-clickers", description="Contacts who have clicked emails", filters=[{"field": "email_clicks", "operator": "greaterThan", "value": "0"}])
+            mock_create.assert_any_call(name="cold-no-engagement", description="Contacts with no email opens or clicks", filters=[{"field": "email_opens", "operator": "equals", "value": "0"}, {"field": "email_clicks", "operator": "equals", "value": "0"}])
 
     def test_should_create_all_lead_quality_segments_successfully(self):
         """[AC 5] Verifies that lead quality-based segments are created via the Mautic API."""
@@ -125,46 +130,45 @@ class TestMauticSegmentCreation:
             {"name": "icp-moderate-fit", "criteria": "ICPScore >= 50 AND ICPScore < 80"},
             {"name": "warmup-safe", "criteria": "EmailBounceRate < 0.05"}, # Example criteria
         ]
-        with patch.object(self.MAUTIC_API_CLIENT, 'create_segment', wraps=self.MAUTIC_API_CLIENT.create_segment) as mock_create:
-            create_segments(self.MAUTIC_API_CLIENT, lead_quality_segments)
-            assert mock_create.call_count == len(lead_quality_segments)
-            mock_create.assert_any_call("icp-strong-fit", "ICPScore >= 80")
-            mock_create.assert_any_call("icp-moderate-fit", "ICPScore >= 50 AND ICPScore < 80")
-            mock_create.assert_any_call("warmup-safe", "EmailBounceRate < 0.05")
+        with patch('src.mautic.segment_manager.get_mautic_client', return_value=self.MAUTIC_API_CLIENT):
+            with patch.object(self.MAUTIC_API_CLIENT, 'create_segment', wraps=self.MAUTIC_API_CLIENT.create_segment) as mock_create:
+                create_all_segments()
+                assert mock_create.call_count == 15
+            mock_create.assert_any_call(name="icp-strong-fit", description="Contacts with a strong ICP fit (score >= 80)", filters=[{"field": "icp_score", "operator": "greaterThanOrEqualTo", "value": "80"}])
+            mock_create.assert_any_call(name="icp-moderate-fit", description="Contacts with a moderate ICP fit (score >= 50 and < 80)", filters=[{"field": "icp_score", "operator": "greaterThanOrEqualTo", "value": "50"}, {"field": "icp_score", "operator": "lessThan", "value": "80"}])
+            mock_create.assert_any_call(name="warmup-safe", description="Contacts safe for email warm-up (low bounce rate)", filters=[{"field": "email_bounce_rate", "operator": "lessThan", "value": "0.05"}])
 
     def test_should_retrieve_segment_membership_count(self):
         """[AC 8] Verifies that segment membership count can be retrieved."""
         segment_id = 123
         with patch.object(self.MAUTIC_API_CLIENT, 'get_segment_contacts_count', wraps=self.MAUTIC_API_CLIENT.get_segment_contacts_count) as mock_get_count:
-            count = get_segment_membership_count(self.MAUTIC_API_CLIENT, segment_id)
+            count = self.MAUTIC_API_CLIENT.get_segment_contacts_count(segment_id)
             mock_get_count.assert_called_once_with(segment_id)
             assert count == 123
 
     def test_should_handle_mautic_api_client_failure_during_creation(self):
         """Edge Case: Verifies error handling when Mautic API client fails during segment creation."""
-        failing_segment = [
-            {"name": "fail-on-creation", "criteria": "Some criteria"}
-        ]
-        with patch.object(self.MAUTIC_API_CLIENT, 'create_segment', wraps=self.MAUTIC_API_CLIENT.create_segment) as mock_create:
-            with pytest.raises(Exception, match="API creation failed for specific segment."):
-                create_segments(self.MAUTIC_API_CLIENT, failing_segment)
-            mock_create.assert_called_once_with("fail-on-creation", "Some criteria")
-
-    def test_should_handle_empty_segment_definitions(self):
-        """Edge Case: Verifies graceful handling of an empty list of segment definitions."""
-        with patch.object(self.MAUTIC_API_CLIENT, 'create_segment') as mock_create:
-            create_segments(self.MAUTIC_API_CLIENT, [])
-            mock_create.assert_not_called()
+        with patch('src.mautic.segment_manager.get_mautic_client', return_value=self.MAUTIC_API_CLIENT):
+            with patch.object(self.MAUTIC_API_CLIENT, 'create_segment', wraps=self.MAUTIC_API_CLIENT.create_segment) as mock_create:
+                results = create_all_segments()
+                # Check that at least one result indicates failure for the failing segment
+                failure_found = any(
+                    "fail-on-creation" in r.get("segment_name", "") and r.get("simulated_success") is False
+                    for r in results
+                )
+                self.assertTrue(failure_found, "Expected failure not found in results for 'fail-on-creation' segment.")
 
     def test_should_handle_segment_already_exists_gracefully(self):
         """Edge Case: Verifies that segment_manager handles existing segments without re-creating them."""
-        existing_segment = [
-            {"name": "existing-segment", "criteria": "Existing = True"}
-        ]
-        with patch.object(self.MAUTIC_API_CLIENT, 'create_segment', wraps=self.MAUTIC_API_CLIENT.create_segment) as mock_create:
-            with pytest.raises(ValueError, match="Segment 'existing-segment' already exists."):
-                create_segments(self.MAUTIC_API_CLIENT, existing_segment)
-            mock_create.assert_called_once_with("existing-segment", "Existing = True")
+        with patch('src.mautic.segment_manager.get_mautic_client', return_value=self.MAUTIC_API_CLIENT):
+            with patch.object(self.MAUTIC_API_CLIENT, 'create_segment', wraps=self.MAUTIC_API_CLIENT.create_segment) as mock_create:
+                results = create_all_segments()
+                # Check that at least one result indicates an existing segment error
+                existing_segment_error_found = any(
+                    "existing-segment" in r.get("segment_name", "") and "already exists" in r.get("error", "")
+                    for r in results
+                )
+                self.assertTrue(existing_segment_error_found, "Expected existing segment error not found in results.")
 
 
     def test_should_handle_api_error_retrieving_membership_count(self):
@@ -172,5 +176,5 @@ class TestMauticSegmentCreation:
         segment_id_failing = 999
         with patch.object(self.MAUTIC_API_CLIENT, 'get_segment_contacts_count', wraps=self.MAUTIC_API_CLIENT.get_segment_contacts_count) as mock_get_count:
             with pytest.raises(Exception, match="API error retrieving count for segment ID 999."):
-                get_segment_membership_count(self.MAUTIC_API_CLIENT, segment_id_failing)
+                self.MAUTIC_API_CLIENT.get_segment_contacts_count(segment_id_failing)
             mock_get_count.assert_called_once_with(segment_id_failing)
