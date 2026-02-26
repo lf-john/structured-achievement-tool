@@ -1,67 +1,55 @@
 {
   "systemAnalysis": {
     "filesToChange": [
-      "mautic/app/config/local.php",
-      "mautic/app/config/suitecrm_field_mapping.json"
+      "/home/johnlane/projects/marketing-automation/scripts/normalize_leads.py"
     ],
-    "systemImpact": "The changes will enable data synchronization from Mautic to SuiteCRM. A Mautic cache clear is required, which can cause a brief moment of slowness. No downtime is expected. Misconfiguration can lead to failed or incorrect data synchronization.",
-    "externalDependencies": [
-      "A running SuiteCRM instance with API credentials.",
-      "The Mautic SuiteCRM integration plugin must be installed."
-    ]
+    "systemImpact": "This change introduces a new script for data processing. It has no impact on currently running systems as it is a standalone script intended for manual or scheduled execution.",
+    "externalDependencies": []
   },
   "executionSteps": [
     {
       "step": 1,
-      "description": "Create the field mapping configuration file. This file will define how Mautic contact fields map to SuiteCRM contact fields.",
-      "commands": [],
-      "files": [
-        {
-          "path": "mautic/app/config/suitecrm_field_mapping.json",
-          "change": "Create this new file with the following content: \n```json\n{\n  \"mautic_field_to_suitecrm_field\": {\n    \"email\": \"email1\",\n    \"firstname\": \"first_name\",\n    \"lastname\": \"last_name\",\n    \"company\": \"account_name\",\n    \"score\": \"lead_score_c\"\n  }\n}\n```"
-        }
-      ]
+      "description": "Create the directory structure for the new script and its test data.",
+      "commands": [
+        "mkdir -p /home/johnlane/projects/marketing-automation/scripts",
+        "mkdir -p /home/johnlane/projects/marketing-automation/data",
+        "mkdir -p /home/johnlane/projects/marketing-automation/tests"
+      ],
+      "files": []
     },
     {
       "step": 2,
-      "description": "Update the Mautic local configuration file to enable and configure the SuiteCRM plugin.",
+      "description": "Create the Python script `normalize_leads.py`. The script will contain the logic to read, normalize, and write lead data, and generate a report.",
       "commands": [],
       "files": [
         {
-          "path": "mautic/app/config/local.php",
-          "change": "Append the following configuration to the return array in the file. Replace placeholders with actual SuiteCRM credentials."
+          "path": "/home/johnlane/projects/marketing-automation/scripts/normalize_leads.py",
+          "change": "Create a new Python script with functions for data normalization, deduplication, and email validation using the pandas library."
         }
       ]
     },
     {
       "step": 3,
-      "description": "Provide the content to be appended to `mautic/app/config/local.php`",
-      "commands": [
-        "MAUTIC_CONFIG_CONTENT='\n    \"plugin_suitecrm_enabled\" => true,\n    \"suitecrm_url\" => \"https://your-suitecrm-instance.com\",\n    \"suitecrm_username\" => \"admin\",\n    \"suitecrm_password\" => \"your-secret-password\",\n    \"suitecrm_field_mapping_file\" => \"/var/www/html/app/config/suitecrm_field_mapping.json\",\n    \"suitecrm_sync_email_opens\" => true,\n    \"suitecrm_sync_email_clicks\" => true,\n    \"suitecrm_sync_form_submissions\" => true,\n    \"suitecrm_sync_lead_score_changes\" => true,\n    \"suitecrm_sync_campaign_membership\" => true,\n'"
-      ],
-      "files": []
+      "description": "Create a placeholder test file for the new script.",
+      "commands": [],
+      "files": [
+          {
+              "path": "/home/johnlane/projects/marketing-automation/tests/test_normalize_leads.py",
+              "change": "Create a new Python test script using pytest to ensure the normalization script works as expected. This test will not be implemented in this phase."
+          }
+      ]
     },
     {
       "step": 4,
-      "description": "Append the configuration to `mautic/app/config/local.php`.",
-      "commands": [
-        "docker-compose exec -T mautic bash -c \"sed -i '/^);/i '\"'\"$MAUTIC_CONFIG_CONTENT\"'\"'' /var/www/html/app/config/local.php\""
-      ],
-      "files": []
-    },
-    {
-      "step": 5,
-      "description": "Clear the Mautic cache to apply the configuration changes.",
-      "commands": [
-        "docker-compose exec -T mautic php /var/www/html/bin/console cache:clear"
-      ],
+      "description": "Install pandas if not already installed, as it is a dependency for the script.",
+      "commands": ["pip install pandas"],
       "files": []
     }
   ],
   "verificationScript": "verify_script.sh created and executable",
   "rollbackPlan": [
-    "Step 1: Revert the changes in `mautic/app/config/local.php` by removing the added lines.",
-    "Step 2: Delete the `mautic/app/config/suitecrm_field_mapping.json` file.",
-    "Step 3: Run `docker-compose exec -T mautic php /var/www/html/bin/console cache:clear` to clear the cache."
+    "rm -f /home/johnlane/projects/marketing-automation/scripts/normalize_leads.py",
+    "rm -f /home/johnlane/projects/marketing-automation/tests/test_normalize_leads.py",
+    "rm -rf /home/johnlane/projects/marketing-automation/data"
   ]
 }
