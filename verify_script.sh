@@ -1,23 +1,19 @@
 #!/bin/bash
-set -eo pipefail
+# US-010 Verification Script
+# This script runs the integration test for the Ollama fallback logic.
+# It ensures that when Ollama is unavailable, tasks are retried,
+# notifications are sent, and no fallback to other LLM providers occurs.
 
-echo "Sourcing Python virtual environment..."
-# Check if venv exists before sourcing
-if [ -f ".venv/bin/activate" ]; then
-    source .venv/bin/activate
-else
-    echo "Error: Virtual environment not found at .venv/bin/activate"
+# Ensure python path includes the source
+export PYTHONPATH=$PYTHONPATH:$(pwd)
+
+# Run the specific test for this story.
+# Note: The test file 'tests/test_us_010_ollama_fallback.py' will be created
+# as part of the execution plan. This script assumes it exists.
+if [ ! -f "tests/test_us_010_ollama_fallback.py" ]; then
+    echo "ERROR: Test file tests/test_us_010_ollama_fallback.py not found."
+    echo "Please run the implementation steps first."
     exit 1
 fi
 
-echo "Verifying engagement scorer workflow by running its tests..."
-
-# Check if the test file exists before running pytest
-if [ -f "tests/workflows/test_engagement_scorer.py" ]; then
-    pytest tests/workflows/test_engagement_scorer.py -v
-else
-    echo "Error: Test file not found at tests/workflows/test_engagement_scorer.py"
-    exit 1
-fi
-
-echo "Verification complete. All tests passed."
+pytest tests/test_us_010_ollama_fallback.py -v

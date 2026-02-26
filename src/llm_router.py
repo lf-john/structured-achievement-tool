@@ -1,11 +1,12 @@
 
 import logging
+from src.core.embedding_service import EmbeddingService, OllamaUnavailableError
 
 logger = logging.getLogger(__name__)
 
 class LLMRouter:
     def __init__(self):
-        pass
+        self.embedding_service = EmbeddingService()
 
     def _is_ollama_task(self, task_description: str) -> bool:
         """Determines if a task should be routed to Ollama based on keywords."""
@@ -44,6 +45,9 @@ class LLMRouter:
         if is_claude:
             return "claude"
         elif is_ollama:
+            if not self.embedding_service.check_ollama_health():
+                logger.warning("Ollama is unavailable, routing Ollama-bound task to 'ollama_unavailable'.")
+                return "ollama_unavailable"
             return "ollama"
         else:
             # Default to Claude for ambiguous or complex tasks not explicitly matching Ollama

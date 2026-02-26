@@ -280,3 +280,12 @@ class Notifier:
             priority="urgent",
             tags="warning",
         )
+
+    def notify_ollama_unavailable(self, task_id: str):
+        """Notify that Ollama is unavailable and the task will be retried."""
+        self.send_ntfy(
+            title=f"SAT: Ollama Unavailable ({task_id})",
+            message="Ollama is currently down. Task will be queued for retry.",
+            priority="high",
+            tags="warning,hourglass",
+        )

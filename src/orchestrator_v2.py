@@ -24,7 +24,7 @@ from src.execution.audit_journal import AuditJournal, AuditRecord
 from src.core.rag_summarizer import RAGSummarizer
 from src.notifications.notifier import Notifier
 from src.core.vector_store import VectorStore
-from src.core.embedding_service import EmbeddingService
+from src.core.embedding_service import EmbeddingService, OllamaUnavailableError
 from src.agents.base_agent import BaseAgent
 from src.llm.prompt_builder import load_template, substitute_placeholders, TEMPLATE_DIR
 from src.llm.response_parser import extract_json
@@ -146,6 +146,11 @@ class OrchestratorV2:
         task_type = classification.task_type
         logger.info(f"Task classified as: {task_type} (confidence: {classification.confidence})")
 
+        if task_type == "ollama_unavailable":
+            logger.warning(f"Ollama is unavailable, task '{task_id}' cannot be processed. Queuing for retry.")
+            self.notifier.notify_ollama_unavailable(task_id)
+            return {"status": "pending_ollama_retry", "returncode": 1}
+
         # --- Search vector memory for context ---
         rag_context = ""
         if self.vector_store:
@@ -161,6 +166,10 @@ class OrchestratorV2:
                             parts.append(f"\n### Similar Task {idx} (similarity: {task.get('score', 0):.2f})")
                             parts.append(task.get("text", ""))
                         rag_context = "\n".join(parts)
+            except OllamaUnavailableError as e:
+                logger.warning(f"Ollama unavailable for vector search: {e}. Task '{task_id}' will be retried.")
+                self.notifier.notify_ollama_unavailable(task_id)
+                return {"status": "pending_ollama_retry", "returncode": 1}
             except Exception as e:
                 logger.warning(f"Vector search failed: {e}")
 
