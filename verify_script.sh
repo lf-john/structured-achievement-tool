@@ -1,19 +1,55 @@
 #!/bin/bash
-# US-010 Verification Script
-# This script runs the integration test for the Ollama fallback logic.
-# It ensures that when Ollama is unavailable, tasks are retried,
-# notifications are sent, and no fallback to other LLM providers occurs.
 
-# Ensure python path includes the source
-export PYTHONPATH=$PYTHONPATH:$(pwd)
+# verify_script.sh
 
-# Run the specific test for this story.
-# Note: The test file 'tests/test_us_010_ollama_fallback.py' will be created
-# as part of the execution plan. This script assumes it exists.
-if [ ! -f "tests/test_us_010_ollama_fallback.py" ]; then
-    echo "ERROR: Test file tests/test_us_010_ollama_fallback.py not found."
-    echo "Please run the implementation steps first."
+set -e
+
+FILE="n8n_claude_email_workflow.json"
+
+if [ ! -f "$FILE" ]; then
+    echo "Error: $FILE not found."
     exit 1
 fi
 
-pytest tests/test_us_010_ollama_fallback.py -v
+# Check for valid JSON
+if ! jq -e . "$FILE" > /dev/null; then
+    echo "Error: $FILE is not valid JSON."
+    exit 1
+fi
+
+# Check for key components
+WEBHOOK_NODE=$(jq '.nodes[] | select(.type == "n8n-nodes-base.webhook")' "$FILE")
+CLAUDE_NODE=$(jq '.nodes[] | select(.name == "Call Claude API")' "$FILE")
+MAUTIC_NODE=$(jq '.nodes[] | select(.type == "n8n-nodes-base.mautic")' "$FILE")
+
+if [ -z "$WEBHOOK_NODE" ]; then
+    echo "Error: Webhook trigger node not found."
+    exit 1
+fi
+
+if [ -z "$CLAUDE_NODE" ]; then
+    echo "Error: 'Call Claude API' node not found."
+    exit 1
+fi
+
+# Check for placeholder for Claude API key
+CLAUDE_CREDENTIALS=$(echo "$CLAUDE_NODE" | jq -r '.parameters.authentication' )
+if [[ "$CLAUDE_CREDENTIALS" != "headerAuth" ]]; then
+    echo "Error: Claude API node is not using header authentication for the API key."
+    exit 1
+fi
+
+API_KEY_VALUE=$(echo "$CLAUDE_NODE" | jq -r '.parameters.headerParameters.parameters[] | select(.name == "x-api-key") | .value')
+if [[ "$API_KEY_VALUE" != "{{$credentials.claudeApiKey.apiKey}}" ]]; then
+    echo "Error: Claude API key placeholder '{{$credentials.claudeApiKey.apiKey}}' not found."
+    exit 1
+fi
+
+
+if [ -z "$MAUTIC_NODE" ]; then
+    echo "Error: Mautic node not found."
+    exit 1
+fi
+
+echo "Verification successful: $FILE is a valid N8N workflow with all required components."
+exit 0

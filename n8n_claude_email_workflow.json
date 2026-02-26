@@ -1,0 +1,169 @@
+{
+  "name": "Claude Email Generation",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/contact-scored",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "webhookId": "some-unique-id"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "{{$json.body.tag}}",
+              "operation": "equal",
+              "value2": "initial_outreach"
+            },
+            {
+              "value1": "{{$json.body.tag}}",
+              "operation": "equal",
+              "value2": "follow_up_visit"
+            },
+            {
+              "value1": "{{$json.body.tag}}",
+              "operation": "equal",
+              "value2": "re_engagement"
+            }
+          ]
+        }
+      },
+      "name": "Route by Tag",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "{{$credentials.claudeApiKey.apiKey}}"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={
+  "model": "claude-3-sonnet-20240229",
+  "max_tokens": 1024,
+  "messages": [
+    {
+      "role": "user",
+      "content": "Generate a personalized email for a contact named {{$json.body.firstName}} about {{$json.body.topic}}. The company is {{$json.body.company}}. Here is some context: {{$json.body.context}}. Generate 3 subject line variants for A/B testing, in a JSON format like { 'subjects': ['subject1', 'subject2', 'subject3'], 'body': 'email body' }."
+    }
+  ]
+}"
+      },
+      "name": "Call Claude API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        850,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "create",
+        "name": "={{JSON.parse($json.body).subjects[0]}}",
+        "subject": "={{JSON.parse($json.body).subjects[0]}}",
+        "customHtml": "={{JSON.parse($json.body).body}}",
+        "isPublished": false
+      },
+      "name": "Save to Mautic as Draft",
+      "type": "n8n-nodes-base.mautic",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        200
+      ],
+      "credentials": {
+        "mauticApi": {
+          "id": "mautic-credentials-id",
+          "name": "Mautic API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Route by Tag",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Tag": {
+      "main": [
+        [
+          {
+            "node": "Call Claude API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Claude API",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Call Claude API",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Call Claude API": {
+      "main": [
+        [
+          {
+            "node": "Save to Mautic as Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

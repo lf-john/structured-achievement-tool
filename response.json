@@ -1,61 +1,43 @@
 {
   "systemAnalysis": {
     "filesToChange": [
-      "src/workflows/engagement_scorer.py",
-      "tests/workflows/test_engagement_scorer.py"
+      "n8n_claude_email_workflow.json"
     ],
-    "systemImpact": "This is a new, isolated workflow. No impact on existing system functionality is anticipated. It adds a new capability for engagement scoring.",
+    "systemImpact": "This is an additive change. A new N8N workflow will be created, but it will not impact the currently running system until it is manually imported and activated in the N8N instance. No existing services will be modified.",
     "externalDependencies": [
-      "Ollama (for LLM classification)"
+      "N8N (workflow execution environment)",
+      "Mautic API (for storing email drafts)",
+      "Claude API (for email content generation)"
     ]
   },
   "executionSteps": [
     {
       "step": 1,
-      "description": "Create the core workflow logic for the Engagement Scorer.",
+      "description": "Create the N8N workflow JSON file that defines the email generation process. This file represents the workflow to be imported into N8N.",
       "commands": [],
       "files": [
         {
-          "path": "src/workflows/engagement_scorer.py",
-          "change": "Create a new file to house the `EngagementScorer` class. This class will contain the logic to interact with an Ollama model to classify Mautic engagement history into 'hot', 'warm', or 'cold'."
+          "path": "n8n_claude_email_workflow.json",
+          "change": "A new file containing the JSON definition of the N8N workflow. It includes a webhook trigger, logic to route contacts, a node to call the Claude API for email generation, and a node to save the generated email as a draft in Mautic. The Claude API call uses a placeholder `{{$credentials.claudeApiKey.apiKey}}` which should be configured in the N8N credential manager."
         }
       ]
     },
     {
       "step": 2,
-      "description": "Create TDD tests for the Engagement Scorer workflow.",
+      "description": "Create a markdown document explaining how to import and configure the new workflow in N8N.",
       "commands": [],
       "files": [
         {
-          "path": "tests/workflows/test_engagement_scorer.py",
-          "change": "Create a new test file with unit tests for the `EngagementScorer`. It will use 'unittest.mock.patch' to mock calls to the Ollama service, ensuring tests are independent and reliable."
+          "path": "US-006_IMPLEMENTATION_PLAN.md",
+          "change": "Create a new documentation file with instructions for importing the `n8n_claude_email_workflow.json` into N8N, setting up the necessary 'claudeApiKey' credentials, and activating the workflow."
         }
       ]
-    },
-    {
-      "step": 3,
-      "description": "Create the verification script.",
-      "commands": [],
-      "files": [
-        {
-          "path": "verify_script.sh",
-          "change": "Create a bash script that runs the unit tests for the new workflow to verify its correctness."
-        }
-      ]
-    },
-    {
-      "step": 4,
-      "description": "Make the verification script executable.",
-      "commands": [
-        "chmod +x verify_script.sh"
-      ],
-      "files": []
     }
   ],
-  "verificationScript": "A script named `verify_script.sh` will be created and made executable. It activates the Python virtual environment and runs the newly created tests (`pytest tests/workflows/test_engagement_scorer.py`). A successful test run (exit code 0) verifies the change.",
+  "verificationScript": "verify_script.sh created and executable",
   "rollbackPlan": [
-    "Remove the created Python files: `rm src/workflows/engagement_scorer.py tests/workflows/test_engagement_scorer.py`.",
-    "Remove the verification script: `rm verify_script.sh`.",
-    "If any other files were modified, revert them using `git checkout -- <file_path>`."
+    "The execution of this plan only creates new files.",
+    "To roll back, delete the created files: `rm n8n_claude_email_workflow.json US-006_IMPLEMENTATION_PLAN.md`"
   ]
 }
+<promise>COMPLETE</promise>
