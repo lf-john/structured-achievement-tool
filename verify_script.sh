@@ -1,21 +1,52 @@
 #!/bin/bash
 set -e
 
-FILE_PATH="lead-import-guide.md"
+# This script verifies the basic functionality of the import_leads.py script in dry-run mode.
 
-if [ ! -f "$FILE_PATH" ]; then
-  echo "Error: File '$FILE_PATH' not found."
-  exit 1
+# Create a dummy CSV for testing
+cat <<EOL > test_leads.csv
+email,firstname,lastname
+test1@example.com,Test,User1
+test2@example.com,Test,User2
+EOL
+
+# Path to the script
+SCRIPT_PATH="scripts/import_leads.py"
+
+# Check if the script exists
+if [ ! -f "$SCRIPT_PATH" ]; then
+    echo "Error: Script $SCRIPT_PATH not found."
+    exit 1
 fi
 
-# Check for key sections in the documentation using case-insensitive matching
-grep -qi "Contacts > Import" "$FILE_PATH" || (echo "Missing section: Navigation instructions to 'Contacts > Import'" && exit 1)
-grep -qi "upload" "$FILE_PATH" || (echo "Missing section: CSV upload instructions" && exit 1)
-grep -qi "map" "$FILE_PATH" || (echo "Missing section: Column mapping guidance" && exit 1)
-grep -qi "default value" "$FILE_PATH" || (echo "Missing section: Setting default values" && exit 1)
-grep -qi "lead_source" "$FILE_PATH" || (echo "Missing example: 'lead_source' default value" && exit 1)
-grep -qi "import_batch" "$FILE_PATH" || (echo "Missing section: 'import_batch' identifier" && exit 1)
-grep -qi "monitor" "$FILE_PATH" || (echo "Missing section: Monitoring import progress" && exit 1)
+# Make sure python is available
+if ! command -v python3 &> /dev/null
+then
+    echo "python3 could not be found"
+    exit 1
+fi
 
-echo "Verification successful: '$FILE_PATH' contains all required sections."
+# Run the script in dry-run mode
+OUTPUT=$(python3 "$SCRIPT_PATH" --input-file test_leads.csv --dry-run 2>&1)
+
+# Check for expected output
+if ! echo "$OUTPUT" | grep -q "Dry run mode enabled."; then
+    echo "Verification failed: Did not find 'Dry run mode enabled.' in output."
+    exit 1
+fi
+
+if ! echo "$OUTPUT" | grep -q "Processing batch 1 of 1"; then
+    echo "Verification failed: Did not find 'Processing batch 1 of 1' in output."
+    exit 1
+fi
+
+if ! echo "$OUTPUT" | grep -q "Successfully processed 2 contacts in dry run."; then
+    echo "Verification failed: Did not find 'Successfully processed 2 contacts in dry run.' in output."
+    exit 1
+fi
+
+# Clean up
+rm test_leads.csv
+
+echo "Verification successful."
 exit 0
