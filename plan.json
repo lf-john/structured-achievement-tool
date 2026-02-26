@@ -1,51 +1,65 @@
 {
   "systemAnalysis": {
     "filesToChange": [
-      "src/dashboard_builder.py (or a new script that uses it)",
-      "tests/test_US_002_dashboard_builder.py (or a new test file)"
+      "tests/test_grafana_setup.py",
+      "tests/test_grafana_client.py",
+      "tests/test_dashboard_builder.py"
     ],
-    "systemImpact": "A new panel will be added to a Grafana dashboard. No impact on core services. Requires running a build script and updating Grafana.",
+    "systemImpact": "No impact on the running system. The changes involve adding a new test suite that uses mocking and does not interact with any live services.",
     "externalDependencies": [
-      "Prometheus",
-      "Grafana"
+      "The tests will mock the 'requests' library to avoid making live HTTP calls to a Grafana instance."
     ]
   },
   "executionSteps": [
     {
       "step": 1,
-      "description": "Create or update a Python script to generate the new Grafana panel JSON using the DashboardBuilder class.",
-      "commands": [],
-      "files": [
-        {
-          "path": "A new or existing dashboard generation script.",
-          "change": "Add logic to create a time series panel for 'sat_stories_succeeded_total' and 'sat_stories_failed_total' metrics."
-        }
-      ]
+      "description": "Create empty test files for each module to establish the test suite structure.",
+      "commands": [
+        "touch tests/test_grafana_client.py",
+        "touch tests/test_dashboard_builder.py",
+        "touch tests/test_grafana_setup.py"
+      ],
+      "files": []
     },
     {
       "step": 2,
-      "description": "Add a corresponding test to verify the panel generation logic and ensure the output is valid JSON.",
+      "description": "Implement unit tests for DashboardBuilder to validate the JSON structure of dashboards and various panel types.",
       "commands": [],
       "files": [
         {
-          "path": "A new or existing test file for dashboard generation.",
-          "change": "Add a test case that asserts the new panel's title, type, and metric targets are correct."
+          "path": "tests/test_dashboard_builder.py",
+          "change": "Add tests for `create_dashboard` and all `create_*_panel` methods. Verify correct structure, titles, queries, and options application for each panel type (timeseries, stat, gauge, etc.)."
         }
       ]
     },
     {
       "step": 3,
-      "description": "Run the script to generate the dashboard JSON and load it into Grafana.",
-      "commands": [
-        "python3 <your_script_name>.py > /tmp/grafana_panel.json"
-      ],
-      "files": []
+      "description": "Implement unit tests for GrafanaClient, mocking all external HTTP requests.",
+      "commands": [],
+      "files": [
+        {
+          "path": "tests/test_grafana_client.py",
+          "change": "Add tests for API methods (`get_dashboard`, `create_dashboard`, `update_dashboard`). Mock `requests.Session.request` to test success paths, authentication header injection, and error handling for various HTTP statuses (401, 403, 500) and connection issues."
+        }
+      ]
+    },
+    {
+      "step": 4,
+      "description": "Implement integration tests for the GrafanaSetup orchestrator and main script logic.",
+      "commands": [],
+      "files": [
+        {
+          "path": "tests/test_grafana_setup.py",
+          "change": "Add tests for the main `setup_dashboard` logic. Mock the `GrafanaClient` to test idempotency (verifying that `update_dashboard` is called if the dashboard exists and `create_dashboard` is called if it doesn't). Test the `--dry-run` functionality by asserting that no API calls are made and JSON is printed. Test command-line argument parsing and error handling."
+        }
+      ]
     }
   ],
   "verificationScript": "verify_script.sh created and executable",
   "rollbackPlan": [
-    "If changes were made to existing files, revert them using 'git checkout <file_path>'.",
-    "If new files were created, remove them.",
-    "If the dashboard was updated in Grafana, revert to the previous version using Grafana's version history or re-upload the old configuration."
+    "rm tests/test_grafana_client.py",
+    "rm tests/test_dashboard_builder.py",
+    "rm tests/test_grafana_setup.py",
+    "rm verify_script.sh"
   ]
 }
