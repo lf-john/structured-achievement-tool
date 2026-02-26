@@ -1,20 +1,23 @@
 #!/bin/bash
 
-set -e
+# Verification script for US-005
 
-FILE="DAILY_MONITORING_CHECKLIST.md"
+FILE="EMAIL_WARMUP_ABORT_CRITERIA.md"
 
 if [ ! -f "$FILE" ]; then
-    echo "Error: $FILE not found."
+    echo "Error: $FILE does not exist."
     exit 1
 fi
 
-# Verify key commands and metrics are in the checklist
-grep -q "aws ses get-send-statistics" "$FILE" || (echo "Missing 'get-send-statistics' command"; exit 1)
-grep -q "aws ses get-account-sending-enabled" "$FILE" || (echo "Missing 'get-account-sending-enabled' command"; exit 1)
-grep -q "Mautic Email Queue" "$FILE" || (echo "Missing Mautic queue check section"; exit 1)
-grep -q "BounceRate" "$FILE" || (echo "Missing BounceRate check"; exit 1)
-grep -q "ComplaintRate" "$FILE" || (echo "Missing ComplaintRate check"; exit 1)
+if ! grep -q "Abort Criteria" "$FILE"; then
+    echo "Error: 'Abort Criteria' section is missing from $FILE."
+    exit 1
+fi
 
-echo "Verification successful: $FILE contains all required checks."
+if ! grep -q "Remediation Steps" "$FILE"; then
+    echo "Error: 'Remediation Steps' section is missing from $FILE."
+    exit 1
+fi
+
+echo "Verification successful: $FILE contains the required sections."
 exit 0
