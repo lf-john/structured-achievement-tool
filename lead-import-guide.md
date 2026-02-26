@@ -81,3 +81,7 @@ After creating segments, it's crucial to verify their membership counts to ensur
     *   Utilize the Mautic API to fetch segment membership counts. The `MauticApiClient` in `src/mautic/mautic_api_client.py` contains a placeholder method `get_segment_membership_count(segment_id: int)` which, if fully implemented, would allow programmatic retrieval of these counts.
     *   This method would typically make a GET request to an endpoint like `/api/segments/{segment_id}/contacts/count` (Mautic API endpoints may vary, consult Mautic API documentation for exact paths).
     *   Compare the retrieved counts with expected numbers based on your contact data.
+
+### Programmatic Segment Creation:
+
+For automated segment creation, refer to the `create_mautic_segments.py` script. This script outlines how to programmatically define and potentially create these segments using a Mautic API client.
