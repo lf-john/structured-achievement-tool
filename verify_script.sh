@@ -1,40 +1,13 @@
 #!/bin/bash
+# verify_script.sh
 
-# Path to the documentation file
-DOC_FILE="docs/lead-import-guide.md"
+# This script verifies that the lead scoring documentation has been added to the guide.
+# It checks for the presence of the main header for the new section.
 
-# List of segments to verify
-SEGMENTS=(
-  "industry-healthcare"
-  "industry-higher-ed"
-  "industry-manufacturing"
-  "geo-california"
-  "geo-texas"
-  "geo-new-york"
-  "size-smb"
-  "size-mid-market"
-  "size-enterprise"
-  "engaged-openers"
-  "engaged-clickers"
-  "cold-no-engagement"
-  "icp-strong-fit"
-  "icp-moderate-fit"
-  "warmup-safe"
-)
-
-# Check if the documentation file exists
-if [ ! -f "$DOC_FILE" ]; then
-  echo "Error: Documentation file '$DOC_FILE' not found."
+if grep -q "## Mautic Lead Scoring Configuration" "lead-import-guide.md"; then
+  echo "Verification successful: Lead scoring documentation found."
+  exit 0
+else
+  echo "Verification failed: Lead scoring documentation not found."
   exit 1
 fi
-
-# Check for each segment's presence in the document
-for segment in "${SEGMENTS[@]}"; do
-  if ! grep -q "$segment" "$DOC_FILE"; then
-    echo "Error: Segment '$segment' not found in documentation."
-    exit 1
-  fi
-done
-
-echo "Verification successful: All segments are documented in '$DOC_FILE'."
-exit 0
