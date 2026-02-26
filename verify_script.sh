@@ -1,55 +1,18 @@
 #!/bin/bash
-
-# verify_script.sh
-
 set -e
 
-FILE="n8n_claude_email_workflow.json"
+FILE="US-011_DESIGN.md"
 
 if [ ! -f "$FILE" ]; then
-    echo "Error: $FILE not found."
+    echo "Verification failed: Design document $FILE not found."
     exit 1
 fi
 
-# Check for valid JSON
-if ! jq -e . "$FILE" > /dev/null; then
-    echo "Error: $FILE is not valid JSON."
-    exit 1
-fi
-
-# Check for key components
-WEBHOOK_NODE=$(jq '.nodes[] | select(.type == "n8n-nodes-base.webhook")' "$FILE")
-CLAUDE_NODE=$(jq '.nodes[] | select(.name == "Call Claude API")' "$FILE")
-MAUTIC_NODE=$(jq '.nodes[] | select(.type == "n8n-nodes-base.mautic")' "$FILE")
-
-if [ -z "$WEBHOOK_NODE" ]; then
-    echo "Error: Webhook trigger node not found."
-    exit 1
-fi
-
-if [ -z "$CLAUDE_NODE" ]; then
-    echo "Error: 'Call Claude API' node not found."
-    exit 1
-fi
-
-# Check for placeholder for Claude API key
-CLAUDE_CREDENTIALS=$(echo "$CLAUDE_NODE" | jq -r '.parameters.authentication' )
-if [[ "$CLAUDE_CREDENTIALS" != "headerAuth" ]]; then
-    echo "Error: Claude API node is not using header authentication for the API key."
-    exit 1
-fi
-
-API_KEY_VALUE=$(echo "$CLAUDE_NODE" | jq -r '.parameters.headerParameters.parameters[] | select(.name == "x-api-key") | .value')
-if [[ "$API_KEY_VALUE" != "{{$credentials.claudeApiKey.apiKey}}" ]]; then
-    echo "Error: Claude API key placeholder '{{$credentials.claudeApiKey.apiKey}}' not found."
-    exit 1
-fi
+grep -q "Batching" "$FILE" || (echo "Verification failed: 'Batching' section missing." && exit 1)
+grep -q "Resumability" "$FILE" || (echo "Verification failed: 'Resumability' section missing." && exit 1)
+grep -q "Progress Tracking" "$FILE" || (echo "Verification failed: 'Progress Tracking' section missing." && exit 1)
+grep -q "Background Processing" "$FILE" || (echo "Verification failed: 'Background Processing' section missing." && exit 1)
 
 
-if [ -z "$MAUTIC_NODE" ]; then
-    echo "Error: Mautic node not found."
-    exit 1
-fi
-
-echo "Verification successful: $FILE is a valid N8N workflow with all required components."
+echo "Verification successful: Design document is valid and contains all required sections."
 exit 0
