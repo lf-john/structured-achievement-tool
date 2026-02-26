@@ -1,21 +1,22 @@
 #!/bin/bash
+# verify_script.sh: Verifies that key network ports are listening.
 
-# Ensure the script fails if any command fails
-set -e
+PORTS=(8080 8088 8090 9090 3001 11434)
 
-# Run the health check script
-OUTPUT=$(python3 src/health_check.py)
+echo "Verifying connectivity for ports: ${PORTS[*]}"
 
-# Print the output for debugging purposes
-echo "--- Health Check Script Output ---"
-echo "${OUTPUT}"
-echo "----------------------------------"
+for port in "${PORTS[@]}"; do
+  # Use 'ss -tuln' to get a list of listening TCP and UDP ports.
+  # 'grep -q' searches quietly and exits with success if a match is found.
+  # We search for ":<port>" to match the port number in the address column.
+  if ss -tuln | grep -q ":${port}"; then
+    echo "  - Port ${port}: OK"
+  else
+    echo "  - Port ${port}: FAILED (Not listening)"
+    # Exit with an error code if any port is not found
+    exit 1
+  fi
+done
 
-# Verify that the new metrics are present in the output
-if echo "${OUTPUT}" | grep -q "CPU Load:" && echo "${OUTPUT}" | grep -q "Memory:"; then
-  echo "✅ Verification successful: CPU Load and Memory metrics found in the output."
-  exit 0
-else
-  echo "❌ Verification failed: Did not find 'CPU Load:' and/or 'Memory:' in the output."
-  exit 1
-fi
+echo "All ports are listening. Verification successful."
+exit 0
