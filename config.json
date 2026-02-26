@@ -2,5 +2,17 @@
     "ollama_api_url": "http://localhost:11434/api/generate",
     "ollama_model": "qwen2:7b",
     "mautic_api_url": "https://mautic.example.com/api",
-    "mautic_api_token": "YOUR_MAUTIC_API_TOKEN"
+    "mautic_api_token": "YOUR_MAUTIC_API_TOKEN",
+    "llm_cost_tracker": {
+        "daily_budget": 10.0,
+        "monthly_budget": 100.0,
+        "daily_warning_threshold": 0.8,
+        "monthly_warning_threshold": 0.9,
+        "model_pricing": {
+            "claude-3-opus-20240229": {
+                "input_cost_per_million_tokens": 15.0,
+                "output_cost_per_million_tokens": 75.0
+            }
+        }
+    }
 }
