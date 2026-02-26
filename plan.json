@@ -1,48 +1,66 @@
 {
   "systemAnalysis": {
     "filesToChange": [
-      "~/projects/marketing-automation/scripts/import_leads.py"
+      "scripts/verify_mautic_import.py",
+      "verify_script.sh",
+      "pyproject.toml",
+      "config.json"
     ],
-    "systemImpact": "This is a new batch import script and will have no impact on the currently running system. It is designed to be run manually or via a cron job.",
+    "systemImpact": "This change introduces a read-only verification script. It will query the Mautic API, causing a minor increase in API load during execution. It does not modify any system data, so the risk to the running system is low.",
     "externalDependencies": [
-      "Mautic API: The script will heavily interact with the Mautic API for creating and updating contacts. It needs valid API credentials and appropriate permissions."
+      "Mautic API"
     ]
   },
   "executionSteps": [
     {
       "step": 1,
-      "description": "Create the directory for the script if it doesn't exist.",
+      "description": "Update pyproject.toml to add 'requests' as a dependency.",
       "commands": [
-        "mkdir -p ~/projects/marketing-automation/scripts/"
+        "pip install requests"
       ],
-      "files": []
+      "files": [
+        {
+          "path": "pyproject.toml",
+          "change": "Add [project] section with requests dependency."
+        }
+      ]
     },
     {
       "step": 2,
-      "description": "Create the Python script `import_leads.py` with the core logic for argument parsing, CSV reading, batching, and a dry-run mode to satisfy the verification script.",
+      "description": "Create the main Python verification script.",
       "commands": [],
       "files": [
         {
-          "path": "~/projects/marketing-automation/scripts/import_leads.py",
-          "change": "Create the initial version of the script. This version includes argument parsing, logging setup, CSV reading, batch processing, and a functional dry-run mode. The Mautic API interaction logic is stubbed out with placeholders."
+          "path": "scripts/verify_mautic_import.py",
+          "change": "Create a new Python script to perform verification checks against the Mautic API."
         }
       ]
     },
     {
       "step": 3,
-      "description": "Populate the `import_leads.py` file with initial code.",
+      "description": "Create the bash script to run the verification.",
+      "commands": [],
+      "files": [
+        {
+          "path": "verify_script.sh",
+          "change": "Create the verification script that executes the Python script and checks its exit code."
+        }
+      ]
+    },
+    {
+      "step": 4,
+      "description": "Make the scripts executable.",
       "commands": [
-        "cat <<'EOL' > ~/projects/marketing-automation/scripts/import_leads.py\n#!/usr/bin/env python3\nimport argparse\nimport csv\nimport json\nimport logging\nimport os\nimport time\n\n# Configure logging\nlogging.basicConfig(\n    level=logging.INFO,\n    format='%(asctime)s - %(levelname)s - %(message)s',\n    handlers=[\n        logging.FileHandler('import_leads.log'),\n        logging.StreamHandler()\n    ]\n)\n\n# --- Mautic API Client (Placeholder) ---\nclass MauticApi:\n    def __init__(self, base_url, api_key, secret_key):\n        self.base_url = base_url\n        self.api_key = api_key\n        self.secret_key = secret_key\n        logging.info(\"Mautic API client initialized for %s\", base_url)\n\n    def import_batch(self, batch, dry_run=False):\n        logging.info(\"Importing batch of %d contacts.\", len(batch))\n        if dry_run:\n            time.sleep(0.1) # Simulate network latency\n            # In dry run, we just pretend it worked.\n            return {'created': len(batch), 'updated': 0, 'failed': 0}\n\n        # In a real implementation, this would be a POST request to Mautic's API\n        # endpoint, e.g., /api/contacts/batch/new\n        # It would handle authentication, rate limiting (429 errors), and retries.\n        pass\n\n# --- Main Script Logic ---\ndef get_progress(progress_file):\n    if os.path.exists(progress_file):\n        with open(progress_file, 'r') as f:\n            try:\n                return json.load(f).get('last_processed_index', -1)\n            except json.JSONDecodeError:\n                return -1\n    return -1\n\ndef save_progress(progress_file, index):\n    with open(progress_file, 'w') as f:\n        json.dump({'last_processed_index': index}, f)\n\ndef main():\n    parser = argparse.ArgumentParser(description='Import leads into Mautic from a CSV file.')\n    parser.add_argument('--input-file', required=True, help='Path to the input CSV file.')\n    parser.add_argument('--batch-size', type=int, default=200, help='Number of contacts per batch.')\n    parser.add_argument('--dry-run', action='store_true', help='Run script without making actual API calls.')\n    args = parser.parse_args()\n\n    if args.dry_run:\n        logging.info(\"Dry run mode enabled.\")\n\n    # Mautic configuration (should be externalized in a real scenario)\n    MAUTIC_URL = os.environ.get('MAUTIC_URL', 'http://localhost')\n    MAUTIC_API_KEY = os.environ.get('MAUTIC_API_KEY', 'key')\n    MAUTIC_SECRET_KEY = os.environ.get('MAUTIC_SECRET_KEY', 'secret')\n\n    api = MauticApi(MAUTIC_URL, MAUTIC_API_KEY, MAUTIC_SECRET_KEY)\n    progress_file = 'import_progress.json'\n\n    try:\n        with open(args.input_file, 'r', encoding='utf-8') as f:\n            reader = list(csv.DictReader(f))\n    except FileNotFoundError:\n        logging.error(\"Input file not found: %s\", args.input_file)\n        return\n\n    total_contacts = len(reader)\n    logging.info(\"Found %d contacts to process.\", total_contacts)\n\n    start_index = get_progress(progress_file) + 1\n    if start_index > 0:\n        logging.info(\"Resuming from contact index %d.\", start_index)\n\n    processed_count = 0\n    total_batches = (total_contacts - start_index + args.batch_size - 1) // args.batch_size\n    \n    for i in range(start_index, total_contacts, args.batch_size):\n        batch_num = (i - start_index) // args.batch_size + 1\n        batch = reader[i:i + args.batch_size]\n        logging.info(\"Processing batch %d of %d...\", batch_num, total_batches)\n\n        # In a real scenario, implement retry logic here\n        result = api.import_batch(batch, args.dry_run)\n        \n        if args.dry_run:\n            processed_count += len(batch)\n\n        save_progress(progress_file, i + len(batch) - 1)\n\n    if args.dry_run:\n         logging.info(\"Successfully processed %d contacts in dry run.\", processed_count)\n    else:\n        logging.info(\"Import process finished.\")\n    \n    # Clean up progress file on successful completion\n    if (start_index + processed_count) >= total_contacts:\n        os.remove(progress_file)\n        logging.info(\"Removed progress file.\")\n\nif __name__ == '__main__':\n    main()\nEOL"
+        "chmod +x scripts/verify_mautic_import.py",
+        "chmod +x verify_script.sh"
       ],
       "files": []
     }
   ],
   "verificationScript": "verify_script.sh created and executable",
   "rollbackPlan": [
-    "If the execution fails, the rollback process is to remove the created script and any temporary files.",
-    "rm ~/projects/marketing-automation/scripts/import_leads.py",
-    "rm import_leads.log",
-    "rm import_progress.json"
+    "rm scripts/verify_mautic_import.py",
+    "rm verify_script.sh",
+    "git checkout pyproject.toml"
   ]
 }
-<promise>COMPLETE</promise>

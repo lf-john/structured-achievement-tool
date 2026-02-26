@@ -75,3 +75,63 @@ class MauticApiClient:
     def get_segment_membership_count(self, segment_id: int) -> int:
         print(f"Simulating fetching membership count for segment ID {segment_id}")
         return 0 # Simulate no members for now
+
+    def get_contacts(self, limit=1, start=0, search=None, order_by=None, order_direction='asc') -> dict:
+        print(f"Simulating GET request to /api/contacts with limit={limit}, start={start}, search={search}")
+        # Placeholder for actual API call. Return mock data for now.
+        # This mock data needs to be flexible enough for testing various scenarios.
+        dummy_contacts = {
+            "1": {"id": 1, "firstname": "John", "lastname": "Doe", "email": "john@example.com", "company": "ABC Inc.", "fields": {"core": {"lead_score": {"value": 10}}}},
+            "2": {"id": 2, "firstname": "Jane", "lastname": "Smith", "email": "jane@example.com", "company": "XYZ Corp.", "fields": {"core": {"lead_score": {"value": 20}}}},
+            "3": {"id": 3, "firstname": "Peter", "lastname": "Jones", "email": "peter@example.com", "company": "123 Corp.", "fields": {"core": {"lead_score": {"value": 15}}}},
+            "4": {"id": 4, "firstname": "Alice", "lastname": "Brown", "email": "alice@example.com", "company": "Data LLC", "fields": {"core": {"lead_score": {"value": 25}}}}
+        }
+        
+        # Apply basic filtering for simulation
+        filtered_contacts = {}
+        for contact_id, contact_data in dummy_contacts.items():
+            if search:
+                if search.lower() in str(contact_data.values()).lower():
+                    filtered_contacts[contact_id] = contact_data
+            else:
+                filtered_contacts[contact_id] = contact_data
+        
+        total_count = len(filtered_contacts)
+        
+        # Apply limit and start for simulation
+        contacts_list = list(filtered_contacts.values())
+        if limit is not None and limit != 0:
+            paginated_contacts = contacts_list[start : start + limit]
+        else: # If limit is 0 or None, return all (for duplicate check)
+            paginated_contacts = contacts_list[start:]
+
+
+        # Convert back to dict format for response
+        contacts_dict = {str(c['id']): c for c in paginated_contacts}
+
+        return {"contacts": contacts_dict, "totalCount": total_count}
+
+    def get_segments(self, limit=50, start=0) -> dict:
+        print(f"Simulating GET request to /api/segments with limit={limit}, start={start}")
+        dummy_segments = {
+            "1": {"id": 1, "name": "Segment A", "contacts": 10},
+            "2": {"id": 2, "name": "Segment B", "contacts": 5},
+            "3": {"id": 3, "name": "Segment C", "contacts": 0}
+        }
+        segments_list = list(dummy_segments.values())
+        paginated_segments = segments_list[start : start + limit]
+        segments_dict = {str(s['id']): s for s in paginated_segments}
+        return {"segments": segments_dict, "totalCount": len(dummy_segments)}
+
+    def get_contact_by_id(self, contact_id: int) -> dict:
+        print(f"Simulating GET request to /api/contacts/{contact_id}")
+        dummy_contacts = {
+            1: {"id": 1, "firstname": "John", "lastname": "Doe", "email": "john@example.com", "fields": {"core": {"lead_score": {"value": 10}}}},
+            2: {"id": 2, "firstname": "Jane", "lastname": "Smith", "email": "jane@example.com", "fields": {"core": {"lead_score": {"value": 20}}}},
+            3: {"id": 3, "firstname": "Peter", "lastname": "Jones", "email": "peter@example.com", "fields": {"core": {"lead_score": {"value": 15}}}}
+        }
+        contact = dummy_contacts.get(contact_id)
+        if contact:
+            return {"contact": contact}
+        else:
+            return {"error": f"Contact with ID {contact_id} not found"}

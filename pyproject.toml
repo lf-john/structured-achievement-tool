@@ -1,3 +1,8 @@
+[project]
+dependencies = [
+    "requests"
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["*.py", "*.test.py"]
