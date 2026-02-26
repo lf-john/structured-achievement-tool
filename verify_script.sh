@@ -1,22 +1,36 @@
 #!/bin/bash
-# verify_script.sh: Verifies that key network ports are listening.
 
-PORTS=(8080 8088 8090 9090 3001 11434)
-
-echo "Verifying connectivity for ports: ${PORTS[*]}"
-
-for port in "${PORTS[@]}"; do
-  # Use 'ss -tuln' to get a list of listening TCP and UDP ports.
-  # 'grep -q' searches quietly and exits with success if a match is found.
-  # We search for ":<port>" to match the port number in the address column.
-  if ss -tuln | grep -q ":${port}"; then
-    echo "  - Port ${port}: OK"
-  else
-    echo "  - Port ${port}: FAILED (Not listening)"
-    # Exit with an error code if any port is not found
+# Activate python environment
+if [ -f "venv/bin/activate" ]; then
+    source venv/bin/activate
+else
+    echo "ERROR: Could not find venv/bin/activate" >&2
     exit 1
-  fi
-done
+fi
 
-echo "All ports are listening. Verification successful."
+# Generate the report
+python src/generate_audit_report.py
+if [ $? -ne 0 ]; then
+    echo "ERROR: Report generation script failed" >&2
+    exit 1
+fi
+
+# Check if the report file was created
+DATE=$(date +%Y%m%d)
+REPORT_FILE="audit_${DATE}.md"
+
+if [ ! -f "$REPORT_FILE" ]; then
+    echo "ERROR: Report file '$REPORT_FILE' was not created." >&2
+    exit 1
+fi
+
+# Check for key content
+if ! grep -q "SAT System Audit Report" "$REPORT_FILE" || ! grep -q "Timestamp" "$REPORT_FILE"; then
+    echo "ERROR: Report file is missing expected content." >&2
+    rm "$REPORT_FILE"
+    exit 1
+fi
+
+echo "SUCCESS: Audit report generated and verified successfully."
+rm "$REPORT_FILE"
 exit 0
