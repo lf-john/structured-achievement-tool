@@ -1,35 +1,72 @@
+
 {
   "systemAnalysis": {
-    "filesToChange": ["docs/SES_SANDBOX_EXIT_PROCESS.md"],
-    "systemImpact": "None. This is a documentation-only change and has no impact on the running system.",
-    "externalDependencies": []
+    "filesToChange": [
+      "mautic-app:/var/www/html/config/local.php"
+    ],
+    "systemImpact": "This change will throttle Mautic's email sending by spooling messages to the filesystem and processing only 50 per batch. This is a configuration change within the running `mautic-app` Docker container and will take effect after clearing the application cache. No downtime is expected, but email throughput will be intentionally reduced.",
+    "externalDependencies": [
+      "Docker",
+      "Mautic"
+    ]
   },
   "executionSteps": [
     {
       "step": 1,
-      "description": "Create a new markdown file to document the SES sandbox exit process.",
-      "commands": [],
+      "description": "Find the running 'mautic-app' container ID.",
+      "commands": [
+        "CONTAINER_ID=$(docker ps --filter 'name=mautic-app' -q)"
+      ],
+      "files": []
+    },
+    {
+      "step": 2,
+      "description": "Back up the current 'local.php' configuration file inside the container.",
+      "commands": [
+        "docker exec \"$CONTAINER_ID\" cp /var/www/html/config/local.php /var/www/html/config/local.php.bak.$(date +%F)"
+      ],
+      "files": []
+    },
+    {
+      "step": 3,
+      "description": "Set 'mailer_spool_type' to 'file'. This command finds the line and replaces it. It assumes the key already exists.",
+      "commands": [
+        "docker exec \"$CONTAINER_ID\" sed -i \"s/.*'mailer_spool_type'.*/    'mailer_spool_type' => 'file',/\" /var/www/html/config/local.php"
+      ],
       "files": [
         {
-          "path": "docs/SES_SANDBOX_EXIT_PROCESS.md",
-          "change": "Create a new file and add the documentation content."
+          "path": "mautic-app:/var/www/html/config/local.php",
+          "change": "Update the value for 'mailer_spool_type' to 'file'."
         }
       ]
     },
     {
-      "step": 2,
-      "description": "Populate the document with the required information about the SES sandbox exit process.",
-      "commands": [],
+      "step": 4,
+      "description": "Set 'mailer_spool_msg_limit' to 50. This command finds the line and replaces it. It assumes the key already exists.",
+      "commands": [
+        "docker exec \"$CONTAINER_ID\" sed -i \"s/.*'mailer_spool_msg_limit'.*/    'mailer_spool_msg_limit' => 50,/\" /var/www/html/config/local.php"
+      ],
       "files": [
         {
-          "path": "docs/SES_SANDBOX_EXIT_PROCESS.md",
-          "change": "Add sections covering: 1. How to request production access. 2. AWS review criteria (bounce/complaint rates, use case). 3. Expected timeline. 4. Differences between sandbox and production limits."
+          "path": "mautic-app:/var/www/html/config/local.php",
+          "change": "Update the value for 'mailer_spool_msg_limit' to 50."
         }
       ]
+    },
+    {
+      "step": 5,
+      "description": "Clear the Mautic application cache for the changes to take effect.",
+      "commands": [
+        "docker exec \"$CONTAINER_ID\" php /var/www/html/bin/console mautic:cache:clear --env=prod"
+      ],
+      "files": []
     }
   ],
   "verificationScript": "verify_script.sh created and executable",
   "rollbackPlan": [
-    "rm docs/SES_SANDBOX_EXIT_PROCESS.md"
+    "Find the container ID: `CONTAINER_ID=$(docker ps --filter 'name=mautic-app' -q)`",
+    "Find the latest backup file: `BACKUP_FILE=$(docker exec \"$CONTAINER_ID\" ls /var/www/html/config/ | grep local.php.bak | sort -r | head -n 1)`",
+    "Restore the backup: `docker exec \"$CONTAINER_ID\" cp /var/www/html/config/\"$BACKUP_FILE\" /var/www/html/config/local.php`",
+    "Clear the Mautic cache: `docker exec \"$CONTAINER_ID\" php /var/www/html/bin/console mautic:cache:clear --env=prod`"
   ]
 }

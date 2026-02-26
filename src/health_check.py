@@ -90,7 +90,7 @@ def check_gdrive():
 def check_dashboard():
     """Check if the SAT dashboard is responding."""
     try:
-        res = requests.get("http://localhost:8765/api/status", timeout=5)
+        res = requests.get("http://localhost:8765/status", timeout=5)
         return res.status_code == 200
     except:
         return False
@@ -128,7 +128,11 @@ def scan_tasks():
                         status["finished"] += 1
                     elif "<Working>" in content:
                         status["working"] += 1
-                        issues.append(f"WORKING: {task_dir_name}/{f}")
+                        # Only flag as issue if stuck (not modified in 30+ min)
+                        mtime = os.path.getmtime(path)
+                        age_min = (time.time() - mtime) / 60
+                        if age_min > 30:
+                            issues.append(f"STUCK: {task_dir_name}/{f} ({int(age_min)}m)")
                     elif "<Failed>" in content:
                         status["failed"] += 1
                         issues.append(f"FAILED: {task_dir_name}/{f}")
