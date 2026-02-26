@@ -1,55 +1,26 @@
+
 {
   "systemAnalysis": {
-    "filesToChange": [
-      "/home/johnlane/projects/marketing-automation/scripts/normalize_leads.py"
-    ],
-    "systemImpact": "This change introduces a new script for data processing. It has no impact on currently running systems as it is a standalone script intended for manual or scheduled execution.",
-    "externalDependencies": []
+    "filesToChange": ["docs/lead-import-guide.md"],
+    "systemImpact": "No impact on the running system. This is a documentation-only task. The plan outlines manual steps to be performed in the Mautic UI.",
+    "externalDependencies": ["Mautic"]
   },
   "executionSteps": [
     {
       "step": 1,
-      "description": "Create the directory structure for the new script and its test data.",
-      "commands": [
-        "mkdir -p /home/johnlane/projects/marketing-automation/scripts",
-        "mkdir -p /home/johnlane/projects/marketing-automation/data",
-        "mkdir -p /home/johnlane/projects/marketing-automation/tests"
-      ],
-      "files": []
-    },
-    {
-      "step": 2,
-      "description": "Create the Python script `normalize_leads.py`. The script will contain the logic to read, normalize, and write lead data, and generate a report.",
+      "description": "Create the lead import guide and add documentation for creating Mautic contact segments.",
       "commands": [],
       "files": [
         {
-          "path": "/home/johnlane/projects/marketing-automation/scripts/normalize_leads.py",
-          "change": "Create a new Python script with functions for data normalization, deduplication, and email validation using the pandas library."
+          "path": "docs/lead-import-guide.md",
+          "change": "Create a new file and add detailed instructions for creating all specified contact segments (`industry-*`, `geo-*`, `size-*`, `engaged-*`, `icp-*`, and `warmup-safe`) via the Mautic UI. Include the specific filter criteria for each segment and a section on how to verify membership counts."
         }
       ]
-    },
-    {
-      "step": 3,
-      "description": "Create a placeholder test file for the new script.",
-      "commands": [],
-      "files": [
-          {
-              "path": "/home/johnlane/projects/marketing-automation/tests/test_normalize_leads.py",
-              "change": "Create a new Python test script using pytest to ensure the normalization script works as expected. This test will not be implemented in this phase."
-          }
-      ]
-    },
-    {
-      "step": 4,
-      "description": "Install pandas if not already installed, as it is a dependency for the script.",
-      "commands": ["pip install pandas"],
-      "files": []
     }
   ],
   "verificationScript": "verify_script.sh created and executable",
   "rollbackPlan": [
-    "rm -f /home/johnlane/projects/marketing-automation/scripts/normalize_leads.py",
-    "rm -f /home/johnlane/projects/marketing-automation/tests/test_normalize_leads.py",
-    "rm -rf /home/johnlane/projects/marketing-automation/data"
+    "git restore docs/lead-import-guide.md",
+    "rm docs/lead-import-guide.md"
   ]
 }
