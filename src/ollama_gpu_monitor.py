@@ -1,7 +1,6 @@
 import re
 import logging
-from typing import Dict, Any
-from default_api import run_shell_command
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -10,22 +9,32 @@ class OllamaGPUMonitor:
         pass
 
     def get_gpu_utilization(self) -> float:
-        """
-        Retrieves the current GPU utilization for Ollama.
-        Executes 'nvidia-smi' and parses the output.
-        Returns utilization as a float between 0.0 and 1.0, or 0.0 if an error occurs.
-        """
-        command = "nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits"
-        description = "Get Ollama GPU utilization"
         try:
-            result = run_shell_command(command=command, description=description)
-            output = result.get("output", "").strip()
-            if output and output.isdigit():
-                utilization_percent = float(output)
-                return utilization_percent / 100.0
-            else:
-                logger.warning(f"Could not parse GPU utilization from nvidia-smi output: {output}")
+            # Use subprocess to run the shell command
+            result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+                capture_output=True,
+                text=True,
+                check=True # Raise an exception for non-zero exit codes
+            )
+            
+            utilization_str = result.stdout.strip()
+            if not utilization_str:
+                logger.warning("nvidia-smi returned empty output.")
                 return 0.0
+
+            # The output is a percentage, e.g., "75". Convert to float 0.0-1.0
+            utilization = float(utilization_str) / 100.0
+            return utilization
+        except FileNotFoundError:
+            logger.error("'nvidia-smi' command not found. Is NVIDIA driver installed?")
+            return 0.0
+        except subprocess.CalledProcessError as e:
+            logger.error(f"nvidia-smi command failed with error: {e}\nStderr: {e.stderr}")
+            return 0.0
+        except ValueError as e:
+            logger.error(f"Error parsing GPU utilization output '{utilization_str}': {e}")
+            return 0.0
         except Exception as e:
-            logger.error(f"Error getting GPU utilization with nvidia-smi: {e}")
+            logger.error(f"Unexpected error in get_gpu_utilization: {e}")
             return 0.0
