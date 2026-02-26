@@ -1,72 +1,119 @@
-
+```json
 {
   "systemAnalysis": {
     "filesToChange": [
-      "mautic-app:/var/www/html/config/local.php"
+      "config.json",
+      "src/workflows/lead_scoring_workflow.py",
+      "src/utils/ollama_client.py",
+      "src/utils/mautic_client.py",
+      "tests/workflows/test_lead_scoring_workflow.py",
+      "tests/utils/test_ollama_client.py",
+      "tests/utils/test_mautic_client.py"
     ],
-    "systemImpact": "This change will throttle Mautic's email sending by spooling messages to the filesystem and processing only 50 per batch. This is a configuration change within the running `mautic-app` Docker container and will take effect after clearing the application cache. No downtime is expected, but email throughput will be intentionally reduced.",
+    "systemImpact": "This change is additive and introduces a new lead scoring workflow. It will not affect existing functionality. The workflow's operation depends on a running Ollama instance (with the 'qwen2:7b' model) and network access to a Mautic API. If these dependencies are unavailable, the workflow will fail gracefully without impacting other system processes.",
     "externalDependencies": [
-      "Docker",
-      "Mautic"
+      "Ollama API (e.g., http://localhost:11434)",
+      "Mautic API"
     ]
   },
   "executionSteps": [
     {
       "step": 1,
-      "description": "Find the running 'mautic-app' container ID.",
+      "description": "Create new directories for the workflow and utility modules to maintain a clean project structure.",
       "commands": [
-        "CONTAINER_ID=$(docker ps --filter 'name=mautic-app' -q)"
+        "mkdir -p src/workflows src/utils tests/workflows tests/utils"
       ],
       "files": []
     },
     {
       "step": 2,
-      "description": "Back up the current 'local.php' configuration file inside the container.",
-      "commands": [
-        "docker exec \"$CONTAINER_ID\" cp /var/www/html/config/local.php /var/www/html/config/local.php.bak.$(date +%F)"
-      ],
-      "files": []
+      "description": "Update the main configuration file with API endpoints and model details for Ollama and Mautic.",
+      "commands": [],
+      "files": [
+        {
+          "path": "config.json",
+          "change": "Add 'ollama_api_url', 'ollama_model', 'mautic_api_url', and 'mautic_api_token' keys. The model is set to 'qwen2:7b' as 'Qwen3 8B' is not a standard Ollama model name, but this can be configured as needed."
+        }
+      ]
     },
     {
       "step": 3,
-      "description": "Set 'mailer_spool_type' to 'file'. This command finds the line and replaces it. It assumes the key already exists.",
-      "commands": [
-        "docker exec \"$CONTAINER_ID\" sed -i \"s/.*'mailer_spool_type'.*/    'mailer_spool_type' => 'file',/\" /var/www/html/config/local.php"
-      ],
+      "description": "Create the Ollama client, a utility module responsible for building the prompt, sending it to the Ollama API, and parsing the JSON response.",
+      "commands": [],
       "files": [
         {
-          "path": "mautic-app:/var/www/html/config/local.php",
-          "change": "Update the value for 'mailer_spool_type' to 'file'."
+          "path": "src/utils/ollama_client.py",
+          "change": "Create a new file containing the `OllamaClient` class to handle all communication with the Ollama service."
         }
       ]
     },
     {
       "step": 4,
-      "description": "Set 'mailer_spool_msg_limit' to 50. This command finds the line and replaces it. It assumes the key already exists.",
-      "commands": [
-        "docker exec \"$CONTAINER_ID\" sed -i \"s/.*'mailer_spool_msg_limit'.*/    'mailer_spool_msg_limit' => 50,/\" /var/www/html/config/local.php"
-      ],
+      "description": "Create the Mautic client, a utility module for updating contact records via the Mautic API.",
+      "commands": [],
       "files": [
         {
-          "path": "mautic-app:/var/www/html/config/local.php",
-          "change": "Update the value for 'mailer_spool_msg_limit' to 50."
+          "path": "src/utils/mautic_client.py",
+          "change": "Create a new file containing the `MauticClient` class to handle API calls for updating contact scores in Mautic."
         }
       ]
     },
     {
       "step": 5,
-      "description": "Clear the Mautic application cache for the changes to take effect.",
+      "description": "Create the main lead scoring workflow module, which orchestrates the process of getting a score from Ollama and updating Mautic.",
+      "commands": [],
+      "files": [
+        {
+          "path": "src/workflows/lead_scoring_workflow.py",
+          "change": "Create a new file with the `LeadScoringWorkflow` class that utilizes the Ollama and Mautic clients to execute the end-to-end process."
+        }
+      ]
+    },
+    {
+      "step": 6,
+      "description": "Create unit tests for the new client and workflow modules to ensure correctness and allow for future regression testing.",
+      "commands": [],
+      "files": [
+        {
+          "path": "tests/utils/test_ollama_client.py",
+          "change": "Create unit tests for the Ollama client, mocking API calls."
+        },
+        {
+          "path": "tests/utils/test_mautic_client.py",
+          "change": "Create unit tests for the Mautic client, mocking API calls."
+        },
+        {
+          "path": "tests/workflows/test_lead_scoring_workflow.py",
+          "change": "Create integration tests for the workflow, mocking both the Ollama and Mautic clients."
+        }
+      ]
+    },
+    {
+      "step": 7,
+      "description": "Create and chmod the verification script.",
       "commands": [
-        "docker exec \"$CONTAINER_ID\" php /var/www/html/bin/console mautic:cache:clear --env=prod"
+        "chmod +x verify_script.sh"
       ],
-      "files": []
+      "files": [
+        {
+          "path": "verify_script.sh",
+          "change": "Create a bash script that executes the newly created unit tests to confirm the implementation is correct."
+        }
+      ]
     }
   ],
   "verificationScript": "verify_script.sh created and executable",
   "rollbackPlan": [
-    "Find the container ID: `CONTAINER_ID=$(docker ps --filter 'name=mautic-app' -q)`",
-    "Find the latest backup file: `BACKUP_FILE=$(docker exec \"$CONTAINER_ID\" ls /var/www/html/config/ | grep local.php.bak | sort -r | head -n 1)`",
-    "Restore the backup: `docker exec \"$CONTAINER_ID\" cp /var/www/html/config/\"$BACKUP_FILE\" /var/www/html/config/local.php`",
-    "Clear the Mautic cache: `docker exec \"$CONTAINER_ID\" php /var/www/html/bin/console mautic:cache:clear --env=prod`"
+    "The implementation is purely additive. To roll back, delete the files created during the execution steps:",
+    "rm src/workflows/lead_scoring_workflow.py",
+    "rm src/utils/ollama_client.py",
+    "rm src/utils/mautic_client.py",
+    "rm tests/workflows/test_lead_scoring_workflow.py",
+    "rm tests/utils/test_ollama_client.py",
+    "rm tests/utils/test_mautic_client.py",
+    "rm verify_script.sh",
+    "Remove the 'ollama_api_url', 'ollama_model', 'mautic_api_url', and 'mautic_api_token' keys from the `config.json` file."
   ]
 }
+```
+<promise>COMPLETE</promise>
