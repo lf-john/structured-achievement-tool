@@ -123,6 +123,21 @@ class TestMauticSuiteCRMSyncPlugin:
                 "invalid-mautic", self.SUITECRM_CONTAINER, self.SYNC_NETWORK
             )
 
+    def test_should_have_field_mapping_and_documentation_methods(self):
+        """
+        AMENDED BY US-003: Verifies the MauticSuiteCRMSyncManager (or a related mapper)
+        exposes methods for field mapping and documenting conflict resolution,
+        as these are core aspects of a sync plugin.
+        """
+        manager = MauticSuiteCRMSyncManager()
+        # These methods are expected to be implemented as part of US-003
+        # and are checked here to ensure the sync manager concept is complete.
+        assert hasattr(manager, 'configure_bidirectional_mapping')
+        assert hasattr(manager, 'configure_unidirectional_mapping')
+        assert hasattr(manager, 'document_custom_field_mapping')
+        assert hasattr(manager, 'document_conflict_resolution_strategy')
+
+
 if __name__ == '__main__':
     exit_code = pytest.main([__file__])
     sys.exit(exit_code)

@@ -1,87 +1,53 @@
 {
   "systemAnalysis": {
     "filesToChange": [
-      "docker-compose.yml (or equivalent container orchestration configuration)",
-      "/path/to/mautic/plugins/ (Mautic's plugins directory on the host volume)"
+      "MAUTIC_SUITECRM_FIELD_MAPPING.md"
     ],
-    "systemImpact": "This will add a new plugin to the Mautic container and potentially modify container networking rules. The Mautic service may need to be restarted, causing a brief outage. No impact is expected on SuiteCRM other than API load.",
+    "systemImpact": "This change will activate and configure the data synchronization between Mautic and SuiteCRM. Incorrect mapping could lead to data inconsistency. A full data sync will be required after applying the changes, which may cause a temporary increase in server load.",
     "externalDependencies": [
-      "Mautic API",
-      "SuiteCRM API (OAuth2)"
+      "Mautic Instance",
+      "SuiteCRM Instance",
+      "Mautic API credentials for SuiteCRM"
     ]
   },
   "executionSteps": [
     {
       "step": 1,
-      "description": "Confirm container networking. Mautic and SuiteCRM containers must be on the same Docker network to communicate. This step ensures they are.",
+      "description": "Create a comprehensive documentation file outlining the field mapping, custom field handling, and conflict resolution strategy. This file serves as the primary artifact for this configuration task.",
       "commands": [],
       "files": [
         {
-          "path": "docker-compose.yml",
-          "change": "Ensure both the Mautic and SuiteCRM services are listed under the same `networks:` block. Example: `networks: - mautic-suitecrm-net` for both services."
+          "path": "MAUTIC_SUITECRM_FIELD_MAPPING.md",
+          "change": "Create a new markdown file with the following content: Title, Overview, Step-by-step configuration guide for the Mautic UI, a table of field mappings, a section on custom fields, and a section on the conflict resolution strategy."
         }
       ]
     },
     {
       "step": 2,
-      "description": "Download the Mautic-SuiteCRM sync plugin. The URL is a placeholder and should be replaced with the actual plugin download link.",
+      "description": "Manually apply the configuration in the Mautic UI based on the created documentation. This involves navigating to the SuiteCRM plugin settings and entering the field mappings.",
       "commands": [
-        "wget https://github.com/mautic-integrations/mautic-sugarcrm-plugin/archive/refs/heads/main.zip -O MauticSuiteCRMSync.zip"
+        "echo 'Navigate to Mautic > Settings > Plugins > SuiteCRM'",
+        "echo 'Go to the Feature tab, enable contact sync.'",
+        "echo 'Go to the Field Mapping tab and configure the mappings as per MAUTIC_SUITECRM_FIELD_MAPPING.md.'"
       ],
       "files": []
     },
     {
       "step": 3,
-      "description": "Install the plugin into the Mautic container. This involves placing the plugin files in the correct directory and running Mautic's installation commands.",
+      "description": "After applying the settings in the UI, trigger a manual synchronization from the Mautic server's command line to ensure the new mappings are applied.",
       "commands": [
-        "unzip MauticSuiteCRMSync.zip",
-        "sudo mv mautic-sugarcrm-plugin-main /var/lib/docker/volumes/mautic_mautic-data/_data/plugins/MauticSuiteCRMSyncBundle",
-        "docker exec mautic_app_1 php /var/www/html/bin/console mautic:plugins:reload",
-        "docker exec mautic_app_1 php /var/www/html/bin/console cache:clear"
-      ],
-      "files": []
-    },
-    {
-      "step": 4,
-      "description": "Enable and configure the Mautic API. This is required for the sync plugin to function.",
-      "commands": [
-        "docker exec mautic_app_1 php /var/www/html/bin/console mautic:config:set api_enabled 1",
-        "docker exec mautic_app_1 php /var/www/html/bin/console mautic:config:set api_enable_basic_auth 1"
-      ],
-      "files": []
-    },
-    {
-      "step": 5,
-      "description": "MANUAL STEP: Create API credentials in Mautic and SuiteCRM. This cannot be automated and must be done through the respective UIs.",
-      "commands": [
-        "echo 'Navigate to Mautic > Settings > API Credentials and create a new Basic Auth credential.'",
-        "echo 'Navigate to SuiteCRM > Admin > OAuth2 Clients and Consumers and create new credentials.'"
-      ],
-      "files": []
-    },
-    {
-      "step": 6,
-      "description": "MANUAL STEP: Configure the plugin in the Mautic UI. This involves entering the SuiteCRM URL and the credentials created in the previous step.",
-      "commands": [
-        "echo 'Navigate to Mautic > Settings > Plugins, find the SuiteCRM plugin, enable it, and enter the SuiteCRM URL and API credentials.'"
-      ],
-      "files": []
-    },
-    {
-      "step": 7,
-      "description": "MANUAL STEP: Test the connection from the Mautic plugin's configuration page.",
-      "commands": [
-        "echo 'Inside the plugin configuration UI in Mautic, click the \"Test Connection\" button to verify.'"
+        "php /var/www/mautic/bin/console mautic:integration:synccontacts --integration=SuiteCRM"
       ],
       "files": []
     }
   ],
   "verificationScript": "verify_script.sh created and executable",
   "rollbackPlan": [
-    "1. Go to Mautic UI > Settings > Plugins and disable the SuiteCRM plugin.",
-    "2. Execute `docker exec mautic_app_1 php /var/www/html/bin/console mautic:plugins:uninstall MauticSuiteCRMSyncBundle`",
-    "3. Remove the plugin directory: `sudo rm -rf /var/lib/docker/volumes/mautic_mautic-data/_data/plugins/MauticSuiteCRMSyncBundle`",
-    "4. Revert any changes made to `docker-compose.yml` and restart the services.",
-    "5. Delete the API credentials from both the Mautic and SuiteCRM UIs."
+    "Navigate to the Mautic UI > Settings > Plugins > SuiteCRM.",
+    "Go to the Field Mapping tab and remove the mappings configured in this story.",
+    "Disable the contact sync feature if it was not previously enabled.",
+    "Save the plugin configuration.",
+    "Delete the MAUTIC_SUITECRM_FIELD_MAPPING.md file."
   ]
 }
+<promise>COMPLETE</promise>
