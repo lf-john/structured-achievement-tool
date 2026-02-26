@@ -221,6 +221,75 @@ class DashboardBuilder:
 
         return panel
 
+    def create_queue_depth_panel(
+        self,
+        custom_title=None,
+        min=None,
+        max=None,
+        grid_pos=None,
+        datasource=None,
+        queries=None
+    ):
+        """
+        Create a gauge panel showing sat_queue_depth metric.
+
+        Args:
+            custom_title: Custom title for the panel (defaults to 'Queue Depth')
+            min: Minimum value for the gauge (optional)
+            max: Maximum value for the gauge (optional)
+            grid_pos: Grid position {'x': int, 'y': int, 'w': int, 'h': int}
+            datasource: Grafana datasource name (defaults to 'Prometheus')
+            queries: List of target queries (optional, defaults to queue depth metric)
+
+        Returns:
+            Dictionary representing a Grafana gauge panel
+        """
+        if queries is None:
+            queries = [
+                {
+                    'expr': 'sat_queue_depth',
+                    'legendFormat': 'queue_depth'
+                }
+            ]
+
+        panel = {
+            'type': 'gauge',
+            'title': custom_title if custom_title else 'Queue Depth',
+            'targets': queries
+        }
+
+        # Apply optional parameters
+        if grid_pos is not None:
+            panel['gridPos'] = grid_pos
+        if datasource is not None:
+            panel['datasource'] = datasource
+
+        # Add fieldConfig with thresholds for color coding
+        panel['fieldConfig'] = {
+            'defaults': {
+                'thresholds': {
+                    'mode': 'absolute',
+                    'steps': [
+                        {'value': 0, 'color': 'green'},
+                        {'value': 10, 'color': 'yellow'},
+                        {'value': 50, 'color': 'orange'},
+                        {'value': 100, 'color': 'red'}
+                    ]
+                }
+            }
+        }
+
+        # Always add options for gauge formatting
+        panel['options'] = {}
+
+        # Apply min/max values if provided
+        if min is not None:
+            panel['options']['min'] = min
+        if max is not None:
+            panel['options']['max'] = max
+
+        return panel
+
     def create_prometheus_datasource(self, name, url, access="proxy", version=None):
         """
         Create a Prometheus datasource configuration.
