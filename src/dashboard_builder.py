@@ -559,3 +559,91 @@ class DashboardBuilder:
         }
 
         return panel
+
+    def create_response_time_histogram_panel(
+        self,
+        custom_title=None,
+        grid_pos=None,
+        datasource=None,
+        queries=None
+    ):
+        """
+        Create a heatmap panel displaying sat_response_time_seconds_bucket metric.
+
+        Args:
+            custom_title: Custom title for the panel (defaults to 'Response Time Histogram')
+            grid_pos: Grid position {'x': int, 'y': int, 'w': int, 'h': int}
+            datasource: Grafana datasource name (defaults to 'Prometheus')
+            queries: List of target queries (optional, defaults to response time histogram metric)
+
+        Returns:
+            Dictionary representing a Grafana heatmap panel
+        """
+        if queries is None:
+            queries = [
+                {
+                    'expr': 'sat_response_time_seconds_bucket',
+                    'legendFormat': '{{le}}'
+                }
+            ]
+
+        panel = {
+            'type': 'heatmap',
+            'title': custom_title if custom_title else 'Response Time Histogram',
+            'targets': queries
+        }
+
+        # Apply optional parameters
+        if grid_pos is not None:
+            panel['gridPos'] = grid_pos
+        if datasource is not None:
+            panel['datasource'] = datasource
+
+        # Add fieldConfig for heatmap formatting
+        panel['fieldConfig'] = {
+            'defaults': {
+                'custom': {
+                    'scaleDistribution': {
+                        'type': 'linear'
+                    }
+                },
+                'color': {
+                    'scheme': 'Spectral'
+                },
+                'mappings': []
+            }
+        }
+
+        # Add options for heatmap visualization
+        panel['options'] = {
+            'calculate': False,
+            'color': {
+                'scale': {
+                    'mode': 'scheme',
+                    'scheme': 'Spectral'
+                }
+            },
+            'dataFormat': 'timeseries',
+            'dimensions': {
+                'x': {
+                    'field': 'time'
+                },
+                'y': {
+                    'field': 'le',
+                    'displayMode': 'legend'
+                },
+                'z': {
+                    'field': 'value',
+                    'displayMode': 'color'
+                }
+            },
+            'tooltip': {
+                'mode': 'single',
+                'sort': 'none'
+            },
+            'yAxis': {
+                'unit': 's'
+            }
+        }
+
+        return panel
