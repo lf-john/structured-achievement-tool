@@ -1,34 +1,18 @@
 #!/bin/bash
+# Verification script for US-001
+
+# Exit immediately if a command exits with a non-zero status.
 set -e
 
-# Path to the verification script
-SCRIPT_PATH="scripts/verify_mautic_import.py"
+# Define the directory path
+# Expand the tilde to the user's home directory
+DIR_PATH="$HOME/projects/system-reports"
 
-# Placeholder for expected contacts. In a real CI/CD pipeline,
-# this value would come from the lead import process.
-EXPECTED_CONTACT_COUNT=500
-
-# Check if the script exists
-if [ ! -f "$SCRIPT_PATH" ]; then
-    echo "Verification script not found at $SCRIPT_PATH"
-    exit 1
-fi
-
-# Activate python environment if it exists
-if [ -f "venv/bin/activate" ]; then
-    source venv/bin/activate
-elif [ -f ".venv/bin/activate" ]; then
-    source .venv/bin/activate
-fi
-
-
-echo "Running Mautic import verification..."
-python3 "$SCRIPT_PATH" --expected-contacts "$EXPECTED_CONTACT_COUNT"
-
-if [ $? -eq 0 ]; then
-    echo "Verification script completed successfully."
-    exit 0
+# Check if the directory exists
+if [ -d "$DIR_PATH" ]; then
+  echo "Verification successful: Directory '$DIR_PATH' exists."
+  exit 0
 else
-    echo "Verification script failed."
-    exit 1
+  echo "Verification failed: Directory '$DIR_PATH' does not exist."
+  exit 1
 fi
