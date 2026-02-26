@@ -1,34 +1,87 @@
 {
   "systemAnalysis": {
     "filesToChange": [
-      "output/llm-routing-system.md"
+      "docker-compose.yml (or equivalent container orchestration configuration)",
+      "/path/to/mautic/plugins/ (Mautic's plugins directory on the host volume)"
     ],
-    "systemImpact": "No impact on the running system. This is a documentation task. The output file is created in the `output` directory as the requested path is outside the workspace.",
-    "externalDependencies": []
+    "systemImpact": "This will add a new plugin to the Mautic container and potentially modify container networking rules. The Mautic service may need to be restarted, causing a brief outage. No impact is expected on SuiteCRM other than API load.",
+    "externalDependencies": [
+      "Mautic API",
+      "SuiteCRM API (OAuth2)"
+    ]
   },
   "executionSteps": [
     {
       "step": 1,
-      "description": "Create the output directory.",
+      "description": "Confirm container networking. Mautic and SuiteCRM containers must be on the same Docker network to communicate. This step ensures they are.",
+      "commands": [],
+      "files": [
+        {
+          "path": "docker-compose.yml",
+          "change": "Ensure both the Mautic and SuiteCRM services are listed under the same `networks:` block. Example: `networks: - mautic-suitecrm-net` for both services."
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "description": "Download the Mautic-SuiteCRM sync plugin. The URL is a placeholder and should be replaced with the actual plugin download link.",
       "commands": [
-        "mkdir -p output"
+        "wget https://github.com/mautic-integrations/mautic-sugarcrm-plugin/archive/refs/heads/main.zip -O MauticSuiteCRMSync.zip"
       ],
       "files": []
     },
     {
-      "step": 2,
-      "description": "Write the LLM Routing System documentation.",
-      "commands": [],
-      "files": [
-        {
-          "path": "output/llm-routing-system.md",
-          "change": "Create and write the content of the documentation file."
-        }
-      ]
+      "step": 3,
+      "description": "Install the plugin into the Mautic container. This involves placing the plugin files in the correct directory and running Mautic's installation commands.",
+      "commands": [
+        "unzip MauticSuiteCRMSync.zip",
+        "sudo mv mautic-sugarcrm-plugin-main /var/lib/docker/volumes/mautic_mautic-data/_data/plugins/MauticSuiteCRMSyncBundle",
+        "docker exec mautic_app_1 php /var/www/html/bin/console mautic:plugins:reload",
+        "docker exec mautic_app_1 php /var/www/html/bin/console cache:clear"
+      ],
+      "files": []
+    },
+    {
+      "step": 4,
+      "description": "Enable and configure the Mautic API. This is required for the sync plugin to function.",
+      "commands": [
+        "docker exec mautic_app_1 php /var/www/html/bin/console mautic:config:set api_enabled 1",
+        "docker exec mautic_app_1 php /var/www/html/bin/console mautic:config:set api_enable_basic_auth 1"
+      ],
+      "files": []
+    },
+    {
+      "step": 5,
+      "description": "MANUAL STEP: Create API credentials in Mautic and SuiteCRM. This cannot be automated and must be done through the respective UIs.",
+      "commands": [
+        "echo 'Navigate to Mautic > Settings > API Credentials and create a new Basic Auth credential.'",
+        "echo 'Navigate to SuiteCRM > Admin > OAuth2 Clients and Consumers and create new credentials.'"
+      ],
+      "files": []
+    },
+    {
+      "step": 6,
+      "description": "MANUAL STEP: Configure the plugin in the Mautic UI. This involves entering the SuiteCRM URL and the credentials created in the previous step.",
+      "commands": [
+        "echo 'Navigate to Mautic > Settings > Plugins, find the SuiteCRM plugin, enable it, and enter the SuiteCRM URL and API credentials.'"
+      ],
+      "files": []
+    },
+    {
+      "step": 7,
+      "description": "MANUAL STEP: Test the connection from the Mautic plugin's configuration page.",
+      "commands": [
+        "echo 'Inside the plugin configuration UI in Mautic, click the \"Test Connection\" button to verify.'"
+      ],
+      "files": []
     }
   ],
   "verificationScript": "verify_script.sh created and executable",
   "rollbackPlan": [
-    "rm -rf output"
+    "1. Go to Mautic UI > Settings > Plugins and disable the SuiteCRM plugin.",
+    "2. Execute `docker exec mautic_app_1 php /var/www/html/bin/console mautic:plugins:uninstall MauticSuiteCRMSyncBundle`",
+    "3. Remove the plugin directory: `sudo rm -rf /var/lib/docker/volumes/mautic_mautic-data/_data/plugins/MauticSuiteCRMSyncBundle`",
+    "4. Revert any changes made to `docker-compose.yml` and restart the services.",
+    "5. Delete the API credentials from both the Mautic and SuiteCRM UIs."
   ]
 }
