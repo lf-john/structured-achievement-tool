@@ -1,55 +1,59 @@
-# US-003: Bidirectional Field Mapping Configuration
+# Mautic to SuiteCRM Field Mapping and Synchronization Strategy
 
-This document outlines the configuration for bidirectional field mapping between SuiteCRM Contacts/Leads and Mautic Contacts, including handling custom fields and conflict resolution strategies.
+## Overview
+This document outlines the configuration for synchronizing contacts between Mautic and SuiteCRM, focusing on field mappings, handling of custom fields, and strategies for conflict resolution. The primary goal is to ensure data consistency and efficient lead management across both platforms for a dataset of approximately 30,000 contacts.
 
-## 1. Configured Field Mappings
+## Synchronization Schedule and Performance
+- **Sync Frequency:** Every 15 minutes for bulk updates.
+- **Real-time Updates:** Utilize webhooks for immediate synchronization of new contacts or significant contact updates from Mautic to SuiteCRM to ensure ongoing data freshness.
+- **Batch Size:** Configured to handle 30,000 contacts efficiently. Initial full sync will process contacts in batches of 500-1000 to manage server load.
+- **Initial Full Sync Process:**
+    1.  **Backup:** Ensure a full backup of both Mautic and SuiteCRM databases before initiating the sync.
+    2.  **Configuration:** Apply all field mappings and sync settings as detailed in this document within the Mautic SuiteCRM plugin.
+    3.  **Disable Webhooks (Temporarily):** For the initial full sync, temporarily disable any real-time webhooks to prevent duplicate processing or race conditions.
+    4.  **Execute Command:** Run the manual synchronization command from the Mautic CLI:
+        `php /var/www/mautic/bin/console mautic:integration:synccontacts --integration=SuiteCRM`
+    5.  **Monitor:** Closely monitor server resource usage (CPU, RAM, database I/O) on both Mautic and SuiteCRM instances during the sync.
+    6.  **Verify:** After completion, spot-check a sample of contacts in both systems to ensure accurate data transfer.
+    7.  **Re-enable Webhooks:** Once the initial sync is complete and verified, re-enable real-time webhooks.
 
-The following fields are configured for mapping:
+## Field Mapping (Mautic to SuiteCRM)
 
-| SuiteCRM Field (Contacts/Leads) | Mautic Field (Contacts) | Mapping Direction | Notes |
-|---------------------------------|-------------------------|-------------------|-------|
-| `first_name`                    | `firstname`             | Bidirectional     |       |
-| `last_name`                     | `lastname`              | Bidirectional     |       |
-| `email1`                        | `email`                 | Bidirectional     |       |
-| `phone_work`                    | `phone`                 | Bidirectional     |       |
-| `title`                         | `position`              | Bidirectional     |       |
-| `account_name`                  | `company`               | Bidirectional     |       |
-| `primary_address_street`        | `address1`              | Bidirectional     |       |
-| `primary_address_city`          | `city`                  | Bidirectional     |       |
-| `primary_address_state`         | `state`                 | Bidirectional     |       |
-| `primary_address_postalcode`    | `zipcode`               | Bidirectional     |       |
-| `primary_address_country`       | `country`               | Bidirectional     |       |
-| `lead_source`                   | `lead_source`           | SuiteCRM -> Mautic| Unidirectional |
-| `status`                        | `segment`               | Bidirectional     | Mautic equivalent for lead/contact status |
-| `description`                   | `notes`                 | Bidirectional     | Mautic equivalent for general description/notes |
+| Mautic Field (Source) | SuiteCRM Field (Target) | Notes |
+|-----------------------|-------------------------|-------|
+| First Name            | first_name              |       |
+| Last Name             | last_name               |       |
+| Email                 | email1                  | Primary email |
+| Mobile                | phone_mobile            |       |
+| Phone                 | phone_work              |       |
+| Company               | account_name            | Linked to Account module in SuiteCRM |
+| Website               | website                 |       |
+| Address Line 1        | primary_address_street  |       |
+| City                  | primary_address_city    |       |
+| State                 | primary_address_state   |       |
+| Zip Code              | primary_address_postalcode |       |
+| Country               | primary_address_country |       |
+| Lead Source           | lead_source             | Mapped from Mautic segments or form submissions |
+| Do Not Contact        | do_not_call             | Sync based on Mautic's "Do Not Contact" status |
+| Unsubscribed          | email_opt_out           | Sync based on Mautic's email unsubscribe status |
+| Last Activity Date    | date_modified           | Updates on Mautic contact activity |
 
-## 2. Custom Field Mapping Configuration
+## Custom Fields
+For any custom fields created in Mautic that need to be synced to SuiteCRM:
+1.  **Create in SuiteCRM:** Ensure a corresponding custom field with the same data type exists in SuiteCRM (e.g., using Studio).
+2.  **Map in Mautic Plugin:** Add these custom fields to the field mapping section within the Mautic SuiteCRM integration settings.
+3.  **Naming Convention:** Maintain consistent naming conventions where possible (e.g., `mautic_custom_field_name` in SuiteCRM).
 
-To add new custom fields to the bidirectional mapping, follow these steps:
-
-1.  **Create Custom Field in SuiteCRM:**
-    *   Navigate to `Admin > Studio`.
-    *   Select the `Contacts` and/or `Leads` module.
-    *   Add a new custom field with the desired name and type.
-    *   Deploy the changes.
-
-2.  **Create Custom Field in Mautic:**
-    *   Navigate to `Settings > Custom Fields`.
-    *   Create a new custom field with a matching name (or a logical equivalent) and type.
-    *   Ensure the field is marked as "Publicly Updatable" if it's intended for form submissions or API updates.
-
-3.  **Update Mapping Configuration:**
-    *   Identify the integration point or configuration file responsible for SuiteCRM-Mautic synchronization. (e.g., a custom integration script or a plugin configuration).
-    *   Add a new entry to the mapping table, specifying:
-        *   SuiteCRM field name (e.g., `suitecrm_custom_field__c`)
-        *   Mautic field name (e.g., `mautic_custom_field`)
-        *   Desired mapping direction (Bidirectional, SuiteCRM -> Mautic, or Mautic -> SuiteCRM).
-    *   Restart or refresh the integration service to apply the new mapping.
-
-## 3. Conflict Resolution Strategy
-
-Conflicts can occur when a record is updated in both SuiteCRM and Mautic independently before synchronization. The following strategy is implemented:
-
-*   **Last Modified Wins:** In cases where a field is updated in both systems simultaneously, the value from the system where the field was most recently modified will take precedence. The `last_modified_date` or `date_modified` timestamps of the respective records are compared to determine the winning value.
-*   **System Preference for Key Fields:** For certain critical fields (e.g., `email1` or unique identifiers), SuiteCRM is designated as the master system. Changes to these fields in Mautic will not overwrite the SuiteCRM value if a conflict is detected, unless explicitly overridden by an administrator.
-*   **Logging and Alerts:** All detected conflicts and their resolutions are logged in the integration's activity log. Critical conflicts that cannot be automatically resolved are flagged, and an alert is sent to the system administrator for manual review and intervention.
+## Deduplication Strategy
+A robust deduplication strategy is critical to maintain data integrity.
+-   **Primary Identifier:** Email address will serve as the primary unique identifier for contacts across both systems.
+-   **Mautic Deduplication:** Mautic's built-in deduplication (based on email) will be relied upon for inbound contacts.
+-   **SuiteCRM Deduplication:**
+    -   **On Sync:** When a contact is pushed from Mautic to SuiteCRM, the integration should first attempt to find an existing contact in SuiteCRM by email address.
+    -   **Update vs. Create:** If a match is found, the existing SuiteCRM contact should be updated with Mautic's data. If no match, a new contact should be created.
+    -   **Manual Review:** Implement a process for manual review of potential duplicates identified by SuiteCRM's internal duplicate detection (if enabled) that are not caught by the email-based primary identifier.
+-   **Conflict Resolution:**
+    -   **Last Update Wins:** In cases where a field is modified in both Mautic and SuiteCRM between sync cycles, the value from the system that had the most recent update will prevail.
+    -   **Mautic as Master (for certain fields):** For marketing-specific fields (e.g., Lead Score, Segment Membership), Mautic will be considered the master. Changes in Mautic for these fields will always overwrite SuiteCRM.
+    -   **SuiteCRM as Master (for certain fields):** For sales-specific fields (e.g., Sales Stage, Owner), SuiteCRM will be considered the master.
+    -   **Logging:** Ensure that the integration logs all conflict resolutions for auditing and troubleshooting purposes.
