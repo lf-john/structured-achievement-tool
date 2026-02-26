@@ -96,6 +96,74 @@ def check_dashboard():
         return False
 
 
+def check_prometheus_targets():
+    """
+    Queries the Prometheus targets API and checks the health of each target.
+
+    This function is used by US-007 to collect Prometheus target health metrics.
+    Returns a dictionary with target data, or an error message if the request fails.
+    """
+    prometheus_url = "http://localhost:9090/api/v1/targets"
+
+    # Handle network errors (connection refused, timeout, etc.)
+    try:
+        response = requests.get(prometheus_url, timeout=10)
+    except requests.exceptions.RequestException as e:
+        return {"error": f"Error connecting to Prometheus at {prometheus_url}: {e}"}
+    except ConnectionError as e:
+        # Catch built-in ConnectionError in case requests.exceptions.ConnectionError isn't raised
+        return {"error": f"Error connecting to Prometheus at {prometheus_url}: {e}"}
+
+    # Handle HTTP errors (4xx, 5xx)
+    if response.status_code != 200:
+        return {"error": f"Prometheus returned HTTP {response.status_code}"}
+
+    # Handle invalid JSON
+    try:
+        data = response.json()
+    except (json.JSONDecodeError, ValueError) as e:
+        return {"error": f"Failed to decode JSON response: {e}"}
+
+    # Handle non-success status
+    if data.get('status') != 'success':
+        return {"error": f"Prometheus API returned status: {data.get('status')}"}
+
+    # Extract and process targets
+    active_targets = data.get('data', {}).get('activeTargets', [])
+    if not active_targets:
+        return {
+            "status": "success",
+            "data": {
+                "activeTargets": [],
+                "summary": {
+                    "total": 0,
+                    "up": 0,
+                    "down": 0,
+                    "health_percent": 0
+                }
+            }
+        }
+
+    # Calculate health summary
+    total = len(active_targets)
+    up_count = sum(1 for t in active_targets if t.get('health') == 'up')
+    down_count = total - up_count
+    health_percent = round((up_count / total * 100), 2) if total > 0 else 0
+
+    return {
+        "status": "success",
+        "data": {
+            "activeTargets": active_targets,
+            "summary": {
+                "total": total,
+                "up": up_count,
+                "down": down_count,
+                "health_percent": health_percent
+            }
+        }
+    }
+
+
 def maintain_checkpoint_db():
     """Expire old checkpoint entries (>24h) and VACUUM the DB (Failure State 8).
 
