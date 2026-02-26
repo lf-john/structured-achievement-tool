@@ -1,65 +1,51 @@
 {
   "systemAnalysis": {
     "filesToChange": [
-      "src/execution/story_executor.py",
-      "src/execution/checkpoint_manager.py",
-      "tests/test_story_executor_v2.py",
-      "tests/test_checkpoint_manager.py"
+      "src/dashboard_builder.py (or a new script that uses it)",
+      "tests/test_US_002_dashboard_builder.py (or a new test file)"
     ],
-    "systemImpact": "This change introduces a file I/O operation to write a JSON checkpoint file to the '.checkpoints/' directory after each story is successfully executed. The system is designed to be resilient; a failure to write a checkpoint will be logged but will not interrupt or block the main task execution workflow.",
+    "systemImpact": "A new panel will be added to a Grafana dashboard. No impact on core services. Requires running a build script and updating Grafana.",
     "externalDependencies": [
-      "None. The feature relies solely on the local filesystem and built-in Python libraries."
+      "Prometheus",
+      "Grafana"
     ]
   },
   "executionSteps": [
     {
       "step": 1,
-      "description": "Create a new CheckpointManager module in `src/execution/checkpoint_manager.py` responsible for saving and managing workflow state checkpoints. This module will handle JSON serialization, file I/O, and error logging.",
+      "description": "Create or update a Python script to generate the new Grafana panel JSON using the DashboardBuilder class.",
       "commands": [],
       "files": [
         {
-          "path": "src/execution/checkpoint_manager.py",
-          "change": "Create a new file to house the CheckpointManager class with a `save` method."
+          "path": "A new or existing dashboard generation script.",
+          "change": "Add logic to create a time series panel for 'sat_stories_succeeded_total' and 'sat_stories_failed_total' metrics."
         }
       ]
     },
     {
       "step": 2,
-      "description": "Implement unit tests for the CheckpointManager in `tests/test_checkpoint_manager.py`. Tests will cover successful checkpoint creation and graceful failure handling (e.g., in case of file permission errors).",
+      "description": "Add a corresponding test to verify the panel generation logic and ensure the output is valid JSON.",
       "commands": [],
       "files": [
         {
-          "path": "tests/test_checkpoint_manager.py",
-          "change": "Create a new test file to validate the CheckpointManager's functionality."
+          "path": "A new or existing test file for dashboard generation.",
+          "change": "Add a test case that asserts the new panel's title, type, and metric targets are correct."
         }
       ]
     },
     {
       "step": 3,
-      "description": "Integrate the CheckpointManager into the StoryExecutor. Modify `src/execution/story_executor.py` to call the checkpoint manager after each story execution successfully completes, passing the current workflow state.",
-      "commands": [],
-      "files": [
-        {
-          "path": "src/execution/story_executor.py",
-          "change": "Import and instantiate CheckpointManager, then call its `save` method within the story execution loop."
-        }
-      ]
-    },
-    {
-      "step": 4,
-      "description": "Update the tests for the StoryExecutor in `tests/test_story_executor_v2.py` to mock the CheckpointManager and assert that it is called with the correct state after each story. Verify that the workflow continues even if the checkpoint manager mock raises an exception.",
-      "commands": [],
-      "files": [
-        {
-          "path": "tests/test_story_executor_v2.py",
-          "change": "Add patches and assertions to verify the new checkpointing integration."
-        }
-      ]
+      "description": "Run the script to generate the dashboard JSON and load it into Grafana.",
+      "commands": [
+        "python3 <your_script_name>.py > /tmp/grafana_panel.json"
+      ],
+      "files": []
     }
   ],
-  "verificationScript": "verify_script.sh created and executable. It runs a self-contained Python script that simulates the execution of a task with multiple stories and verifies that a correctly formatted checkpoint file is created after the final story.",
+  "verificationScript": "verify_script.sh created and executable",
   "rollbackPlan": [
-    "git restore src/execution/story_executor.py tests/test_story_executor_v2.py",
-    "rm src/execution/checkpoint_manager.py tests/test_checkpoint_manager.py"
+    "If changes were made to existing files, revert them using 'git checkout <file_path>'.",
+    "If new files were created, remove them.",
+    "If the dashboard was updated in Grafana, revert to the previous version using Grafana's version history or re-upload the old configuration."
   ]
 }

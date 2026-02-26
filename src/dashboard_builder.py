@@ -245,3 +245,94 @@ class DashboardBuilder:
             datasource['version'] = version
 
         return datasource
+
+    def create_stories_success_fail_panel(
+        self,
+        custom_title=None,
+        grid_pos=None,
+        datasource=None,
+        yaxis_min=None,
+        yaxis_max=None,
+        time_range=None,
+        queries=None
+    ):
+        """
+        Create a time series panel showing Stories Success/Fail Rate metrics.
+
+        Args:
+            custom_title: Custom title for the panel (defaults to 'Stories Success/Fail Rate')
+            grid_pos: Grid position {'x': int, 'y': int, 'w': int, 'h': int}
+            datasource: Grafana datasource name (defaults to 'Prometheus')
+            yaxis_min: Minimum y-axis value (optional)
+            yaxis_max: Maximum y-axis value (optional)
+            time_range: Time range {'from': str, 'to': str}
+            queries: List of target queries (optional, defaults to succeeded/failed metrics)
+
+        Returns:
+            Dictionary representing a Grafana time series panel
+        """
+        if queries is None:
+            queries = [
+                {
+                    'expr': 'sat_stories_succeeded_total',
+                    'legendFormat': 'Succeeded'
+                },
+                {
+                    'expr': 'sat_stories_failed_total',
+                    'legendFormat': 'Failed'
+                }
+            ]
+
+        panel = {
+            'type': 'timeseries',
+            'title': custom_title if custom_title else 'Stories Success/Fail Rate',
+            'targets': queries
+        }
+
+        # Apply optional parameters
+        if grid_pos is not None:
+            panel['gridPos'] = grid_pos
+        if datasource is not None:
+            panel['datasource'] = datasource
+        if yaxis_min is not None:
+            panel['yaxis'] = panel.get('yaxis', {})
+            panel['yaxis']['min'] = yaxis_min
+        if yaxis_max is not None:
+            panel['yaxis'] = panel.get('yaxis', {})
+            panel['yaxis']['max'] = yaxis_max
+        if time_range is not None:
+            panel['timeRange'] = time_range
+
+        # Add fieldConfig and options for proper Grafana formatting
+        panel['fieldConfig'] = {
+            'defaults': {
+                'custom': {
+                    'lineWidth': 2,
+                    'pointRadius': 4,
+                    'fillOpacity': 20
+                },
+                'color': {
+                    'mode': 'palette-classic'
+                },
+                'thresholds': {
+                    'mode': 'absolute',
+                    'steps': [
+                        {'value': 0, 'color': 'green'},
+                        {'value': 1, 'color': 'yellow'}
+                    ]
+                }
+            }
+        }
+
+        panel['options'] = {
+            'legend': {
+                'displayMode': 'list',
+                'placement': 'bottom'
+            },
+            'tooltip': {
+                'mode': 'multi',
+                'sort': 'none'
+            }
+        }
+
+        return panel
