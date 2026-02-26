@@ -29,9 +29,33 @@ def is_service_active(service_name):
     except:
         return False
 
+PID_FILE = "/tmp/sat-daemon.pid"
+
+
+def _daemon_pid_alive():
+    """Check whether the daemon process identified by PID_FILE is actually running."""
+    if not os.path.exists(PID_FILE):
+        return False
+    try:
+        with open(PID_FILE, 'r') as f:
+            pid = int(f.read().strip())
+        os.kill(pid, 0)  # signal 0 = existence check
+        return True
+    except (ValueError, ProcessLookupError, PermissionError, OSError):
+        return False
+
+
 def is_sat_busy():
-    """Check if SAT is actively processing a task."""
-    # Check for any file in <Working> state
+    """Check if SAT is actively processing a task.
+
+    Uses a two-pronged check (Failure State 7):
+    1. Daemon PID must be alive.
+    2. At least one task file is in <Working> state.
+    If the daemon is dead but files say <Working>, the monitor treats SAT as
+    NOT busy so stuck-task handling can kick in.
+    """
+    daemon_alive = _daemon_pid_alive()
+
     for d in WATCH_DIRS:
         if not os.path.exists(d):
             continue
@@ -43,7 +67,15 @@ def is_sat_busy():
                 with open(path, 'r') as file:
                     content = file.read()
                 if "<Working>" in content:
-                    return True
+                    if daemon_alive:
+                        return True
+                    else:
+                        # Daemon is dead but file says <Working> — treat as stuck
+                        logging.warning(
+                            "Task %s is <Working> but daemon PID is gone — "
+                            "treating as stuck, not busy", f,
+                        )
+                        return False
             except:
                 pass
     return False

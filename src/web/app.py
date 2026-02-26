@@ -17,6 +17,7 @@ import markdown
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from jinja2 import Environment, BaseLoader
+from markupsafe import Markup
 
 # ---------------------------------------------------------------------------
 # Config
@@ -432,10 +433,6 @@ COMMON_CSS = """
 # ---------------------------------------------------------------------------
 
 jinja_env = Environment(loader=BaseLoader(), autoescape=True)
-
-# Add custom filter for safe HTML
-jinja_env.filters['safe_html'] = lambda x: x
-
 
 def _nav(active: str) -> str:
     """Generate nav HTML with active highlighting."""
@@ -878,7 +875,7 @@ async def task_view(file_path: str):
         state=state,
         mtime=datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
         size=_format_size(stat.st_size),
-        rendered_html=rendered,
+        rendered_html=Markup(rendered),
     )
 
 

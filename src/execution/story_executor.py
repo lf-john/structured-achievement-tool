@@ -203,6 +203,33 @@ async def execute_story(
                 phase=last_phase.get("phase", ""),
             )
 
+            # Identical-failure detection (Failure State 6):
+            # Compute a short signature from phase + first 200 chars of error.
+            # If the last 2 signatures are identical, stop retrying.
+            _sig = f"{last_phase.get('phase', '')}:{failure_output[:200]}"
+            _failure_signatures.append(_sig)
+            if (
+                len(_failure_signatures) >= 2
+                and _failure_signatures[-1] == _failure_signatures[-2]
+            ):
+                logger.warning(
+                    "Identical failure signature detected twice for %s — "
+                    "skipping remaining retries",
+                    story_id,
+                )
+                if notifier:
+                    notifier.notify_story_failed(
+                        story_id, story_title,
+                        f"Identical failure x2: {classification.message}",
+                    )
+                return StoryResult(
+                    story_id=story_id,
+                    success=False,
+                    attempts=attempt,
+                    reason=f"Identical failure x2. Last: {classification.message}",
+                    phase_outputs=phase_outputs,
+                )
+
             if classification.severity == FailureSeverity.TRANSIENT:
                 consecutive_env_failures = 0
                 last_failure_reason = failure_output
