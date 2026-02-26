@@ -246,6 +246,94 @@ class DashboardBuilder:
 
         return datasource
 
+    def create_task_completion_panel(
+        self,
+        custom_title=None,
+        grid_pos=None,
+        datasource=None,
+        yaxis_min=None,
+        yaxis_max=None,
+        time_range=None,
+        queries=None,
+        legends=None
+    ):
+        """
+        Create a stat panel showing Task Completion count metric.
+
+        Args:
+            custom_title: Custom title for the panel (defaults to 'Task Completion Count')
+            grid_pos: Grid position {'x': int, 'y': int, 'w': int, 'h': int}
+            datasource: Grafana datasource name (defaults to 'Prometheus')
+            yaxis_min: Minimum y-axis value (optional)
+            yaxis_max: Maximum y-axis value (optional)
+            time_range: Time range {'from': str, 'to': str}
+            queries: List of target queries (optional, defaults to completed metric)
+            legends: List of legend labels (optional, defaults to 'Completed')
+
+        Returns:
+            Dictionary representing a Grafana stat panel
+        """
+        if queries is None:
+            queries = [
+                {
+                    'expr': 'sat_tasks_completed_total',
+                    'legendFormat': 'Completed'
+                }
+            ]
+
+        panel = {
+            'type': 'stat',
+            'title': custom_title if custom_title else 'Task Completion Count',
+            'targets': queries
+        }
+
+        # Apply optional parameters
+        if grid_pos is not None:
+            panel['gridPos'] = grid_pos
+        if datasource is not None:
+            panel['datasource'] = datasource
+        if yaxis_min is not None:
+            panel['yaxis'] = panel.get('yaxis', {})
+            panel['yaxis']['min'] = yaxis_min
+        if yaxis_max is not None:
+            panel['yaxis'] = panel.get('yaxis', {})
+            panel['yaxis']['max'] = yaxis_max
+        if time_range is not None:
+            panel['timeRange'] = time_range
+
+        # Add fieldConfig and options for proper Grafana stat formatting
+        panel['fieldConfig'] = {
+            'defaults': {
+                'custom': {
+                    'displayMode': 'color-background',
+                    'colorMode': 'value'
+                },
+                'color': {
+                    'mode': 'thresholds'
+                },
+                'thresholds': {
+                    'mode': 'absolute',
+                    'steps': [
+                        {'value': 0, 'color': 'gray'},
+                        {'value': 100, 'color': 'green'},
+                        {'value': 500, 'color': 'yellow'},
+                        {'value': 1000, 'color': 'orange'},
+                        {'value': 5000, 'color': 'red'}
+                    ]
+                }
+            }
+        }
+
+        panel['options'] = {
+            'graphMode': 'none',
+            'reduceOptions': {
+                'values': False,
+                'calcs': ['lastNotNull']
+            }
+        }
+
+        return panel
+
     def create_stories_success_fail_panel(
         self,
         custom_title=None,

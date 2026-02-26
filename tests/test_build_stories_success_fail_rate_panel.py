@@ -159,7 +159,8 @@ class TestStoriesSuccessFailRatePanel:
 
         # Should still be valid panel with type and title
         assert panel['type'] == 'timeseries'
-        assert panel['title'] in panel
+        assert 'title' in panel
+        assert panel['title'] in ['Stories Success/Fail Rate']
 
 
 # Exit code for pytest to report failures
