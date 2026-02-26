@@ -1,5 +1,6 @@
 import logging
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, Optional, List
+
 from src.core.embedding_service import EmbeddingService
 from src.core.vector_store import VectorStore
 
@@ -9,80 +10,111 @@ class OllamaICPMatcher:
     def __init__(self, embedding_service: EmbeddingService, vector_store: VectorStore):
         self.embedding_service = embedding_service
         self.vector_store = vector_store
-        # No collection_name as VectorStore works on a single collection
+        # VectorStore does not manage collections, it operates on a single implicit collection.
+        # ICP profiles will be distinguished by metadata.
+
+    def _ensure_collection_exists(self):
+        try:
+            # Attempt to get the collection info; if it doesn't exist, an error will be raised
+            self.vector_store.get_collection(self.collection_name)
+        except ValueError:
+            # If it doesn't exist, create it
+            self.vector_store.create_collection(self.collection_name, 768) # 768 is the dimension for nomic-embed-text
 
     def add_icp_profile(self, profile_id: str, profile_data: Dict[str, Any]) -> bool:
         """
         Adds an ICP profile to the vector store.
-        profile_data should contain 'description' key with a string summary of the ICP.
         """
-        if not profile_data or "description" not in profile_data or not profile_data["description"]:
-            logger.warning("Attempted to add an empty or invalid ICP profile.")
+        if not profile_data:
+            logger.warning("Attempted to add an empty ICP profile for ID: %s", profile_id)
             return False
 
         try:
-            description = profile_data["description"]
-            # VectorStore.add_document generates its own embedding
-            # Merge profile_id into metadata to retain it
-            metadata = {"profile_id": profile_id, **profile_data}
-            self.vector_store.add_document(text=description, metadata=metadata)
-            logger.info(f"Successfully added ICP profile: {profile_id}")
+            profile_text = self._serialize_profile_data(profile_data)
+            embedding = self.embedding_service.embed_text(profile_text)
+            metadata = {"profile_id": profile_id, "type": "icp_profile", **profile_data}
+            self.vector_store.add_document(profile_text, metadata)
             return True
         except Exception as e:
-            logger.error(f"Error adding ICP profile {profile_id}: {e}")
+            logger.error("Error adding ICP profile %s: %s", profile_id, e)
             return False
 
-    def match_icp(self, input_data: Dict[str, Any]) -> Tuple[float, str]:
+    def match_icp(self, input_data: Dict[str, Any], top_k: int = 1) -> Dict[str, Any]:
         """
-        Matches input contact/company data against stored ICP profiles
-        and returns a fit score and reasoning.
+        Matches input data against stored ICP profiles and returns a fit score and reasoning.
         """
         if not input_data:
-            logger.warning("Empty input data for ICP matching.")
-            return 0.0, "No input data provided."
-
-        input_description = self._generate_input_description(input_data)
-        if not input_description:
-            return 0.0, "Could not generate a description from input data."
+            return {"score": 0.0, "reasoning": "No input data provided."}
 
         try:
-            # VectorStore.search takes query_text and handles embedding internally
-            results = self.vector_store.search(query_text=input_description, k=1)
+            input_text = self._serialize_profile_data(input_data)
+            input_embedding = self.embedding_service.embed_text(input_text)
 
-            if not results:
-                return 0.0, "No ICP profiles found to match against."
+            if input_embedding is None:
+                return {"score": 0.0, "reasoning": "Failed to generate embedding for input data."}
 
-            best_match = results[0]
-            score = best_match['score']
-            profile_id = best_match['metadata'].get('profile_id', 'UNKNOWN')
-            reasoning = (f"Matched with ICP profile '{profile_id}' with a similarity score of {score:.2f}. "
-                         f"The profile describes: '{best_match['text']}'")
+            # The VectorStore's search method expects a query_text, not an embedding directly.
+            # We'll pass the serialized input_text for searching.
+            results = self.vector_store.search(input_text, k=top_k * 5) # Fetch more to filter down
 
-            # Simple score scaling for better user interpretation
-            scaled_score = max(00.0, min(1.0, (score + 1) / 2)) # Scale from [-1, 1] to [0, 1]
+            icp_results = [res for res in results if res.get("metadata", {}).get("type") == "icp_profile"]
 
-            return scaled_score, reasoning
+            if not icp_results:
+                return {"score": 0.0, "reasoning": "No ICP profiles found for matching."}
+
+            # Sort by similarity (highest score first) and take the top_k
+            icp_results.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+            best_match = icp_results[0]
+            
+            score = self._calculate_fit_score(best_match.get("score", 0.0))
+            reasoning = self._generate_reasoning(input_data, best_match)
+
+            return {"score": score, "reasoning": reasoning, "matched_profile": best_match.get("metadata")}
+
         except Exception as e:
-            logger.error(f"Error matching ICP: {e}")
-            return 0.0, f"An internal error occurred during matching: {e}"
+            logger.error("Error matching ICP: %s", e)
+            return {"score": 0.0, "reasoning": f"An error occurred during matching: {e}"}
 
-    def _generate_input_description(self, input_data: Dict[str, Any]) -> str:
+    def _serialize_profile_data(self, data: Dict[str, Any]) -> str:
         """
-        Generates a concise description from input contact/company data for embedding.
+        Converts a dictionary of profile data into a string for embedding.
         """
-        parts = []
-        if "company_name" in input_data and input_data["company_name"]:
-            parts.append(f"Company: {input_data['company_name']}")
-        if "industry" in input_data and input_data["industry"]:
-            parts.append(f"Industry: {input_data['industry']}")
-        if "size" in input_data and input_data["size"]:
-            parts.append(f"Size: {input_data['size']}")
-        if "contact_role" in input_data and input_data["contact_role"]:
-            parts.append(f"Contact role: {input_data['contact_role']}")
-        if "pain_points" in input_data and input_data["pain_points"]:
-            parts.append(f"Pain points: {input_data['pain_points']}")
+        # A simple serialization, can be made more sophisticated
+        return " ".join(f"{k}: {v}" for k, v in data.items())
+
+    def _calculate_fit_score(self, similarity: float) -> float:
+        """
+        Converts a similarity score (e.g., cosine similarity) into a fit score (0-100).
+        """
+        # Assuming similarity is between 0 and 1.
+        # This can be adjusted based on desired scaling and distribution.
+        return round(similarity * 100, 2)
+
+    def _generate_reasoning(self, input_data: Dict[str, Any], matched_profile: Dict[str, Any]) -> str:
+        """
+        Generates reasoning for the ICP fit based on input and matched profile.
+        """
+        profile_metadata = matched_profile.get("metadata", {})
+        similarity = matched_profile.get("similarity", 0.0)
+
+        reasoning = (
+            f"The input data shows a similarity of {similarity:.2f} with ICP profile "
+            f"'{profile_metadata.get('name', profile_metadata.get('profile_id', 'N/A'))}' (ID: {profile_metadata.get('profile_id', 'N/A')}). "
+        )
+        reasoning += "Key matching points: "
         
-        if not parts:
-            return ""
+        # Example: Compare common fields (can be enhanced with LLM for better reasoning)
+        matching_fields = []
+        for key, input_value in input_data.items():
+            profile_value = profile_metadata.get(key)
+            if profile_value and input_value == profile_value:
+                matching_fields.append(key)
         
-        return ". ".join(parts) + "."
+        if matching_fields:
+            reasoning += f"Exact matches on: {', '.join(matching_fields)}. "
+        else:
+            reasoning += "No exact field matches found, but overall semantic similarity is high. "
+            
+        reasoning += f"This profile represents a {profile_metadata.get('description', 'typical ICP')}. "
+        
+        return reasoning
