@@ -493,3 +493,69 @@ class DashboardBuilder:
         }
 
         return panel
+
+    def create_provider_usage_panel(
+        self,
+        custom_title=None,
+        grid_pos=None,
+        datasource=None,
+        queries=None
+    ):
+        """
+        Create a pie chart panel showing Provider Usage Breakdown metric.
+
+        Args:
+            custom_title: Custom title for the panel (defaults to 'Provider Usage Breakdown')
+            grid_pos: Grid position {'x': int, 'y': int, 'w': int, 'h': int}
+            datasource: Grafana datasource name (defaults to 'Prometheus')
+            queries: List of target queries (optional, defaults to provider usage metric)
+
+        Returns:
+            Dictionary representing a Grafana pie chart panel
+        """
+        if queries is None:
+            queries = [
+                {
+                    'expr': 'sum by (provider) (sat_provider_requests_total)',
+                    'legendFormat': '{{provider}}'
+                }
+            ]
+
+        panel = {
+            'type': 'piechart',
+            'title': custom_title if custom_title else 'Provider Usage Breakdown',
+            'targets': queries
+        }
+
+        # Apply optional parameters
+        if grid_pos is not None:
+            panel['gridPos'] = grid_pos
+        if datasource is not None:
+            panel['datasource'] = datasource
+
+        # Add fieldConfig and options for proper Grafana pie chart formatting
+        panel['fieldConfig'] = {
+            'defaults': {
+                'color': {
+                    'mode': 'palette-classic'
+                },
+                'custom': {
+                    'displayMode': 'percent',
+                    'pieType': 'donut',
+                    'showLegend': True
+                }
+            }
+        }
+
+        panel['options'] = {
+            'legend': {
+                'displayMode': 'list',
+                'placement': 'bottom'
+            },
+            'tooltip': {
+                'mode': 'single',
+                'sort': 'none'
+            }
+        }
+
+        return panel

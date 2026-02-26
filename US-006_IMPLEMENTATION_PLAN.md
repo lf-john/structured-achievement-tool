@@ -1,72 +1,107 @@
-# US-006: N8N Claude Email Generation Workflow Implementation Plan
 
-This document provides the steps to import, configure, and activate the new email generation workflow in your N8N instance.
-
-## Prerequisites
-
-1.  An active N8N instance.
-2.  Admin access to the N8N instance.
-3.  Mautic credentials configured in N8N.
-4.  A Claude API key from Anthropic.
-
-## Implementation Steps
-
-### 1. Import the Workflow
-
-1.  Open your N8N dashboard.
-2.  Navigate to the **Workflows** section.
-3.  Click on the **"New"** button to create a new workflow.
-4.  In the new workflow canvas, click on the options menu (three dots) in the top right and select **"Import from file"**.
-5.  Select the `n8n_claude_email_workflow.json` file from this project.
-6.  The "Claude Email Generation" workflow will be loaded onto the canvas.
-
-### 2. Configure Credentials
-
-The workflow requires a Claude API key to function.
-
-1.  In the N8N sidebar, go to **Credentials**.
-2.  Click **"Add credential"**.
-3.  Search for **"Header Auth"** and select it.
-4.  Fill in the credential details:
-    *   **Credential Name:** `Claude API Key`
-    *   **Name:** `x-api-key`
-    *   **Value:** Paste your Claude API key here.
-5.  Click **"Save"**.
-6.  Go back to the imported workflow. Double-click the **"Call Claude API"** node.
-7.  In the **"Authentication"** dropdown, ensure **"Header Auth"** is selected.
-8.  For the **"Credentials"** field, select the `Claude API Key` credential you just created. The value should be `{{$credentials.Claude API Key.apiKey}}`.
-
-### 3. Configure Mautic Node
-
-1.  Double-click the **"Save to Mautic as Draft"** node.
-2.  Ensure the correct Mautic API credentials are selected in the **"Credentials"** section.
-3.  Review the parameters and adjust if necessary for your Mautic instance.
-
-### 4. Activate the Workflow
-
-1.  Once all nodes are configured correctly and show no errors, save the workflow.
-2.  Toggle the **"Active"** switch in the top left of the workflow editor to activate it.
-
-## 5. Using the Workflow
-
-The workflow is triggered by a POST request to its webhook URL.
-
-1.  Find the webhook URL by clicking on the **"Webhook Trigger"** node and navigating to the **"Webhook URLs"** tab.
-2.  Send a POST request to this URL with a JSON body containing the contact information.
-
-**Example `curl` command:**
-
-```bash
-curl -X POST 
--H "Content-Type: application/json" 
--d '{
-  "tag": "initial_outreach",
-  "firstName": "John",
-  "company": "ACME Corp",
-  "topic": "your recent inquiry about our products",
-  "context": "John visited our pricing page twice this week."
-}' 
-YOUR_N8N_WEBHOOK_URL
+```json
+{
+  "designPlan": {
+    "architectureAnalysis": {
+      "filesToCreate": [
+        "tests/test_us_006_provider_usage_panel.py"
+      ],
+      "filesToModify": [
+        "src/dashboard_builder.py"
+      ],
+      "dependencies": [
+        "This story relies on the existing `DashboardBuilder` class structure in `src/dashboard_builder.py`. No new external dependencies are required."
+      ]
+    },
+    "implementationPlan": [
+      {
+        "filePath": "src/dashboard_builder.py",
+        "purpose": "To add a new function to the DashboardBuilder class that constructs a Grafana pie chart panel specifically for visualizing the `sat_provider_requests_total` metric.",
+        "keyChanges": [
+          "Add a new method `create_provider_usage_panel(self, custom_title=None, grid_pos=None, datasource=None)` to the `DashboardBuilder` class.",
+          "This method will generate a dictionary representing the JSON for a Grafana pie chart panel.",
+          "The panel's query will be configured to target the `sat_provider_requests_total` metric, summed by the `provider` label."
+        ],
+        "dataFlow": "The method will be called by a higher-level script responsible for generating the complete dashboard. It will accept configuration options (title, position) and return a JSON object for the new panel, which will then be added to the main dashboard's list of panels.",
+        "interfaces": [
+          "def create_provider_usage_panel(self, custom_title: str = None, grid_pos: dict = None, datasource: str = None) -> dict:"
+        ]
+      },
+      {
+        "filePath": "tests/test_us_006_provider_usage_panel.py",
+        "purpose": "To provide comprehensive, TDD-style unit tests for the new `create_provider_usage_panel` method, ensuring its correctness and adherence to the required Grafana JSON format.",
+        "keyChanges": [
+          "Create a new test class `TestCreateProviderUsagePanel`.",
+          "Add test cases to verify the panel's title, type (`piechart`), datasource, grid position, and the correctness of the Prometheus query.",
+          "Ensure the generated JSON structure is valid and contains all necessary fields for a Grafana pie chart."
+        ],
+        "dataFlow": "The test methods will call `DashboardBuilder.create_provider_usage_panel` with various arguments and then assert that the returned dictionary matches the expected structure and values.",
+        "interfaces": [
+          "N/A (Test module)"
+        ]
+      }
+    ],
+    "acceptanceCriteriaMapping": [
+      {
+        "criterion": "Pie chart panel created with correct title",
+        "implementationSteps": [
+          "The `create_provider_usage_panel` method will set the 'title' key in the panel's JSON to 'Provider Usage Breakdown' by default, or to the `custom_title` if provided."
+        ],
+        "verificationMethod": "A unit test in `tests/test_us_006_provider_usage_panel.py` will assert that the `title` field in the generated dictionary is correct."
+      },
+      {
+        "criterion": "Includes sat_provider_requests_total metric",
+        "implementationSteps": [
+          "The method will create a 'targets' array in the JSON, with a dictionary containing an 'expr' key set to 'sum by (provider) (sat_provider_requests_total)'."
+        ],
+        "verificationMethod": "A unit test will assert that `panel['targets'][0]['expr']` equals the specified query string."
+      },
+      {
+        "criterion": "Grouped by 'provider' label",
+        "implementationSteps": [
+          "The `sum by (provider)` clause in the Prometheus query handles the grouping.",
+          "The legend format will be set to `{{provider}}` to display the label values."
+        ],
+        "verificationMethod": "The unit test for the query (`expr`) will implicitly verify this. An additional check for the legend format will be added."
+      },
+      {
+        "criterion": "Proper pie chart formatting",
+        "implementationSteps": [
+          "The method will set the 'type' key in the panel's JSON to 'piechart'.",
+          "It will include standard pie chart options, such as setting `pieType` to `donut`."
+        ],
+        "verificationMethod": "A unit test will assert that `panel['type']` is 'piechart' and that `panel['options']['pieType']` is 'donut'."
+      },
+      {
+        "criterion": "Panel JSON is valid Grafana format",
+        "implementationSteps": [
+          "The `create_provider_usage_panel` function will construct a dictionary that includes all required fields for a panel, such as `id`, `title`, `type`, `targets`, and `gridPos`."
+        ],
+        "verificationMethod": "Unit tests will verify the presence and correct types of all essential keys in the generated panel JSON."
+      }
+    ],
+    "edgeCasesAndRisks": {
+      "boundaryConditions": [
+        "The function should handle cases where optional arguments like `custom_title`, `grid_pos`, and `datasource` are not provided, applying sensible defaults."
+      ],
+      "errorScenarios": [
+        "If the `sat_provider_requests_total` metric does not exist or has no data in Prometheus, the panel will render correctly with a 'No data' message in Grafana. This is acceptable behavior and requires no special handling in the builder."
+      ],
+      "securityConsiderations": [
+        "There are no security considerations for this story, as it involves generating configuration JSON and does not handle user input or sensitive data."
+      ],
+      "performanceImplications": [
+        "There are no performance implications. The JSON generation is a lightweight, instantaneous operation."
+      ]
+    },
+    "implementationOrder": [
+      "Create the test file `tests/test_us_006_provider_usage_panel.py` and write an initial, failing test case for the `create_provider_usage_panel` method.",
+      "Modify `src/dashboard_builder.py` to add the `create_provider_usage_panel` method and implement its basic functionality to make the initial test pass.",
+      "Expand the test suite in `tests/test_us_006_provider_usage_panel.py` to cover all acceptance criteria, including optional parameters and formatting options.",
+      "Refine the implementation of `create_provider_usage_panel` until all tests pass.",
+      "Finally, a separate step (outside this story's scope) would be to integrate this new panel into the main dashboard generation script and deploy it."
+    ]
+  }
+}
 ```
-
-This will trigger the workflow, generate an email using the Claude API, and save it as a draft in your Mautic instance.
+<promise>COMPLETE</promise>
