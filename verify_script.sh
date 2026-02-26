@@ -1,36 +1,55 @@
 #!/bin/bash
 
-# Activate python environment
-if [ -f "venv/bin/activate" ]; then
-    source venv/bin/activate
+# Exit immediately if a command exits with a non-zero status.
+set -e
+
+echo "--- Verifying Directory Creation ---"
+if [ -d "$HOME/projects/system-reports/" ]; then
+    echo "OK: Directory ~/projects/system-reports/ exists."
 else
-    echo "ERROR: Could not find venv/bin/activate" >&2
+    echo "FAIL: Directory ~/projects/system-reports/ does not exist."
     exit 1
 fi
 
-# Generate the report
-python src/generate_audit_report.py
-if [ $? -ne 0 ]; then
-    echo "ERROR: Report generation script failed" >&2
-    exit 1
-fi
+echo ""
+echo "--- Verifying Python Module Files ---"
+FILES_TO_CHECK=(
+    "src/benchmarking/__init__.py"
+    "src/benchmarking/data_models.py"
+    "src/benchmarking/config.py"
+    "src/benchmarking/ollama_client.py"
+)
 
-# Check if the report file was created
-DATE=$(date +%Y%m%d)
-REPORT_FILE="audit_${DATE}.md"
+for file in "${FILES_TO_CHECK[@]}"; do
+    if [ -f "$file" ]; then
+        echo "OK: File $file exists."
+    else
+        echo "FAIL: File $file does not exist."
+        exit 1
+    fi
+done
 
-if [ ! -f "$REPORT_FILE" ]; then
-    echo "ERROR: Report file '$REPORT_FILE' was not created." >&2
-    exit 1
-fi
+echo ""
+echo "--- Verifying Ollama API Connectivity ---"
+# Use a short python script to test the client
+cat << 'EOF' > verify_client.py
+import sys
+from src.benchmarking.ollama_client import OllamaClient
 
-# Check for key content
-if ! grep -q "SAT System Audit Report" "$REPORT_FILE" || ! grep -q "Timestamp" "$REPORT_FILE"; then
-    echo "ERROR: Report file is missing expected content." >&2
-    rm "$REPORT_FILE"
-    exit 1
-fi
+client = OllamaClient()
+if client.is_available():
+    print("OK: Ollama API is available.")
+    sys.exit(0)
+else:
+    print(f"FAIL: Could not connect to Ollama API at {client.base_url}.")
+    sys.exit(1)
+EOF
 
-echo "SUCCESS: Audit report generated and verified successfully."
-rm "$REPORT_FILE"
+python3 verify_client.py
+
+# Cleanup the temp script
+rm verify_client.py
+
+echo ""
+echo "--- Verification Successful ---"
 exit 0

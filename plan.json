@@ -1,66 +1,83 @@
 {
   "systemAnalysis": {
     "filesToChange": [
-      "scripts/verify_mautic_import.py",
-      "verify_script.sh",
-      "pyproject.toml",
-      "config.json"
+      "src/benchmarking/data_models.py",
+      "src/benchmarking/config.py",
+      "src/benchmarking/ollama_client.py"
     ],
-    "systemImpact": "This change introduces a read-only verification script. It will query the Mautic API, causing a minor increase in API load during execution. It does not modify any system data, so the risk to the running system is low.",
+    "systemImpact": "This change is additive and introduces a new, isolated benchmarking module. It has no impact on the existing running system or services. The new module will only be active when explicitly executed.",
     "externalDependencies": [
-      "Mautic API"
+      "Ollama API (http://localhost:11434)"
     ]
   },
   "executionSteps": [
     {
       "step": 1,
-      "description": "Update pyproject.toml to add 'requests' as a dependency.",
+      "description": "Create the directory `~/projects/system-reports/` to store future benchmark reports.",
       "commands": [
-        "pip install requests"
+        "mkdir -p ~/projects/system-reports/"
       ],
-      "files": [
-        {
-          "path": "pyproject.toml",
-          "change": "Add [project] section with requests dependency."
-        }
-      ]
+      "files": []
     },
     {
       "step": 2,
-      "description": "Create the main Python verification script.",
-      "commands": [],
-      "files": [
-        {
-          "path": "scripts/verify_mautic_import.py",
-          "change": "Create a new Python script to perform verification checks against the Mautic API."
-        }
-      ]
+      "description": "Create the Python package structure for the new benchmarking module.",
+      "commands": [
+        "mkdir -p src/benchmarking",
+        "touch src/benchmarking/__init__.py"
+      ],
+      "files": []
     },
     {
       "step": 3,
-      "description": "Create the bash script to run the verification.",
+      "description": "Define the Pydantic data model for storing benchmark results.",
       "commands": [],
       "files": [
         {
-          "path": "verify_script.sh",
-          "change": "Create the verification script that executes the Python script and checks its exit code."
+          "path": "src/benchmarking/data_models.py",
+          "change": "Create a new file with a Pydantic `BenchmarkResult` model containing fields: `model_name`, `prompt`, `tokens_per_sec`, `time_to_first_token`, `total_response_time`, and `timestamp`."
         }
       ]
     },
     {
       "step": 4,
-      "description": "Make the scripts executable.",
-      "commands": [
-        "chmod +x scripts/verify_mautic_import.py",
-        "chmod +x verify_script.sh"
-      ],
-      "files": []
-    }
+      "description": "Create the configuration module for models, prompts, and the API endpoint.",
+      "commands": [],
+      "files": [
+        {
+          "path": "src/benchmarking/config.py",
+          "change": "Create a new file defining lists of `MODELS` and `PROMPTS`, and the `OLLAMA_API_BASE_URL`."
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "description": "Implement the HTTP client to communicate with the Ollama API.",
+      "commands": [],
+      "files": [
+        {
+          "path": "src/benchmarking/ollama_client.py",
+          "change": "Create a new file with an `OllamaClient` class that has methods to check API availability (`is_available`) and list models."
+        }
+      ]
+    },
+    {
+        "step": 6,
+        "description": "Create the verification script to ensure all components are set up correctly.",
+        "commands": ["chmod +x verify_script.sh"],
+        "files": [
+          {
+            "path": "verify_script.sh",
+            "change": "Create a new bash script that checks for the existence of the `~/projects/system-reports` directory, the created Python files, and verifies connectivity to the Ollama API using the new client."
+          }
+        ]
+      }
   ],
   "verificationScript": "verify_script.sh created and executable",
   "rollbackPlan": [
-    "rm scripts/verify_mautic_import.py",
-    "rm verify_script.sh",
-    "git checkout pyproject.toml"
+    "rm -rf ~/projects/system-reports/",
+    "rm -rf src/benchmarking/",
+    "rm verify_script.sh"
   ]
 }
+<promise>COMPLETE</promise>
