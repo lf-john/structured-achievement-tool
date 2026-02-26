@@ -28,6 +28,8 @@ class AuditJournal:
     def log(self, record: AuditRecord):
         with open(str(self.journal_file_path), "a", encoding="utf-8") as f:
             f.write(record.model_dump_json() + "\n")
+            f.flush()
+            os.fsync(f.fileno())
 
     def query(self, success: Optional[bool] = None, task_file: Optional[str] = None) -> List[AuditRecord]:
         records = []

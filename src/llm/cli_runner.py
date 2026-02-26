@@ -256,12 +256,18 @@ async def invoke(
         logger.error(f"Timeout after {timeout}s for {provider.name}")
         if stream_parser:
             stream_parser.finalize()
-        # Try to kill the process
+        # SIGKILL watchdog (Failure State 2): SIGTERM first, then hard-kill
+        # after 10 seconds if the process hasn't exited.
         try:
             process.terminate()
-            await asyncio.sleep(2)
-            if process.returncode is None:
+            try:
+                await asyncio.wait_for(process.wait(), timeout=10)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Process did not exit after SIGTERM+10s, sending SIGKILL"
+                )
                 process.kill()
+                await asyncio.wait_for(process.wait(), timeout=5)
         except Exception:
             pass
 

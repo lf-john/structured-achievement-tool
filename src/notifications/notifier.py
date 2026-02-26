@@ -36,6 +36,7 @@ class Notifier:
         self.smtp_user = smtp_user or os.environ.get("SAT_SMTP_USER", "")
         self.smtp_password = smtp_password or os.environ.get("SAT_SMTP_PASSWORD", "")
         self.notify_email = notify_email or os.environ.get("SAT_NOTIFY_EMAIL", "")
+        self._email_warning_logged = False
 
     def send_ntfy(self, title: str, message: str, priority: str = "default", tags: str = "") -> bool:
         """Send a push notification via ntfy.sh."""
@@ -75,7 +76,21 @@ class Notifier:
         """
         to_addr = recipient or self.notify_email
         if not all([self.smtp_host, self.smtp_user, to_addr]):
-            logger.debug("Email not configured, skipping")
+            if not self._email_warning_logged:
+                missing = []
+                if not self.smtp_host:
+                    missing.append("SAT_SMTP_HOST")
+                if not self.smtp_user:
+                    missing.append("SAT_SMTP_USER")
+                if not to_addr:
+                    missing.append("SAT_NOTIFY_EMAIL")
+                logger.warning(
+                    "Email not configured (missing: %s). "
+                    "Set these env vars or pass them to Notifier to enable email notifications. "
+                    "This warning will not repeat.",
+                    ", ".join(missing),
+                )
+                self._email_warning_logged = True
             return False
 
         msg = MIMEMultipart("alternative")

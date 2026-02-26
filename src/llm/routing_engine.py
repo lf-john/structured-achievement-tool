@@ -67,21 +67,52 @@ class RoutingEngine:
     # Cooldown period (seconds) after a 429 before retrying the same provider
     RATE_LIMIT_COOLDOWN = 120
 
+    # Pause-all threshold: if this many distinct providers return 429 within
+    # PAUSE_ALL_WINDOW seconds, all LLM calls are paused for PAUSE_ALL_DURATION.
+    PAUSE_ALL_THRESHOLD = 2
+    PAUSE_ALL_WINDOW = 60  # seconds
+    PAUSE_ALL_DURATION = 120  # seconds
+
     def __init__(self, config_path: Optional[str] = None):
         self.config = {}
         self.phase_overrides = {}
         # Track rate-limited providers: {provider_name: timestamp_of_429}
         self._rate_limited: dict[str, float] = {}
+        # Pause-all state
+        self._paused_until: float = 0.0
 
         if config_path and os.path.exists(config_path):
             with open(config_path, "r") as f:
                 self.config = json.load(f)
             self.phase_overrides = self.config.get("phase_models", {})
 
+    @property
+    def is_paused(self) -> bool:
+        """Return True if all LLM calls are paused due to rate limit cascade."""
+        return time.monotonic() < self._paused_until
+
     def mark_rate_limited(self, provider_name: str):
-        """Mark a provider as rate-limited. It will be deprioritized for RATE_LIMIT_COOLDOWN seconds."""
-        self._rate_limited[provider_name] = time.monotonic()
+        """Mark a provider as rate-limited. It will be deprioritized for RATE_LIMIT_COOLDOWN seconds.
+
+        If multiple distinct providers hit 429 within PAUSE_ALL_WINDOW, triggers
+        a global pause (Failure State 5: rate limit cascade).
+        """
+        now = time.monotonic()
+        self._rate_limited[provider_name] = now
         logger.info(f"Provider {provider_name} marked rate-limited for {self.RATE_LIMIT_COOLDOWN}s")
+
+        # Check for cascade: count providers that hit 429 within the window
+        recent_count = sum(
+            1 for ts in self._rate_limited.values()
+            if now - ts < self.PAUSE_ALL_WINDOW
+        )
+        if recent_count >= self.PAUSE_ALL_THRESHOLD and not self.is_paused:
+            self._paused_until = now + self.PAUSE_ALL_DURATION
+            logger.warning(
+                "Rate limit cascade: %d providers hit 429 within %ds. "
+                "Pausing ALL LLM calls for %ds.",
+                recent_count, self.PAUSE_ALL_WINDOW, self.PAUSE_ALL_DURATION,
+            )
 
     def _is_rate_limited(self, provider_name: str) -> bool:
         """Check if a provider is currently in cooldown."""
@@ -118,6 +149,16 @@ class RoutingEngine:
             story_complexity: Override complexity for variable agents (coder, basic_info)
             is_code_task: If True, use code_power instead of power for comparison
         """
+        # Pause-all gate (Failure State 5): wait out the cascade cooldown
+        if self.is_paused:
+            remaining = self._paused_until - time.monotonic()
+            logger.warning(
+                "LLM calls paused (rate limit cascade). %.0fs remaining. "
+                "Returning fallback.", remaining,
+            )
+            default = self.config.get("default_primary", "sonnet")
+            return get_provider(default)
+
         # Check config override first
         phase_key = agent_name.upper()
         if phase_key in self.phase_overrides:

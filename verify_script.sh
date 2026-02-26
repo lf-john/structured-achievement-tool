@@ -1,28 +1,21 @@
 #!/bin/bash
+# verify_script.sh
+# Verifies that the mautic:emails:send cron is set to run once per day.
 
-set -e
+# This regex checks for a cron schedule pattern that equates to once a day.
+# It looks for two numbers (minute, hour) followed by three asterisks,
+# and then the mautic:emails:send command.
+ONCE_A_DAY_PATTERN="^[0-9]+[[:space:]]+[0-9]+[[:space:]]+\*[[:space:]]+\*[[:space:]]+\*[[:space:]]+.*mautic:emails:send"
 
-FILE_PATH="marketing-automation/docs/mautic-rate-limits.md"
+# Execute grep inside the container.
+# The command will exit with 0 if the pattern is found, and a non-zero value otherwise.
+docker exec mautic-app grep -Eq "$ONCE_A_DAY_PATTERN" /etc/cron.d/mautic
 
-if [ ! -f "$FILE_PATH" ]; then
-  echo "File not found: $FILE_PATH"
+if [ $? -eq 0 ]; then
+  echo "Verification successful: Cron job 'mautic:emails:send' is configured to run once a day."
+  exit 0
+else
+  echo "Verification failed: Cron job 'mautic:emails:send' is not configured correctly."
+  docker exec mautic-app cat /etc/cron.d/mautic
   exit 1
 fi
-
-# Check for Week 2 content
-grep -q "Week 2" "$FILE_PATH"
-grep -q "msg_limit=100" "$FILE_PATH"
-grep -q "cron 1x/day" "$FILE_PATH"
-
-# Check for Week 3 content
-grep -q "Week 3" "$FILE_PATH"
-grep -q "msg_limit=250" "$FILE_PATH"
-grep -q "cron 2x/day" "$FILE_PATH"
-
-# Check for Week 4 content
-grep -q "Week 4" "$FILE_PATH"
-grep -q "msg_limit=500" "$FILE_PATH"
-grep -q "cron 4x/day" "$FILE_PATH"
-
-echo "Verification successful: $FILE_PATH contains all required rate limit information."
-exit 0

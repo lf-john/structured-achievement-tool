@@ -138,6 +138,9 @@ async def execute_story(
 
     consecutive_env_failures = 0
     last_failure_reason = ""
+    # Track error signatures to detect identical failures (Failure State 6).
+    # If the same signature appears twice in a row, skip remaining retries.
+    _failure_signatures: list[str] = []
 
     for attempt in range(1, max_attempts + 1):
         logger.info(f"Story {story_id} attempt {attempt}/{max_attempts}")

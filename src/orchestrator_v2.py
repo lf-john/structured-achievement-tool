@@ -90,8 +90,26 @@ class OrchestratorV2:
         self.max_retries = exec_config.get("max_retries_per_story", 5)
         self.mediator_enabled = exec_config.get("enable_mediator", False)
 
+    @staticmethod
+    def _sanitize_output(text: str) -> str:
+        """Strip system-reminder and other injected XML blocks from LLM output.
+
+        LLMs sometimes echo back system prompts or injected context blocks.
+        These must never appear in user-facing response files.
+        """
+        import re
+        # Remove <system-reminder>...</system-reminder> blocks (possibly multiline)
+        text = re.sub(
+            r'<system-reminder>.*?</system-reminder>',
+            '', text, flags=re.DOTALL,
+        )
+        # Remove any stray opening/closing tags that weren't paired
+        text = re.sub(r'</?system-reminder>', '', text)
+        return text
+
     async def _write_response(self, task_dir: str, content: str, is_final: bool = False):
         """Write a response file, finding the next available number."""
+        content = self._sanitize_output(content)
         i = 2
         while True:
             filename = f"{i:03d}_response.md"
