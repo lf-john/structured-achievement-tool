@@ -1,55 +1,13 @@
 #!/bin/bash
+# This script verifies the GrafanaClient implementation by running its unit tests.
+# It ensures that the client can be initialized, can handle authentication,
+# and that its methods for dashboard operations work as expected, all without
+# requiring a running Grafana instance.
+# The script will exit with 0 on success and a non-zero value on failure.
 
-# Exit immediately if a command exits with a non-zero status.
-set -e
+# It is expected that you first create the following files:
+# 1. src/monitoring/grafana_client.py
+# 2. tests/test_grafana_client.py
+# This script will fail if those files do not exist.
 
-echo "--- Verifying Directory Creation ---"
-if [ -d "$HOME/projects/system-reports/" ]; then
-    echo "OK: Directory ~/projects/system-reports/ exists."
-else
-    echo "FAIL: Directory ~/projects/system-reports/ does not exist."
-    exit 1
-fi
-
-echo ""
-echo "--- Verifying Python Module Files ---"
-FILES_TO_CHECK=(
-    "src/benchmarking/__init__.py"
-    "src/benchmarking/data_models.py"
-    "src/benchmarking/config.py"
-    "src/benchmarking/ollama_client.py"
-)
-
-for file in "${FILES_TO_CHECK[@]}"; do
-    if [ -f "$file" ]; then
-        echo "OK: File $file exists."
-    else
-        echo "FAIL: File $file does not exist."
-        exit 1
-    fi
-done
-
-echo ""
-echo "--- Verifying Ollama API Connectivity ---"
-# Use a short python script to test the client
-cat << 'EOF' > verify_client.py
-import sys
-from src.benchmarking.ollama_client import OllamaClient
-
-client = OllamaClient()
-if client.is_available():
-    print("OK: Ollama API is available.")
-    sys.exit(0)
-else:
-    print(f"FAIL: Could not connect to Ollama API at {client.base_url}.")
-    sys.exit(1)
-EOF
-
-python3 verify_client.py
-
-# Cleanup the temp script
-rm verify_client.py
-
-echo ""
-echo "--- Verification Successful ---"
-exit 0
+pytest tests/test_grafana_client.py -v

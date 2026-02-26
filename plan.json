@@ -1,83 +1,65 @@
 {
   "systemAnalysis": {
     "filesToChange": [
-      "src/benchmarking/data_models.py",
-      "src/benchmarking/config.py",
-      "src/benchmarking/ollama_client.py"
+      "src/execution/story_executor.py",
+      "src/execution/checkpoint_manager.py",
+      "tests/test_story_executor_v2.py",
+      "tests/test_checkpoint_manager.py"
     ],
-    "systemImpact": "This change is additive and introduces a new, isolated benchmarking module. It has no impact on the existing running system or services. The new module will only be active when explicitly executed.",
+    "systemImpact": "This change introduces a file I/O operation to write a JSON checkpoint file to the '.checkpoints/' directory after each story is successfully executed. The system is designed to be resilient; a failure to write a checkpoint will be logged but will not interrupt or block the main task execution workflow.",
     "externalDependencies": [
-      "Ollama API (http://localhost:11434)"
+      "None. The feature relies solely on the local filesystem and built-in Python libraries."
     ]
   },
   "executionSteps": [
     {
       "step": 1,
-      "description": "Create the directory `~/projects/system-reports/` to store future benchmark reports.",
-      "commands": [
-        "mkdir -p ~/projects/system-reports/"
-      ],
-      "files": []
-    },
-    {
-      "step": 2,
-      "description": "Create the Python package structure for the new benchmarking module.",
-      "commands": [
-        "mkdir -p src/benchmarking",
-        "touch src/benchmarking/__init__.py"
-      ],
-      "files": []
-    },
-    {
-      "step": 3,
-      "description": "Define the Pydantic data model for storing benchmark results.",
+      "description": "Create a new CheckpointManager module in `src/execution/checkpoint_manager.py` responsible for saving and managing workflow state checkpoints. This module will handle JSON serialization, file I/O, and error logging.",
       "commands": [],
       "files": [
         {
-          "path": "src/benchmarking/data_models.py",
-          "change": "Create a new file with a Pydantic `BenchmarkResult` model containing fields: `model_name`, `prompt`, `tokens_per_sec`, `time_to_first_token`, `total_response_time`, and `timestamp`."
+          "path": "src/execution/checkpoint_manager.py",
+          "change": "Create a new file to house the CheckpointManager class with a `save` method."
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "description": "Implement unit tests for the CheckpointManager in `tests/test_checkpoint_manager.py`. Tests will cover successful checkpoint creation and graceful failure handling (e.g., in case of file permission errors).",
+      "commands": [],
+      "files": [
+        {
+          "path": "tests/test_checkpoint_manager.py",
+          "change": "Create a new test file to validate the CheckpointManager's functionality."
+        }
+      ]
+    },
+    {
+      "step": 3,
+      "description": "Integrate the CheckpointManager into the StoryExecutor. Modify `src/execution/story_executor.py` to call the checkpoint manager after each story execution successfully completes, passing the current workflow state.",
+      "commands": [],
+      "files": [
+        {
+          "path": "src/execution/story_executor.py",
+          "change": "Import and instantiate CheckpointManager, then call its `save` method within the story execution loop."
         }
       ]
     },
     {
       "step": 4,
-      "description": "Create the configuration module for models, prompts, and the API endpoint.",
+      "description": "Update the tests for the StoryExecutor in `tests/test_story_executor_v2.py` to mock the CheckpointManager and assert that it is called with the correct state after each story. Verify that the workflow continues even if the checkpoint manager mock raises an exception.",
       "commands": [],
       "files": [
         {
-          "path": "src/benchmarking/config.py",
-          "change": "Create a new file defining lists of `MODELS` and `PROMPTS`, and the `OLLAMA_API_BASE_URL`."
+          "path": "tests/test_story_executor_v2.py",
+          "change": "Add patches and assertions to verify the new checkpointing integration."
         }
       ]
-    },
-    {
-      "step": 5,
-      "description": "Implement the HTTP client to communicate with the Ollama API.",
-      "commands": [],
-      "files": [
-        {
-          "path": "src/benchmarking/ollama_client.py",
-          "change": "Create a new file with an `OllamaClient` class that has methods to check API availability (`is_available`) and list models."
-        }
-      ]
-    },
-    {
-        "step": 6,
-        "description": "Create the verification script to ensure all components are set up correctly.",
-        "commands": ["chmod +x verify_script.sh"],
-        "files": [
-          {
-            "path": "verify_script.sh",
-            "change": "Create a new bash script that checks for the existence of the `~/projects/system-reports` directory, the created Python files, and verifies connectivity to the Ollama API using the new client."
-          }
-        ]
-      }
+    }
   ],
-  "verificationScript": "verify_script.sh created and executable",
+  "verificationScript": "verify_script.sh created and executable. It runs a self-contained Python script that simulates the execution of a task with multiple stories and verifies that a correctly formatted checkpoint file is created after the final story.",
   "rollbackPlan": [
-    "rm -rf ~/projects/system-reports/",
-    "rm -rf src/benchmarking/",
-    "rm verify_script.sh"
+    "git restore src/execution/story_executor.py tests/test_story_executor_v2.py",
+    "rm src/execution/checkpoint_manager.py tests/test_checkpoint_manager.py"
   ]
 }
-<promise>COMPLETE</promise>

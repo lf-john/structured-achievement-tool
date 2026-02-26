@@ -1,10 +1,12 @@
 import time, logging, os, asyncio, traceback, re, json, signal, atexit, sys
+import argparse
 from src.orchestrator_v2 import OrchestratorV2 as Orchestrator
 from src.execution.stability_timeout import StabilityTimeout
 from src.execution.slot_manager import SlotManager
 from src.execution.rate_limit_handler import RateLimitHandler
 from src.execution.audit_journal import AuditJournal
 from src.monitoring.metrics_exporter import start_metrics_server
+from src.core.checkpoint_manager import init_db, resume_incomplete_workflows
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -20,6 +22,7 @@ MAX_TASK_ATTEMPTS = 3
 
 # --- PID file lock (Failure State 14) ---
 PID_FILE = "/tmp/sat-daemon.pid"
+CHECKPOINT_DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".memory", "checkpoints.db")
 
 
 def _acquire_pid_lock():
@@ -272,7 +275,7 @@ async def process_task_wrapper(orchestrator, file_path, signal='pending',
             slot_manager.release_slot(slot_id)
         logging.info(f"Unlocking task: {file_path}")
 
-async def async_main():
+async def async_main(no_resume: bool = False):
     _acquire_pid_lock()
     atexit.register(_release_pid_lock)
     logging.info("Starting Structured Achievement Tool (SAT) Daemon...")
@@ -281,6 +284,22 @@ async def async_main():
         watch_dir = os.path.expanduser("~/GoogleDrive/DriveSyncFiles/sat-tasks")
         if not os.path.isdir(watch_dir):
             raise ValueError(f"Watch directory not found: {watch_dir}")
+
+        # Initialize checkpoint database (non-fatal)
+        try:
+            init_db(CHECKPOINT_DB_PATH)
+        except Exception as e:
+            logging.warning(f"Checkpoint DB init failed (non-fatal): {e}")
+
+        # Resume incomplete workflows (unless --no-resume flag is set)
+        if not no_resume:
+            logging.info("Attempting to resume incomplete workflows...")
+            try:
+                resume_incomplete_workflows(CHECKPOINT_DB_PATH)
+            except Exception as e:
+                logging.error(f"Failed to resume workflows (will continue): {e}")
+        else:
+            logging.info("Skipping workflow resumption due to --no-resume flag")
     except Exception as e:
         logging.error(f"Configuration error: {e}")
         return
@@ -393,8 +412,31 @@ async def async_main():
         await asyncio.sleep(5)
 
 def main():
+    """Main entry point for the daemon.
+
+    Parses command-line arguments and starts the daemon with optional
+    --no-resume flag to skip workflow resumption on startup.
+    """
+    parser = argparse.ArgumentParser(
+        description="Structured Achievement Tool (SAT) Daemon",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s                     # Start daemon with resume enabled (default)
+  %(prog)s --no-resume         # Start daemon without resuming workflows
+  %(prog)s --help              # Show this help message
+        """
+    )
+    parser.add_argument(
+        '--no-resume',
+        action='store_true',
+        help='Skip workflow resumption on daemon startup (useful for debugging)'
+    )
+
+    args = parser.parse_args()
+
     try:
-        asyncio.run(async_main())
+        asyncio.run(async_main(no_resume=args.no_resume))
     except KeyboardInterrupt:
         pass
     finally:

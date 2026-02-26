@@ -115,8 +115,8 @@ class EmbeddingService:
                     try:
                         return ollama.embeddings(model=self.model_name, prompt=text)
                     except Exception as retry_error:
-                        raise OllamaUnavailableError(f"Ollama embedding failed after restart: {retry_error}")
-            raise OllamaUnavailableError(f"Ollama embedding failed: {first_error}")
+                        raise Exception(f"Ollama embedding failed after restart: {retry_error}")
+            raise Exception(f"Ollama embedding failed: {first_error}")
 
     def embed_text(self, text: str) -> List[float]:
         """
@@ -183,10 +183,9 @@ class EmbeddingService:
         except ValueError as e:
             # Re-raise ValueError as-is (dimension validation)
             raise
-
-class OllamaUnavailableError(Exception):
-    """Custom exception for when Ollama is unavailable."""
-    pass
+        except Exception as e:
+            # Wrap other exceptions with context
+            raise Exception(f"Ollama embedding generation failed: {e}")
 
     def embed_batch(self, texts: List[str]) -> List[List[float]]:
         """

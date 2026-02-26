@@ -1,18 +1,39 @@
 {
-    "ollama_api_url": "http://localhost:11434/api/generate",
-    "ollama_model": "qwen2:7b",
-    "mautic_api_url": "https://mautic.example.com/api",
-    "mautic_api_token": "YOUR_MAUTIC_API_TOKEN",
-    "llm_cost_tracker": {
-        "daily_budget": 10.0,
-        "monthly_budget": 100.0,
-        "daily_warning_threshold": 0.8,
-        "monthly_warning_threshold": 0.9,
-        "model_pricing": {
-            "claude-3-opus-20240229": {
-                "input_cost_per_million_tokens": 15.0,
-                "output_cost_per_million_tokens": 75.0
-            }
-        }
-    }
+  "routing_strategy": "complexity_based",
+  "default_primary": "sonnet",
+  "default_backup": "deepseek_r1",
+  "routing_rules_enabled": true,
+  "phase_models": {},
+  "execution": {
+    "max_retries_per_story": 5,
+    "max_phase_retries": 10,
+    "use_worktree": false,
+    "enable_mediator": false,
+    "checkpoint_db": ".memory/checkpoints.db"
+  },
+  "routing_preferences": {
+    "reasoning_primary": "sonnet",
+    "reasoning_backup": "deepseek_r1",
+    "code_primary": "sonnet",
+    "code_backup": "qwen25_coder",
+    "classification_primary": "qwen3_8b",
+    "classification_backup": "nemotron"
+  },
+  "proactive_agency": {
+    "enabled": false,
+    "maintenance_interval_hours": 168,
+    "dependency_check_interval_hours": 336,
+    "config_validation_interval_hours": 24,
+    "story_output_dir": "~/GoogleDrive/DriveSyncFiles/sat-tasks/maintenance"
+  },
+  "progress_bar": {
+    "enabled": true,
+    "update_on_story_complete": true,
+    "update_on_phase_transition": false
+  },
+  "metrics": {
+    "enabled": true,
+    "exporter_port": 9101,
+    "export_interval_seconds": 60
+  }
 }
