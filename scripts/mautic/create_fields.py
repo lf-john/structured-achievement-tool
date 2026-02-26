@@ -62,8 +62,7 @@ def create_fields():
             if e.response:
                 print(f"Response body: {e.response.text}")
     
-    print("
-Field creation process complete.")
+    print("\nField creation process complete.")
 
 if __name__ == "__main__":
     create_fields()
