@@ -38,34 +38,53 @@ For 30,000 contacts, an optimal batch size is crucial to balance performance and
 - **Manual Review/Merge:** Empower sales or marketing teams to manually review and merge duplicate records within SuiteCRM.
 
 ### Synchronization Conflict Resolution
-- **Last Modified Wins:** By default, Mautic's SuiteCRM plugin often uses a "last modified wins" approach. The record most recently updated in either system will overwrite older data during sync.
-- **Custom Logic (Advanced):** For more complex scenarios, consider custom Mautic plugins or SuiteCRM logic hooks to implement specific conflict resolution rules (e.g., always prefer data from SuiteCRM for certain fields).
+-   **Last Modified Wins:** In cases where a field is updated in both systems simultaneously, the value from the system where the field was most recently modified will take precedence. The `last_modified_date` or `date_modified` timestamps of the respective records are compared to determine the winning value.
+-   **System Preference for Key Fields:** For certain critical fields (e.g., `email1` or unique identifiers), SuiteCRM is designated as the master system. Changes to these fields in Mautic will not overwrite the SuiteCRM value if a conflict is detected, unless explicitly overridden by an administrator.
+-   **Logging and Alerts:** All detected conflicts and their resolutions are logged in the integration's activity log. Critical conflicts that cannot be automatically resolved are flagged, and an alert is sent to the system administrator for manual review and intervention.
 
 ## Field Mappings
 
-| Mautic Field      | SuiteCRM Field    | Notes                                    |
-|-------------------|-------------------|------------------------------------------|
-| Email             | email1            | Primary identifier                       |
-| First Name        | first_name        |                                          |
-| Last Name         | last_name         |                                          |
-| Company           | account_name      | Mapped to primary account in SuiteCRM    |
-| Phone             | phone_work        |                                          |
-| City              | primary_address_city |                                          |
-| State             | primary_address_state |                                          |
-| Zip Code          | primary_address_postalcode |                                   |
-| Country           | primary_address_country |                                   |
-| Lead Source       | lead_source       | Custom field mapping may be required     |
-| Marketing Segment | description       | Mapped to a text area in SuiteCRM, or a custom field |
+The following fields are configured for mapping:
+
+| SuiteCRM Field (Contacts/Leads) | Mautic Field (Contacts) | Mapping Direction | Notes |
+|---------------------------------|-------------------------|-------------------|-------|
+| `first_name`                    | `firstname`             | Bidirectional     |       |
+| `last_name`                     | `lastname`              | Bidirectional     |       |
+| `email1`                        | `email`                 | Bidirectional     |       |
+| `phone_work`                    | `phone`                 | Bidirectional     |       |
+| `title`                         | `position`              | Bidirectional     |       |
+| `account_name`                  | `company`               | Bidirectional     |       |
+| `primary_address_street`        | `address1`              | Bidirectional     |       |
+| `primary_address_city`          | `city`                  | Bidirectional     |       |
+| `primary_address_state`         | `state`                 | Bidirectional     |       |
+| `primary_address_postalcode`    | `zipcode`               | Bidirectional     |       |
+| `primary_address_country`       | `country`               | Bidirectional     |       |
+| `lead_source`                   | `lead_source`           | SuiteCRM -> Mautic| Unidirectional |
+| `status`                        | `segment`               | Bidirectional     | Mautic equivalent for lead/contact status |
+| `description`                   | `notes`                 | Bidirectional     | Mautic equivalent for general description/notes |
 
 ## Custom Fields
 
-If custom fields are used in either Mautic or SuiteCRM, they must be explicitly mapped in the Mautic SuiteCRM plugin settings.
+To add new custom fields to the bidirectional mapping, follow these steps:
 
-1.  **Create Custom Fields:** Ensure the custom fields exist in both Mautic and SuiteCRM with compatible data types.
-2.  **Map in Mautic:**
-    *   Go to Mautic UI: `Settings` > `Plugins` > `SuiteCRM`.
-    *   Navigate to the `Field Mapping` tab.
-    *   Add new mappings for your custom fields, linking the Mautic custom field to the corresponding SuiteCRM custom field.
+1.  **Create Custom Field in SuiteCRM:**
+    *   Navigate to `Admin > Studio`.
+    *   Select the `Contacts` and/or `Leads` module.
+    *   Add a new custom field with the desired name and type.
+    *   Deploy the changes.
+
+2.  **Create Custom Field in Mautic:**
+    *   Navigate to `Settings > Custom Fields`.
+    *   Create a new custom field with a matching name (or a logical equivalent) and type.
+    *   Ensure the field is marked as "Publicly Updatable" if it's intended for form submissions or API updates.
+
+3.  **Update Mapping Configuration:**
+    *   Identify the integration point or configuration file responsible for SuiteCRM-Mautic synchronization. (e.g., a custom integration script or a plugin configuration).
+    *   Add a new entry to the mapping table, specifying:
+        *   SuiteCRM field name (e.g., `suitecrm_custom_field__c`)
+        *   Mautic field name (e.g., `mautic_custom_field`)
+        *   Desired mapping direction (Bidirectional, SuiteCRM -> Mautic, or Mautic -> SuiteCRM).
+    *   Restart or refresh the integration service to apply the new mapping.
 
 ## Step-by-Step Configuration Guide (Mautic UI)
 
