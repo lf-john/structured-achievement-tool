@@ -67,8 +67,13 @@ class RoutingEngine:
     # Cooldown period (seconds) after a 429 before retrying the same provider
     RATE_LIMIT_COOLDOWN = 120
 
-    # Pause-all threshold: if this many distinct providers return 429 within
-    # PAUSE_ALL_WINDOW seconds, all LLM calls are paused for PAUSE_ALL_DURATION.
+    # Gemini-specific cascade: ordered list of Gemini providers to try.
+    # When one hits 429, try the next. If ALL hit 429, cooldown for 30 min.
+    GEMINI_CASCADE = ["gemini_flash", "gemini_25_flash", "gemini_31_pro", "gemini_pro"]
+    GEMINI_CASCADE_COOLDOWN = 1800  # 30 minutes when all Gemini models exhausted
+
+    # Pause-all threshold: if this many distinct NON-GEMINI providers return 429
+    # within PAUSE_ALL_WINDOW seconds, all LLM calls are paused.
     PAUSE_ALL_THRESHOLD = 2
     PAUSE_ALL_WINDOW = 60  # seconds
     PAUSE_ALL_DURATION = 120  # seconds
@@ -91,35 +96,74 @@ class RoutingEngine:
         """Return True if all LLM calls are paused due to rate limit cascade."""
         return time.monotonic() < self._paused_until
 
-    def mark_rate_limited(self, provider_name: str):
-        """Mark a provider as rate-limited. It will be deprioritized for RATE_LIMIT_COOLDOWN seconds.
+    def _is_gemini(self, provider_name: str) -> bool:
+        """Check if a provider is a Gemini model."""
+        return provider_name in self.GEMINI_CASCADE
 
-        If multiple distinct providers hit 429 within PAUSE_ALL_WINDOW, triggers
-        a global pause (Failure State 5: rate limit cascade).
+    def _all_gemini_rate_limited(self) -> bool:
+        """Check if all Gemini cascade providers are currently rate-limited."""
+        now = time.monotonic()
+        for name in self.GEMINI_CASCADE:
+            if name not in self._rate_limited:
+                return False
+            if now - self._rate_limited[name] >= self.RATE_LIMIT_COOLDOWN:
+                return False
+        return True
+
+    def mark_rate_limited(self, provider_name: str):
+        """Mark a provider as rate-limited.
+
+        Gemini cascade: when a Gemini provider hits 429, it gets a normal cooldown
+        so the next Gemini provider in the cascade is tried. If ALL Gemini providers
+        are rate-limited, all get a 30-minute cooldown.
+
+        Non-Gemini: if enough non-Gemini providers hit 429 within PAUSE_ALL_WINDOW,
+        triggers a global pause.
         """
         now = time.monotonic()
         self._rate_limited[provider_name] = now
         logger.info(f"Provider {provider_name} marked rate-limited for {self.RATE_LIMIT_COOLDOWN}s")
 
-        # Check for cascade: count providers that hit 429 within the window
+        # Gemini-specific cascade logic
+        if self._is_gemini(provider_name):
+            if self._all_gemini_rate_limited():
+                # All 4 Gemini models exhausted — 30 min cooldown on all
+                for name in self.GEMINI_CASCADE:
+                    self._rate_limited[name] = now
+                logger.warning(
+                    "All Gemini models rate-limited. Putting ALL Gemini on %ds cooldown.",
+                    self.GEMINI_CASCADE_COOLDOWN,
+                )
+            return  # Don't trigger pause-all for Gemini 429s
+
+        # Non-Gemini cascade check
         recent_count = sum(
-            1 for ts in self._rate_limited.values()
-            if now - ts < self.PAUSE_ALL_WINDOW
+            1 for name, ts in self._rate_limited.items()
+            if now - ts < self.PAUSE_ALL_WINDOW and not self._is_gemini(name)
         )
         if recent_count >= self.PAUSE_ALL_THRESHOLD and not self.is_paused:
             self._paused_until = now + self.PAUSE_ALL_DURATION
             logger.warning(
-                "Rate limit cascade: %d providers hit 429 within %ds. "
+                "Rate limit cascade: %d non-Gemini providers hit 429 within %ds. "
                 "Pausing ALL LLM calls for %ds.",
                 recent_count, self.PAUSE_ALL_WINDOW, self.PAUSE_ALL_DURATION,
             )
 
     def _is_rate_limited(self, provider_name: str) -> bool:
-        """Check if a provider is currently in cooldown."""
+        """Check if a provider is currently in cooldown.
+
+        Uses GEMINI_CASCADE_COOLDOWN for Gemini providers when all Gemini models
+        are rate-limited, otherwise uses RATE_LIMIT_COOLDOWN.
+        """
         if provider_name not in self._rate_limited:
             return False
         elapsed = time.monotonic() - self._rate_limited[provider_name]
-        if elapsed >= self.RATE_LIMIT_COOLDOWN:
+        # Use longer cooldown when all Gemini models are exhausted
+        if self._is_gemini(provider_name) and self._all_gemini_rate_limited():
+            cooldown = self.GEMINI_CASCADE_COOLDOWN
+        else:
+            cooldown = self.RATE_LIMIT_COOLDOWN
+        if elapsed >= cooldown:
             del self._rate_limited[provider_name]
             return False
         return True

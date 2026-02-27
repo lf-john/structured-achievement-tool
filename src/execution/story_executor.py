@@ -11,6 +11,7 @@ Handles:
 """
 
 import asyncio
+import datetime # Added for checkpoint metadata timestamp
 import logging
 import time
 from dataclasses import dataclass, field
@@ -73,6 +74,7 @@ def get_workflow_for_story(
     story: dict,
     routing_engine: RoutingEngine,
     notifier: Optional[Notifier] = None,
+    checkpointer=None,
 ):
     """Select and compile the appropriate workflow for a story type."""
     story_type = story.get("type", "development")
@@ -96,7 +98,7 @@ def get_workflow_for_story(
     else:
         workflow = workflow_cls(routing_engine=routing_engine)
 
-    return workflow.compile()
+    return workflow.compile(checkpointer=checkpointer)
 
 
 async def execute_story(
@@ -130,170 +132,190 @@ async def execute_story(
     story_id = story.get("id", "unknown")
     story_title = story.get("title", "Untitled")
 
-    # Get compiled workflow
-    graph = get_workflow_for_story(story, re, notifier=notifier)
+    from langgraph.checkpoint.sqlite import SqliteSaver
+    import os
+    db_path = os.path.join(working_directory, ".memory", "checkpoints.db")
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
-    # Capture base commit for reset on retry
-    base_commit = get_current_commit(working_directory)
+    with SqliteSaver.from_conn_string(db_path) as checkpointer:
+        # Get compiled workflow
+        graph = get_workflow_for_story(story, re, notifier=notifier, checkpointer=checkpointer)
 
-    consecutive_env_failures = 0
-    last_failure_reason = ""
-    # Track error signatures to detect identical failures (Failure State 6).
-    # If the same signature appears twice in a row, skip remaining retries.
-    _failure_signatures: list[str] = []
+        # Capture base commit for reset on retry
+        base_commit = get_current_commit(working_directory)
 
-    for attempt in range(1, max_attempts + 1):
-        logger.info(f"Story {story_id} attempt {attempt}/{max_attempts}")
+        consecutive_env_failures = 0
+        last_failure_reason = ""
+        # Track error signatures to detect identical failures (Failure State 6).
+        # If the same signature appears twice in a row, skip remaining retries.
+        _failure_signatures: list[str] = []
 
-        # Check for cancellation
-        if cancellation_event and cancellation_event.is_set():
-            return StoryResult(
-                story_id=story_id,
-                success=False,
-                attempts=attempt,
-                reason="Cancelled by user",
-            )
+        for attempt in range(1, max_attempts + 1):
+            logger.info(f"Story {story_id} attempt {attempt}/{max_attempts}")
 
-        # Reset on retry (keep code for verify failures, full reset otherwise)
-        if attempt > 1 and base_commit:
-            if last_failure_reason == "verify_failure":
-                logger.info(f"Keeping code for verify retry (attempt {attempt})")
-            else:
-                logger.info(f"Resetting to base commit for retry (attempt {attempt})")
-                reset_to_commit(working_directory, base_commit)
-
-        # Create initial state
-        state = create_initial_state(
-            story=story,
-            task_id=task_id,
-            task_description=task_description,
-            working_directory=working_directory,
-            max_attempts=max_attempts,
-            mediator_enabled=mediator_enabled,
-        )
-        state["story_attempt"] = attempt
-        state["failure_context"] = last_failure_reason if attempt > 1 else ""
-
-        # Execute the workflow
-        try:
-            final_state = graph.invoke(state)
-
-            # Check if workflow completed successfully
-            phase_outputs = final_state.get("phase_outputs", [])
-            last_phase = phase_outputs[-1] if phase_outputs else {}
-            last_status = last_phase.get("status", "failed")
-
-            # verify_passed is None when workflow has no verification phase (e.g., research).
-            # Treat None as "no verification needed" (success), only False means failure.
-            verify_passed = final_state.get("verify_passed")
-            if last_status == "complete" and verify_passed is not False:
-                # Success
-                if notifier:
-                    notifier.notify_story_complete(story_id, story_title)
-
+            # Check for cancellation
+            if cancellation_event and cancellation_event.is_set():
                 return StoryResult(
                     story_id=story_id,
-                    success=True,
+                    success=False,
                     attempts=attempt,
-                    phase_outputs=phase_outputs,
+                    reason="Cancelled by user",
                 )
 
-            # Workflow completed but with failures
-            failure_output = final_state.get("failure_context", "")
-            classification = classify_failure(
-                exit_code=last_phase.get("exit_code", 1),
-                output=failure_output,
-                phase=last_phase.get("phase", ""),
-            )
+            # Reset on retry (keep code for verify failures, full reset otherwise)
+            if attempt > 1 and base_commit:
+                if last_failure_reason == "verify_failure":
+                    logger.info(f"Keeping code for verify retry (attempt {attempt})")
+                else:
+                    logger.info(f"Resetting to base commit for retry (attempt {attempt})")
+                    reset_to_commit(working_directory, base_commit)
 
-            # Identical-failure detection (Failure State 6):
-            # Compute a short signature from phase + first 200 chars of error.
-            # If the last 2 signatures are identical, stop retrying.
-            _sig = f"{last_phase.get('phase', '')}:{failure_output[:200]}"
-            _failure_signatures.append(_sig)
-            if (
-                len(_failure_signatures) >= 2
-                and _failure_signatures[-1] == _failure_signatures[-2]
-            ):
-                logger.warning(
-                    "Identical failure signature detected twice for %s — "
-                    "skipping remaining retries",
-                    story_id,
+            config = {
+                "configurable": {
+                    "thread_id": f"{story_id}_attempt_{attempt}",
+                    "task_id": task_id,
+                },
+                "metadata": {
+                    "task_id": task_id,
+                    "timestamp": datetime.datetime.now().isoformat(),
+                },
+            }
+
+            # Check if we should resume
+            state_to_invoke = None
+            checkpoint_state = graph.get_state(config)
+            if not checkpoint_state.values:
+                # Create initial state for fresh run
+                state_to_invoke = create_initial_state(
+                    story=story,
+                    task_id=task_id,
+                    task_description=task_description,
+                    working_directory=working_directory,
+                    max_attempts=max_attempts,
+                    mediator_enabled=mediator_enabled,
                 )
-                if notifier:
-                    notifier.notify_story_failed(
-                        story_id, story_title,
-                        f"Identical failure x2: {classification.message}",
+                state_to_invoke["story_attempt"] = attempt
+                state_to_invoke["failure_context"] = last_failure_reason if attempt > 1 else ""
+
+            try:
+                final_state = graph.invoke(state_to_invoke, config=config)
+
+                # Check if workflow completed successfully
+                phase_outputs = final_state.get("phase_outputs", [])
+                last_phase = phase_outputs[-1] if phase_outputs else {}
+                last_status = last_phase.get("status", "failed")
+
+                # verify_passed is None when workflow has no verification phase (e.g., research).
+                # Treat None as "no verification needed" (success), only False means failure.
+                verify_passed = final_state.get("verify_passed")
+                if last_status == "complete" and verify_passed is not False:
+                    # Success
+                    if notifier:
+                        notifier.notify_story_complete(story_id, story_title)
+
+                    return StoryResult(
+                        story_id=story_id,
+                        success=True,
+                        attempts=attempt,
+                        phase_outputs=phase_outputs,
                     )
-                return StoryResult(
-                    story_id=story_id,
-                    success=False,
-                    attempts=attempt,
-                    reason=f"Identical failure x2. Last: {classification.message}",
-                    phase_outputs=phase_outputs,
+
+                # Workflow completed but with failures
+                failure_output = final_state.get("failure_context", "")
+                classification = classify_failure(
+                    exit_code=last_phase.get("exit_code", 1),
+                    output=failure_output,
+                    phase=last_phase.get("phase", ""),
                 )
 
-            if classification.severity == FailureSeverity.TRANSIENT:
-                consecutive_env_failures = 0
-                last_failure_reason = failure_output
+                # Identical-failure detection (Failure State 6):
+                # Compute a short signature from phase + first 200 chars of error.
+                # If the last 2 signatures are identical, stop retrying.
+                _sig = f"{last_phase.get('phase', '')}:{failure_output[:200]}"
+                _failure_signatures.append(_sig)
+                if (
+                    len(_failure_signatures) >= 2
+                    and _failure_signatures[-1] == _failure_signatures[-2]
+                ):
+                    logger.warning(
+                        "Identical failure signature detected twice for %s — "
+                        "skipping remaining retries",
+                        story_id,
+                    )
+                    if notifier:
+                        notifier.notify_story_failed(
+                            story_id, story_title,
+                            f"Identical failure x2: {classification.message}",
+                        )
+                    return StoryResult(
+                        story_id=story_id,
+                        success=False,
+                        attempts=attempt,
+                        reason=f"Identical failure x2. Last: {classification.message}",
+                        phase_outputs=phase_outputs,
+                    )
+
+                if classification.severity == FailureSeverity.TRANSIENT:
+                    consecutive_env_failures = 0
+                    last_failure_reason = failure_output
+                    delay = min(RETRY_BASE_DELAY * (2 ** (attempt - 1)), RETRY_MAX_DELAY)
+                    logger.info(f"Transient failure, retrying in {delay}s: {classification.message}")
+                    await asyncio.sleep(delay)
+                    continue
+
+                elif classification.severity == FailureSeverity.FATAL:
+                    logger.error(f"Fatal failure for {story_id}: {classification.message}")
+                    if notifier:
+                        notifier.notify_story_failed(story_id, story_title, classification.message)
+                    return StoryResult(
+                        story_id=story_id,
+                        success=False,
+                        attempts=attempt,
+                        reason=classification.message,
+                        phase_outputs=phase_outputs,
+                    )
+
+                else:
+                    # Persistent failure — retry with context
+                    last_failure_reason = failure_output
+                    if "verify" in last_phase.get("phase", "").lower():
+                        last_failure_reason = "verify_failure"
+
+                    delay = min(RETRY_BASE_DELAY * (2 ** (attempt - 1)), RETRY_MAX_DELAY)
+                    logger.info(f"Persistent failure, retrying in {delay}s: {classification.message}")
+                    await asyncio.sleep(delay)
+
+            except Exception as e:
+                logger.error(f"Story {story_id} execution error: {e}")
+
+                classification = classify_failure(exit_code=-1, output=str(e))
+
+                if classification.severity == FailureSeverity.TRANSIENT:
+                    consecutive_env_failures += 1
+                else:
+                    consecutive_env_failures = 0
+
+                # Circuit breaker
+                if consecutive_env_failures >= CIRCUIT_BREAKER_THRESHOLD:
+                    logger.error(f"Circuit breaker triggered for {story_id} after {consecutive_env_failures} environmental failures")
+                    return StoryResult(
+                        story_id=story_id,
+                        success=False,
+                        attempts=attempt,
+                        reason=f"Circuit breaker: {consecutive_env_failures} consecutive environmental failures",
+                    )
+
+                last_failure_reason = str(e)
                 delay = min(RETRY_BASE_DELAY * (2 ** (attempt - 1)), RETRY_MAX_DELAY)
-                logger.info(f"Transient failure, retrying in {delay}s: {classification.message}")
-                await asyncio.sleep(delay)
-                continue
-
-            elif classification.severity == FailureSeverity.FATAL:
-                logger.error(f"Fatal failure for {story_id}: {classification.message}")
-                if notifier:
-                    notifier.notify_story_failed(story_id, story_title, classification.message)
-                return StoryResult(
-                    story_id=story_id,
-                    success=False,
-                    attempts=attempt,
-                    reason=classification.message,
-                    phase_outputs=phase_outputs,
-                )
-
-            else:
-                # Persistent failure — retry with context
-                last_failure_reason = failure_output
-                if "verify" in last_phase.get("phase", "").lower():
-                    last_failure_reason = "verify_failure"
-
-                delay = min(RETRY_BASE_DELAY * (2 ** (attempt - 1)), RETRY_MAX_DELAY)
-                logger.info(f"Persistent failure, retrying in {delay}s: {classification.message}")
                 await asyncio.sleep(delay)
 
-        except Exception as e:
-            logger.error(f"Story {story_id} execution error: {e}")
+        # Exhausted all attempts
+        if notifier:
+            notifier.notify_story_failed(story_id, story_title, f"Failed after {max_attempts} attempts")
 
-            classification = classify_failure(exit_code=-1, output=str(e))
-
-            if classification.severity == FailureSeverity.TRANSIENT:
-                consecutive_env_failures += 1
-            else:
-                consecutive_env_failures = 0
-
-            # Circuit breaker
-            if consecutive_env_failures >= CIRCUIT_BREAKER_THRESHOLD:
-                logger.error(f"Circuit breaker triggered for {story_id} after {consecutive_env_failures} environmental failures")
-                return StoryResult(
-                    story_id=story_id,
-                    success=False,
-                    attempts=attempt,
-                    reason=f"Circuit breaker: {consecutive_env_failures} consecutive environmental failures",
-                )
-
-            last_failure_reason = str(e)
-            delay = min(RETRY_BASE_DELAY * (2 ** (attempt - 1)), RETRY_MAX_DELAY)
-            await asyncio.sleep(delay)
-
-    # Exhausted all attempts
-    if notifier:
-        notifier.notify_story_failed(story_id, story_title, f"Failed after {max_attempts} attempts")
-
-    return StoryResult(
-        story_id=story_id,
-        success=False,
-        attempts=max_attempts,
-        reason=f"Exhausted {max_attempts} attempts. Last failure: {last_failure_reason}",
-    )
+        return StoryResult(
+            story_id=story_id,
+            success=False,
+            attempts=max_attempts,
+            reason=f"Exhausted {max_attempts} attempts. Last failure: {last_failure_reason}",
+        )

@@ -382,6 +382,6 @@ class ApprovalWorkflow:
 
         return builder
 
-    def compile(self):
+    def compile(self, checkpointer=None):
         """Compile the approval workflow graph."""
-        return self.build_graph().compile()
+        return self.build_graph().compile(checkpointer=checkpointer)

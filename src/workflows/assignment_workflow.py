@@ -112,5 +112,5 @@ class AssignmentWorkflow:
 
         return builder
 
-    def compile(self):
-        return self.build_graph().compile()
+    def compile(self, checkpointer=None):
+        return self.build_graph().compile(checkpointer=checkpointer)

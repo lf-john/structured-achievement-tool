@@ -73,6 +73,15 @@ PROVIDERS: Dict[str, ProviderConfig] = {
         model_id="claude-haiku-4-5-20251001",
         agentic=True,
     ),
+    "gemini_31_pro": ProviderConfig(
+        name="gemini_31_pro",
+        power=9, code_power=9, speed=5,
+        cost_tier=CostTier.MEDIUM,
+        context_window=1_000_000,
+        cli_command="gemini",
+        model_id="gemini-3.1-pro-preview",
+        agentic=True,
+    ),
     "gemini_pro": ProviderConfig(
         name="gemini_pro",
         power=9, code_power=9, speed=5,
@@ -94,6 +103,15 @@ PROVIDERS: Dict[str, ProviderConfig] = {
     ),
     "gemini_flash": ProviderConfig(
         name="gemini_flash",
+        power=7, code_power=7, speed=9,
+        cost_tier=CostTier.MINIMAL,
+        context_window=1_000_000,
+        cli_command="gemini",
+        model_id="gemini-3-flash-preview",
+        agentic=True,
+    ),
+    "gemini_25_flash": ProviderConfig(
+        name="gemini_25_flash",
         power=6, code_power=6, speed=9,
         cost_tier=CostTier.MINIMAL,
         context_window=1_000_000,

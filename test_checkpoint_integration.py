@@ -1,10 +1,3 @@
-#!/bin/bash
-set -e
-
-source venv/bin/activate
-
-# Create a simple test script to run execute_story
-cat << 'PYEOF' > test_checkpoint_integration.py
 import asyncio
 import os
 import shutil
@@ -53,6 +46,3 @@ async def run_test():
 
 if __name__ == "__main__":
     asyncio.run(run_test())
-PYEOF
-
-python test_checkpoint_integration.py

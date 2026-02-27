@@ -773,6 +773,6 @@ class BaseWorkflow(ABC):
         """
         ...
 
-    def compile(self):
+    def compile(self, checkpointer=None):
         """Compile the workflow graph."""
-        return self.build_graph().compile()
+        return self.build_graph().compile(checkpointer=checkpointer)

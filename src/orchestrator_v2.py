@@ -125,11 +125,13 @@ class OrchestratorV2:
                 return
             i += 1
 
-    async def process_task_file(self, file_path: str):
+    async def process_task_file(self, file_path: str, mark_status_callback=None):
         """Process a task file: classify, decompose, execute stories.
 
         Args:
             file_path: Path to the .md task file
+            mark_status_callback: Optional callable(success: bool) to update the
+                task file tag BEFORE writing the final response file.
 
         Returns:
             dict with status and returncode
@@ -213,6 +215,8 @@ class OrchestratorV2:
                         max_attempts=self.max_retries,
                         mediator_enabled=self.mediator_enabled,
                         cancellation_event=cancellation_event,
+                        audit_journal=self.audit_journal,
+                        task_file=file_path,
                     )
                 )
 
@@ -278,6 +282,14 @@ class OrchestratorV2:
         log_content = "\n".join(log_parts)
 
         await self._write_response(task_dir, log_content)
+
+        # Update task file tag BEFORE writing response file so the monitor
+        # never sees a response appear while the task is still <Working>.
+        if mark_status_callback:
+            try:
+                mark_status_callback(success)
+            except Exception as e:
+                logger.warning(f"mark_status_callback failed: {e}")
 
         # Write final status
         if success:

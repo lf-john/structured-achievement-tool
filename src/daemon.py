@@ -1,4 +1,4 @@
-import time, logging, os, asyncio, traceback, re, json, signal, atexit, sys
+import time, logging, os, asyncio, traceback, re, json, signal, atexit, sys, shutil
 import argparse
 from src.orchestrator_v2 import OrchestratorV2 as Orchestrator
 from src.execution.stability_timeout import StabilityTimeout
@@ -217,6 +217,10 @@ async def process_task_wrapper(orchestrator, file_path, signal='pending',
     trigger_tag = SIGNAL_TAGS.get(signal, '<Pending>')
     mark_file_status(file_path, trigger_tag, '<Working>')
 
+    # Track whether the mark_status_callback already updated the tag
+    # (only used for normal 'pending' tasks, not PRD signals)
+    _status_already_set = False
+
     # Route to the appropriate orchestrator method
     if signal in PRD_SIGNALS:
         orchestrator_task = asyncio.create_task(
@@ -227,8 +231,16 @@ async def process_task_wrapper(orchestrator, file_path, signal='pending',
             orchestrator.process_prd_to_decompose(file_path)
         )
     else:
+        # Build a callback so the orchestrator can update the task file tag
+        # BEFORE it writes the final response file.
+        def _mark_status(success: bool):
+            nonlocal _status_already_set
+            tag = '<Finished>' if success else '<Failed>'
+            mark_file_status(file_path, '<Working>', tag)
+            _status_already_set = True
+
         orchestrator_task = asyncio.create_task(
-            orchestrator.process_task_file(file_path)
+            orchestrator.process_task_file(file_path, mark_status_callback=_mark_status)
         )
     monitor_task = asyncio.create_task(monitor_cancellation(file_path, orchestrator_task))
 
@@ -241,8 +253,13 @@ async def process_task_wrapper(orchestrator, file_path, signal='pending',
             logging.info(f"PRD phase complete for {file_path}")
             processing_attempts.pop(file_path, None)  # Clear on success
         elif result and result.get("returncode") == 0:
-            tagged = mark_file_status(file_path, '<Working>', '<Finished>')
-            logging.info(f"Marked {file_path} as <Finished>: {tagged}")
+            # The mark_status_callback may have already set the tag inside
+            # the orchestrator (before the response file was written).
+            if not _status_already_set:
+                tagged = mark_file_status(file_path, '<Working>', '<Finished>')
+                logging.info(f"Marked {file_path} as <Finished>: {tagged}")
+            else:
+                logging.info(f"Tag already set to <Finished> via callback for {file_path}")
             processing_attempts.pop(file_path, None)  # Clear on success
             # Remove from rate limit retry queue on success
             if rate_limit_handler:
@@ -258,9 +275,11 @@ async def process_task_wrapper(orchestrator, file_path, signal='pending',
                 # Revert to Pending so it can be retried
                 mark_file_status(file_path, '<Working>', '<Pending>')
                 logging.info(f"Rate-limited task queued for retry: {file_path}")
-            else:
+            elif not _status_already_set:
                 tagged = mark_file_status(file_path, '<Working>', '<Failed>')
                 logging.info(f"Marked {file_path} as <Failed>: {tagged} (returncode={result.get('returncode') if result else 'None'})")
+            else:
+                logging.info(f"Tag already set to <Failed> via callback for {file_path}")
     except asyncio.CancelledError:
         logging.info(f"Task for {file_path} was cancelled.")
         if not mark_file_status(file_path, '<Cancel>', '<Finished>'):
@@ -290,6 +309,32 @@ async def async_main(no_resume: bool = False):
             init_db(CHECKPOINT_DB_PATH)
         except Exception as e:
             logging.warning(f"Checkpoint DB init failed (non-fatal): {e}")
+
+        # --- Config.json validation + backup ---
+        config_path = os.path.join(project_path, "config.json")
+        config_bak_path = config_path + ".bak"
+        REQUIRED_CONFIG_KEYS = {"routing_strategy", "execution", "metrics"}
+
+        config_valid = False
+        try:
+            with open(config_path, "r") as f:
+                config_data = json.load(f)
+            missing = REQUIRED_CONFIG_KEYS - set(config_data.keys())
+            if missing:
+                raise ValueError(f"Missing required config keys: {missing}")
+            config_valid = True
+        except (OSError, json.JSONDecodeError, ValueError) as e:
+            logging.error(f"Config validation failed: {e}")
+            if os.path.exists(config_bak_path):
+                logging.info("Restoring config.json from backup...")
+                shutil.copy2(config_bak_path, config_path)
+                logging.info("Config restored from config.json.bak")
+            else:
+                logging.error("No config.json.bak available to restore from")
+
+        if config_valid:
+            shutil.copy2(config_path, config_bak_path)
+            logging.info("Config validated OK — backup saved to config.json.bak")
 
         # Resume incomplete workflows (unless --no-resume flag is set)
         if not no_resume:
