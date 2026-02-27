@@ -12,7 +12,9 @@ Handles:
 
 import asyncio
 import datetime # Added for checkpoint metadata timestamp
+import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -29,8 +31,16 @@ from src.workflows.qa_feedback_workflow import QAFeedbackWorkflow
 from src.workflows.escalation_workflow import EscalationWorkflow
 from src.llm.routing_engine import RoutingEngine
 from src.agents.failure_classifier import classify_failure, FailureSeverity
-from src.execution.git_manager import get_current_commit, reset_to_commit
+from src.execution.git_manager import (
+    get_current_commit,
+    reset_to_commit,
+    create_story_worktree,
+    merge_story_worktree,
+    remove_story_worktree,
+    get_worktree_diff,
+)
 from src.notifications.notifier import Notifier
+from src.core.checkpoint_manager import write_checkpoint, read_checkpoint, Checkpoint
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +111,23 @@ def get_workflow_for_story(
     return workflow.compile(checkpointer=checkpointer)
 
 
+def _load_execution_config() -> dict:
+    """Load execution config from config.json.
+
+    Returns the 'execution' block, or an empty dict if not found.
+    """
+    config_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "config.json",
+    )
+    try:
+        with open(config_path, "r") as f:
+            return json.load(f).get("execution", {})
+    except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
+        logger.warning(f"Could not load config.json: {e}")
+        return {}
+
+
 async def execute_story(
     story: dict,
     task_id: str,
@@ -113,6 +140,11 @@ async def execute_story(
     cancellation_event: Optional[asyncio.Event] = None,
 ) -> StoryResult:
     """Execute a story through its workflow with retry logic.
+
+    If ``use_worktree`` is enabled in config.json the story runs inside an
+    isolated git worktree so the main repo is never modified by agentic LLMs.
+    On success the worktree branch is merged back; on failure the worktree is
+    simply discarded.
 
     Args:
         story: Story dict from PRD
@@ -132,8 +164,95 @@ async def execute_story(
     story_id = story.get("id", "unknown")
     story_title = story.get("title", "Untitled")
 
+    # --- Worktree isolation ---
+    exec_config = _load_execution_config()
+    use_worktree = exec_config.get("use_worktree", False)
+    worktree_path: Optional[str] = None
+    effective_working_dir = working_directory
+
+    if use_worktree:
+        try:
+            worktree_path = create_story_worktree(story_id, working_directory)
+            effective_working_dir = worktree_path
+            logger.info(
+                f"Story {story_id}: using worktree isolation at {worktree_path}"
+            )
+        except RuntimeError as e:
+            logger.error(
+                f"Story {story_id}: failed to create worktree, "
+                f"falling back to main repo: {e}"
+            )
+            worktree_path = None
+            effective_working_dir = working_directory
+
+    try:
+        result = await _execute_story_inner(
+            story=story,
+            task_id=task_id,
+            task_description=task_description,
+            working_directory=effective_working_dir,
+            routing_engine=re,
+            notifier=notifier,
+            max_attempts=max_attempts,
+            mediator_enabled=mediator_enabled,
+            cancellation_event=cancellation_event,
+        )
+
+        # Merge worktree back on success
+        if worktree_path and result.success:
+            diff_output = get_worktree_diff(worktree_path)
+            if diff_output:
+                logger.info(
+                    f"Story {story_id}: worktree has uncommitted changes, "
+                    f"they will be committed before merge"
+                )
+            merged = merge_story_worktree(worktree_path, working_directory)
+            if merged:
+                logger.info(f"Story {story_id}: merged worktree changes into main repo")
+            else:
+                logger.error(
+                    f"Story {story_id}: worktree merge FAILED — changes remain "
+                    f"on branch story/{story_id} for manual review"
+                )
+                result.reason = (
+                    f"{result.reason}; worktree merge failed — "
+                    f"changes on branch story/{story_id}"
+                ).strip("; ")
+
+        return result
+
+    finally:
+        # Always clean up the worktree
+        if worktree_path:
+            try:
+                remove_story_worktree(worktree_path, working_directory)
+                logger.info(f"Story {story_id}: cleaned up worktree at {worktree_path}")
+            except Exception as e:
+                logger.warning(
+                    f"Story {story_id}: worktree cleanup failed: {e}"
+                )
+
+
+async def _execute_story_inner(
+    story: dict,
+    task_id: str,
+    task_description: str,
+    working_directory: str,
+    routing_engine: RoutingEngine,
+    notifier: Optional[Notifier] = None,
+    max_attempts: int = MAX_ATTEMPTS_PER_STORY,
+    mediator_enabled: bool = False,
+    cancellation_event: Optional[asyncio.Event] = None,
+) -> StoryResult:
+    """Inner story execution logic (retry loop, workflow invocation).
+
+    Separated from execute_story to keep worktree lifecycle management clean.
+    """
+    re = routing_engine
+    story_id = story.get("id", "unknown")
+    story_title = story.get("title", "Untitled")
+
     from langgraph.checkpoint.sqlite import SqliteSaver
-    import os
     db_path = os.path.join(working_directory, ".memory", "checkpoints.db")
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
@@ -212,6 +331,26 @@ async def execute_story(
                     # Success
                     if notifier:
                         notifier.notify_story_complete(story_id, story_title)
+
+                    # Update story-level checkpoint
+                    try:
+                        checkpoint = read_checkpoint(db_path, task_id)
+                        if checkpoint:
+                            if story_id not in checkpoint.completed_stories:
+                                checkpoint.completed_stories.append(story_id)
+                            if story_id in checkpoint.pending_stories:
+                                checkpoint.pending_stories.remove(story_id)
+                        else:
+                            checkpoint = Checkpoint(
+                                task_id=task_id,
+                                current_phase="EXECUTION",
+                                completed_stories=[story_id],
+                                pending_stories=[]
+                            )
+                        write_checkpoint(db_path, checkpoint)
+                        logger.info(f"Updated checkpoint for task {task_id} after story {story_id}")
+                    except Exception as cp_err:
+                        logger.warning(f"Failed to update story-level checkpoint: {cp_err}")
 
                     return StoryResult(
                         story_id=story_id,

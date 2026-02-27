@@ -741,20 +741,26 @@ async def dashboard():
     approvals = get_pending_approvals()
     prom = await fetch_prometheus_metrics()
 
-    # Pull values from Prometheus metrics (with fallbacks from local data)
-    stories_succeeded = int(prom.get('sat_stories_total{status="succeeded"}', 0))
-    stories_failed = int(prom.get('sat_stories_total{status="failed"}', 0))
-    tasks_completed = int(prom.get('sat_tasks_total{status="completed"}', 0))
-    tasks_failed_count = int(prom.get('sat_tasks_total{status="failed"}', 0))
-    queue_depth = int(prom.get('sat_queue_depth', 0))
+    # Pull Prometheus metrics for supplementary data (avg duration, system health)
     system_healthy = bool(prom.get('sat_system_healthy', 1))
     avg_dur_secs = prom.get('sat_stories_avg_duration_seconds', 0)
 
-    # If Prometheus is down, fall back to journal data
+    # Headline cards: use task file scan (accurate) instead of audit journal counters
+    task_state_counts = {}
+    for t in tasks:
+        task_state_counts[t["state"]] = task_state_counts.get(t["state"], 0) + 1
+    tasks_completed = task_state_counts.get("Finished", 0)
+    tasks_failed_count = task_state_counts.get("Failed", 0)
+    tasks_working = task_state_counts.get("Working", 0)
+    tasks_pending = task_state_counts.get("Pending", 0)
+    queue_depth = tasks_pending + tasks_working
+
+    # Stories from Prometheus (still useful), with journal fallback
+    stories_succeeded = int(prom.get('sat_stories_total{status="succeeded"}', 0))
+    stories_failed = int(prom.get('sat_stories_total{status="failed"}', 0))
     if not prom:
         stories_succeeded = sum(1 for e in journal if e.get("success"))
         stories_failed = sum(1 for e in journal if not e.get("success"))
-        queue_depth = sum(1 for t in tasks if t["state"] in ("Pending", "Working"))
 
     # Service statuses
     services = [
@@ -801,17 +807,25 @@ async def status():
         get_service_status("sat-web.service"),
     ]
 
+    # Task file scan counts (accurate, ground-truth)
+    task_state_counts = {}
+    for t in tasks:
+        task_state_counts[t["state"]] = task_state_counts.get(t["state"], 0) + 1
+
     return {
         "status": "ok",
         "uptime_seconds": int(time.time() - START_TIME),
         "uptime": uptime_str(),
         "stories_succeeded": int(prom.get('sat_stories_total{status="succeeded"}', 0)),
         "stories_failed": int(prom.get('sat_stories_total{status="failed"}', 0)),
-        "tasks_completed": int(prom.get('sat_tasks_total{status="completed"}', 0)),
-        "tasks_failed": int(prom.get('sat_tasks_total{status="failed"}', 0)),
-        "queue_depth": int(prom.get('sat_queue_depth', 0)),
+        "tasks_completed": task_state_counts.get("Finished", 0),
+        "tasks_failed": task_state_counts.get("Failed", 0),
+        "tasks_working": task_state_counts.get("Working", 0),
+        "tasks_pending": task_state_counts.get("Pending", 0),
+        "queue_depth": task_state_counts.get("Pending", 0) + task_state_counts.get("Working", 0),
         "system_healthy": bool(prom.get('sat_system_healthy', 1)),
         "total_task_files": len(tasks),
+        "task_state_counts": task_state_counts,
         "pending_approvals": len(approvals),
         "services": {s["name"]: s["active"] for s in services},
         "prometheus_metrics": prom if prom else "unavailable",

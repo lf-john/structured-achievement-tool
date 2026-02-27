@@ -231,6 +231,14 @@ async def invoke(
         elif process.returncode != 0:
             logger.warning(f"CLI failed for {provider.name}: exit_code={process.returncode}")
 
+        # Clean up stream file on success (partial output preserved on timeout)
+        if stream_output_file and not is_api_error:
+            try:
+                if os.path.exists(stream_output_file):
+                    os.remove(stream_output_file)
+            except OSError as e:
+                logger.debug(f"Failed to clean up stream file {stream_output_file}: {e}")
+
         # Auto-continue on max turns if continuator is provided
         if (session_continuator and task_id
                 and session_continuator.detect_max_turns(stdout, result.exit_code)
@@ -271,7 +279,23 @@ async def invoke(
         except Exception:
             pass
 
+        # Recover partial output from stream file (key benefit of streaming)
+        partial_stdout = ""
+        if stream_output_file:
+            try:
+                if os.path.exists(stream_output_file):
+                    with open(stream_output_file, 'r', encoding='utf-8') as f:
+                        partial_stdout = f.read()
+                    if partial_stdout:
+                        logger.info(
+                            f"Recovered {len(partial_stdout)} chars of partial output "
+                            f"from stream file on timeout"
+                        )
+            except Exception as e:
+                logger.warning(f"Failed to recover partial output from stream file: {e}")
+
         return CLIResult(
+            stdout=partial_stdout,
             stderr=f"Timeout after {timeout} seconds",
             exit_code=-1,
             is_api_error=True,

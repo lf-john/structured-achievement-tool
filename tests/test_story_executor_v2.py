@@ -131,8 +131,11 @@ class TestExecuteStory:
             "verify_passed": True,
         }
 
+        # AMENDED BY US-002: Patch checkpoint manager to avoid side effects
         with patch("src.execution.story_executor.get_workflow_for_story", return_value=mock_graph), \
              patch("src.execution.story_executor.get_current_commit", return_value="def456"), \
+             patch("src.execution.story_executor.read_checkpoint", return_value=None), \
+             patch("src.execution.story_executor.write_checkpoint"), \
              patch("asyncio.sleep", new_callable=AsyncMock):
 
             result = await execute_story(

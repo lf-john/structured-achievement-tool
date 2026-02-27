@@ -141,6 +141,187 @@ def merge_worktree(
         return False
 
 
+# --- Story-level worktree isolation ---
+# These functions provide per-story isolation so agentic LLMs cannot modify
+# the main SAT source tree during CODE phases.  The worktree lives at
+# <base_dir>/.worktrees/<story-id> on branch story/<story-id>.
+
+
+def create_story_worktree(story_id: str, base_dir: str) -> str:
+    """Create a git worktree for isolated story execution.
+
+    Creates a worktree at ``<base_dir>/.worktrees/<story_id>`` with a new
+    branch ``story/<story_id>`` based on the current HEAD.
+
+    Args:
+        story_id: Unique story identifier (used in path and branch name).
+        base_dir: The root of the main git repository.
+
+    Returns:
+        Absolute path to the new worktree directory.
+
+    Raises:
+        RuntimeError: If the worktree cannot be created (git not available,
+            conflicting state, etc.).
+    """
+    # Sanitize story_id for filesystem and branch safety
+    safe_id = story_id.replace("/", "_").replace(" ", "_").replace("..", "_")
+    worktree_path = os.path.join(base_dir, ".worktrees", safe_id)
+    branch_name = f"story/{safe_id}"
+
+    # If the worktree already exists on disk, reuse it
+    if os.path.isdir(worktree_path):
+        logger.info(f"Worktree already exists at {worktree_path}, reusing")
+        return worktree_path
+
+    os.makedirs(os.path.dirname(worktree_path), exist_ok=True)
+
+    # Check whether the branch already exists (leftover from a prior run)
+    result = _run_git(["rev-parse", "--verify", branch_name], base_dir)
+    branch_exists = result.returncode == 0
+
+    if branch_exists:
+        # Delete the stale branch so we start fresh from current HEAD
+        _run_git(["branch", "-D", branch_name], base_dir)
+        logger.info(f"Deleted stale branch {branch_name}")
+
+    # Create worktree with a new branch from HEAD
+    result = _run_git(
+        ["worktree", "add", "-b", branch_name, worktree_path, "HEAD"],
+        base_dir,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Failed to create worktree at {worktree_path}: {result.stderr.strip()}"
+        )
+
+    logger.info(f"Created worktree at {worktree_path} on branch {branch_name}")
+    return worktree_path
+
+
+def merge_story_worktree(worktree_path: str, base_dir: str) -> bool:
+    """Merge changes from a story worktree branch back into the current branch.
+
+    Performs a fast-forward merge if possible, otherwise a normal merge commit.
+    On merge conflict the merge is aborted and ``False`` is returned.
+
+    Args:
+        worktree_path: Path to the worktree (used to derive the branch name).
+        base_dir: Root of the main git repository.
+
+    Returns:
+        True if the merge succeeded, False otherwise.
+    """
+    safe_id = os.path.basename(worktree_path)
+    branch_name = f"story/{safe_id}"
+
+    # First, make sure all changes in the worktree are committed
+    wt_status = _run_git(["status", "--porcelain"], worktree_path)
+    if wt_status.returncode == 0 and wt_status.stdout.strip():
+        _run_git(["add", "-A"], worktree_path)
+        _run_git(
+            ["commit", "-m", f"feat({safe_id}): final worktree commit before merge"],
+            worktree_path,
+        )
+
+    # Record the current branch in the main repo so we can return to it
+    head_result = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], base_dir)
+    original_branch = head_result.stdout.strip() if head_result.returncode == 0 else "main"
+
+    try:
+        # Try fast-forward first
+        result = _run_git(["merge", "--ff-only", branch_name], base_dir)
+        if result.returncode == 0:
+            logger.info(f"Fast-forward merged {branch_name} into {original_branch}")
+            return True
+
+        # Fall back to merge commit
+        result = _run_git(
+            ["merge", branch_name, "-m", f"Merge story {safe_id} into {original_branch}"],
+            base_dir,
+        )
+        if result.returncode == 0:
+            logger.info(f"Merge-committed {branch_name} into {original_branch}")
+            return True
+
+        # Merge conflict — abort
+        logger.error(f"Merge conflict merging {branch_name}: {result.stderr.strip()}")
+        _run_git(["merge", "--abort"], base_dir)
+        return False
+
+    except Exception as e:
+        logger.error(f"Merge failed for {branch_name}: {e}")
+        try:
+            _run_git(["merge", "--abort"], base_dir)
+        except Exception:
+            pass
+        return False
+
+
+def remove_story_worktree(worktree_path: str, base_dir: str) -> None:
+    """Remove a story worktree and clean up its branch.
+
+    Safe to call even if the worktree has already been removed.
+
+    Args:
+        worktree_path: Path to the worktree directory.
+        base_dir: Root of the main git repository.
+    """
+    safe_id = os.path.basename(worktree_path)
+    branch_name = f"story/{safe_id}"
+
+    # Remove the worktree
+    if os.path.isdir(worktree_path):
+        result = _run_git(["worktree", "remove", worktree_path, "--force"], base_dir)
+        if result.returncode != 0:
+            logger.warning(
+                f"git worktree remove failed for {worktree_path}: {result.stderr.strip()}"
+            )
+            # Fallback: manual removal + prune
+            import shutil
+            try:
+                shutil.rmtree(worktree_path)
+            except OSError as e:
+                logger.warning(f"shutil.rmtree failed for {worktree_path}: {e}")
+            _run_git(["worktree", "prune"], base_dir)
+
+    # Delete the branch
+    result = _run_git(["branch", "-D", branch_name], base_dir)
+    if result.returncode != 0:
+        logger.debug(f"Branch {branch_name} already deleted or never existed")
+
+    logger.info(f"Cleaned up worktree {worktree_path} and branch {branch_name}")
+
+
+def get_worktree_diff(worktree_path: str) -> str:
+    """Return the combined staged + unstaged diff in a worktree.
+
+    Useful for logging what a story changed before deciding to merge or discard.
+
+    Args:
+        worktree_path: Path to the worktree directory.
+
+    Returns:
+        The diff output as a string (may be empty if no changes).
+    """
+    # Staged changes
+    staged = _run_git(["diff", "--cached"], worktree_path)
+    staged_text = staged.stdout if staged.returncode == 0 else ""
+
+    # Unstaged changes
+    unstaged = _run_git(["diff"], worktree_path)
+    unstaged_text = unstaged.stdout if unstaged.returncode == 0 else ""
+
+    # Also include untracked files as a list
+    untracked = _run_git(["ls-files", "--others", "--exclude-standard"], worktree_path)
+    untracked_text = ""
+    if untracked.returncode == 0 and untracked.stdout.strip():
+        untracked_text = f"\n=== Untracked files ===\n{untracked.stdout}"
+
+    combined = staged_text + unstaged_text + untracked_text
+    return combined.strip()
+
+
 def auto_commit(
     working_directory: str,
     story_id: str,

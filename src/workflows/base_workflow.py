@@ -36,9 +36,45 @@ from src.execution.verification_sdk import ConfigValidator, VerifyResult
 
 logger = logging.getLogger(__name__)
 
+# Directory for streaming LLM output to disk (enables partial recovery on timeout)
+STREAM_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".memory", "streams")
+
 MAX_PHASE_RETRIES = 10
 CHECK_RETRY_LIMIT = 3  # Max retries for test check loops before moving on
 VERIFY_RETRY_LIMIT = 3  # Max VERIFY→CODE cycles before accepting and moving to LEARN
+
+# Per-phase wall-clock timeouts (seconds).
+# These cap the TOTAL time a phase can run, independent of per-API-call timeouts.
+# Test/check phases get short timeouts (tests should NOT take 30 minutes).
+PHASE_WALL_CLOCK_TIMEOUTS = {
+    # Test/check phases — 5 minutes max
+    "TDD_RED_CHECK": 300,
+    "TDD_GREEN_CHECK": 300,
+    "VERIFY": 300,
+    "VERIFY_SCRIPT": 300,
+    "VERIFY_LINT": 300,
+    "VERIFY_TEST": 300,
+    "VERIFY_SECURITY": 300,
+    "VERIFY_ARCH": 300,
+    "PARALLEL_VERIFY": 300,
+    "CONFIG_VALIDATE": 300,
+    "DEPENDENCY_CHECK": 300,
+    # Code-producing phases — 15 minutes max
+    "ARCHITECT_CODE": 900,
+    "CODE": 900,
+    "TEST_WRITER": 900,
+    "TDD_RED": 900,
+    "FIX": 900,
+    "EXECUTE": 900,
+    "PLAN_CODE": 900,
+}
+# Default for phases not listed above: 10 minutes
+DEFAULT_PHASE_TIMEOUT = 600
+
+
+def get_phase_timeout(phase_name: str) -> int:
+    """Return wall-clock timeout in seconds for a given phase."""
+    return PHASE_WALL_CLOCK_TIMEOUTS.get(phase_name, DEFAULT_PHASE_TIMEOUT)
 
 # Thread pool for running async code from synchronous LangGraph nodes.
 # LangGraph's graph.invoke() is synchronous, but our CLI runner is async.
@@ -46,13 +82,17 @@ VERIFY_RETRY_LIMIT = 3  # Max VERIFY→CODE cycles before accepting and moving t
 _thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
 
-def _run_async(coro):
+def _run_async(coro, timeout: int = 660):
     """Run an async coroutine from a synchronous context safely.
 
     Uses a dedicated thread with a fresh event loop to avoid the
     'RuntimeError: This event loop is already running' issue that
     occurs when calling asyncio.get_event_loop().run_until_complete()
     from within an already-running event loop (e.g., story_executor).
+
+    Args:
+        coro: The async coroutine to run.
+        timeout: Wall-clock timeout in seconds. Defaults to 660 (11 min).
     """
     def _run():
         loop = asyncio.new_event_loop()
@@ -62,7 +102,18 @@ def _run_async(coro):
             loop.close()
 
     future = _thread_pool.submit(_run)
-    return future.result(timeout=660)  # 11 minutes max (10min CLI timeout + buffer)
+    return future.result(timeout=timeout)
+
+
+def _stream_file_path(story_id: str, phase: str) -> str:
+    """Return a stream output file path for incremental LLM output capture.
+
+    Creates the streams directory if it doesn't exist.
+    """
+    os.makedirs(STREAM_DIR, exist_ok=True)
+    # Sanitize story_id for filename safety
+    safe_id = str(story_id).replace("/", "_").replace(" ", "_")
+    return os.path.join(STREAM_DIR, f"sat-stream-{safe_id}-{phase}.txt")
 
 
 # --- Node Factories ---
@@ -98,12 +149,19 @@ def phase_node(
     )
 
     # Invoke LLM via thread-safe async bridge
+    phase_timeout = get_phase_timeout(phase_name)
+    story_id = story.get("id", "unknown")
+    stream_file = _stream_file_path(story_id, phase_name)
     start_time = time.monotonic()
     result = None
     output_text = ""
     try:
         result = _run_async(
-            cli_invoke(provider=provider, prompt=prompt, working_directory=working_dir)
+            cli_invoke(
+                provider=provider, prompt=prompt, working_directory=working_dir,
+                stream_output_file=stream_file,
+            ),
+            timeout=phase_timeout,
         )
         duration = time.monotonic() - start_time
         output_text = result.stdout
@@ -128,6 +186,32 @@ def phase_node(
                     state["failure_context"] = parsed.get("output", "Blocked")
             except (ValueError, Exception):
                 pass  # Not all phases return JSON
+
+    except (concurrent.futures.TimeoutError, TimeoutError):
+        duration = time.monotonic() - start_time
+        # Try to recover partial output from stream file
+        output_text = ""
+        try:
+            if os.path.exists(stream_file):
+                with open(stream_file, 'r', encoding='utf-8') as f:
+                    output_text = f.read()
+                if output_text:
+                    logger.info(
+                        f"WATCHDOG: Recovered {len(output_text)} chars of partial output "
+                        f"from stream file for phase {phase_name}"
+                    )
+        except Exception:
+            pass
+        status = PhaseStatus.FAILED
+        state["failure_context"] = (
+            f"WATCHDOG: Phase {phase_name} killed after {phase_timeout}s wall-clock timeout "
+            f"(elapsed {duration:.0f}s). Subprocess hung."
+            + (f" Partial output recovered ({len(output_text)} chars)." if output_text else "")
+        )
+        logger.error(
+            f"WATCHDOG TIMEOUT: Phase {phase_name} exceeded {phase_timeout}s wall-clock limit "
+            f"(elapsed {duration:.0f}s) — killing subprocess"
+        )
 
     except Exception as e:
         duration = time.monotonic() - start_time
@@ -194,8 +278,9 @@ def test_check_node(
     working_dir = state["working_directory"]
 
     test_cmd = get_test_command(story, working_dir)
-    logger.info(f"Test check {phase_name}: running '{test_cmd}' (expect_failure={expect_failure})")
-    result = run_tests(working_dir, test_cmd)
+    phase_timeout = get_phase_timeout(phase_name)
+    logger.info(f"Test check {phase_name}: running '{test_cmd}' (expect_failure={expect_failure}, timeout={phase_timeout}s)")
+    result = run_tests(working_dir, test_cmd, timeout=phase_timeout)
     logger.info(f"Test check {phase_name}: passed={result.passed}, total={result.total}, failures={result.failures}")
 
     test_result = TestResult(
@@ -274,6 +359,7 @@ def mediator_gate_node(
 
     # Invoke mediator via thread-safe async bridge
     mediator = MediatorAgent(routing_engine=routing_engine)
+    mediator_timeout = get_phase_timeout("MEDIATOR")  # defaults to DEFAULT_PHASE_TIMEOUT (600s)
     try:
         result = _run_async(
             mediator.review(
@@ -284,7 +370,8 @@ def mediator_gate_node(
                 changes_diff=diff,
                 test_results_before=None,
                 test_results_after=state.get("test_results"),
-            )
+            ),
+            timeout=mediator_timeout,
         )
 
         state["mediator_verdict"] = MediatorVerdict(
@@ -330,6 +417,7 @@ def parallel_verify_node(
     story = state["story"]
     working_dir = state["working_directory"]
     story_complexity = story.get("complexity", 5)
+    story_id = story.get("id", "unknown")
 
     check_agents = [
         ("linter", "VERIFY_LINT"),
@@ -351,19 +439,21 @@ def parallel_verify_node(
             working_directory=working_dir,
             context=context,
         )
+        stream_file = _stream_file_path(story_id, check_phase)
 
-        def _make_check(p, pr, wd):
-            return _run_async(cli_invoke(provider=p, prompt=pr, working_directory=wd))
+        def _make_check(p, pr, wd, t, sf):
+            return _run_async(cli_invoke(provider=p, prompt=pr, working_directory=wd, stream_output_file=sf), timeout=t)
 
-        future = _thread_pool.submit(_make_check, provider, prompt, working_dir)
-        futures[agent_name] = (future, provider.name)
+        check_timeout = get_phase_timeout(check_phase)
+        future = _thread_pool.submit(_make_check, provider, prompt, working_dir, check_timeout, stream_file)
+        futures[agent_name] = (future, provider.name, check_timeout)
 
-    # Collect results
+    # Collect results — use per-check wall-clock timeout
     all_passed = True
     failure_reasons = []
-    for agent_name, (future, provider_name) in futures.items():
+    for agent_name, (future, provider_name, check_timeout) in futures.items():
         try:
-            result = future.result(timeout=660)
+            result = future.result(timeout=check_timeout + 30)
             output_text = result.stdout if result else ""
             check_passed = result.exit_code == 0 if result else False
 
@@ -383,6 +473,20 @@ def parallel_verify_node(
             if not check_passed:
                 all_passed = False
                 failure_reasons.append(f"{agent_name}: {output_text[:200]}")
+
+        except (concurrent.futures.TimeoutError, TimeoutError):
+            logger.error(
+                f"WATCHDOG TIMEOUT: Parallel verify check {agent_name} exceeded "
+                f"{check_timeout}s — killing"
+            )
+            future.cancel()
+            results[agent_name] = {
+                "passed": False,
+                "output": f"WATCHDOG: killed after {check_timeout}s timeout",
+                "provider": provider_name,
+            }
+            all_passed = False
+            failure_reasons.append(f"{agent_name}: WATCHDOG timeout after {check_timeout}s")
 
         except Exception as e:
             logger.error(f"Parallel verify check {agent_name} failed: {e}")
@@ -543,8 +647,11 @@ def dependency_check_node(
         context=context,
     )
 
+    story_id = story.get("id", "unknown")
+    stream_file = _stream_file_path(story_id, "DEPENDENCY_CHECK")
+    dep_timeout = get_phase_timeout("DEPENDENCY_CHECK")
     try:
-        result = _run_async(cli_invoke(provider=provider, prompt=prompt, working_directory=working_dir))
+        result = _run_async(cli_invoke(provider=provider, prompt=prompt, working_directory=working_dir, stream_output_file=stream_file), timeout=dep_timeout)
         output_text = result.stdout if result else ""
         check_passed = True
 
@@ -606,6 +713,7 @@ def parallel_gather_node(
     story = state["story"]
     working_dir = state["working_directory"]
     story_complexity = story.get("complexity", 5)
+    story_id = story.get("id", "unknown")
 
     gather_channels = [
         ("gatherer_web", "GATHER_WEB"),
@@ -625,18 +733,21 @@ def parallel_gather_node(
             working_directory=working_dir,
             context=context,
         )
+        stream_file = _stream_file_path(story_id, gather_phase)
 
-        def _make_gather(p, pr, wd):
-            return _run_async(cli_invoke(provider=p, prompt=pr, working_directory=wd))
+        gather_timeout = get_phase_timeout(gather_phase)
 
-        future = _thread_pool.submit(_make_gather, provider, prompt, working_dir)
-        futures[agent_name] = (future, provider.name)
+        def _make_gather(p, pr, wd, t, sf):
+            return _run_async(cli_invoke(provider=p, prompt=pr, working_directory=wd, stream_output_file=sf), timeout=t)
+
+        future = _thread_pool.submit(_make_gather, provider, prompt, working_dir, gather_timeout, stream_file)
+        futures[agent_name] = (future, provider.name, gather_timeout)
 
     # Collect results
     all_outputs = []
-    for agent_name, (future, provider_name) in futures.items():
+    for agent_name, (future, provider_name, gather_timeout) in futures.items():
         try:
-            result = future.result(timeout=660)
+            result = future.result(timeout=gather_timeout + 30)
             output_text = result.stdout if result else ""
             results[agent_name] = {
                 "output": output_text[:3000],
@@ -644,6 +755,18 @@ def parallel_gather_node(
                 "exit_code": result.exit_code if result else -1,
             }
             all_outputs.append(f"=== {agent_name} ===\n{output_text[:2000]}")
+        except (concurrent.futures.TimeoutError, TimeoutError):
+            logger.error(
+                f"WATCHDOG TIMEOUT: Parallel gather channel {agent_name} exceeded "
+                f"{gather_timeout}s — killing"
+            )
+            future.cancel()
+            results[agent_name] = {
+                "output": f"WATCHDOG: killed after {gather_timeout}s timeout",
+                "provider": provider_name,
+                "exit_code": -1,
+            }
+            all_outputs.append(f"=== {agent_name} ===\nWATCHDOG: killed after {gather_timeout}s")
         except Exception as e:
             logger.error(f"Parallel gather channel {agent_name} failed: {e}")
             results[agent_name] = {
