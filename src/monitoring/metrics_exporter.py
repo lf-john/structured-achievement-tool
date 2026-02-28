@@ -190,16 +190,20 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/metrics":
-            snapshot = collect_metrics(
-                self.audit_journal,
-                self.queue_dir,
-                self.start_time,
-            )
-            body = format_prometheus(snapshot)
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain; version=0.0.4")
-            self.end_headers()
-            self.wfile.write(body.encode())
+            try:
+                snapshot = collect_metrics(
+                    self.audit_journal,
+                    self.queue_dir,
+                    self.start_time,
+                )
+                body = format_prometheus(snapshot)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; version=0.0.4")
+                self.end_headers()
+                self.wfile.write(body.encode())
+            except BrokenPipeError:
+                # Client disconnected; this is normal
+                pass
         else:
             self.send_response(404)
             self.end_headers()
