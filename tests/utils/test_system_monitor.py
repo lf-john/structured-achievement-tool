@@ -95,10 +95,13 @@ class TestCPULoad:
 
         result = get_cpu_load()
 
+        assert result is not None
         assert 'load' in result
-        assert 'average' in result
         assert isinstance(result['load'], (list, tuple))
         assert len(result['load']) == 3  # 1-minute, 5-minute, 15-minute averages
+        assert result['load'][0] == 1.23
+        assert result['load'][1] == 1.45
+        assert result['load'][2] == 1.67
 
     @patch('subprocess.run')
     def test_get_cpu_load_handles_up_time_failure(self, mock_run):
@@ -149,10 +152,11 @@ class TestIntegration:
         """Test that combined system monitoring works correctly"""
         mock_run.side_effect = [
             MagicMock(
-                stdout="7.7Gi       4.2Gi       3.5Gi\n"
+                stdout="total        used        free      shared  buff/cache   available\n"
+                      "Mem:          7.7Gi       4.2Gi       3.5Gi       1.1Gi       0.4Gi       5.2Gi\n"
             ),
             MagicMock(
-                stdout="load average: 1.23, 1.45, 1.67"
+                stdout=" 12:34:56 up 45 days,  3:21,  2 users,  load average: 1.23, 1.45, 1.67"
             )
         ]
 
@@ -162,8 +166,5 @@ class TestIntegration:
         assert result is not None
         assert cpu_result is not None
         assert 'load' in cpu_result
-
-
-# Import sys and set exit code at the end
-import sys
-sys.exit(1 if False else 0)
+        assert 'total' in result
+        assert 'used' in result
