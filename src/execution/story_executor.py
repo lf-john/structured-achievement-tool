@@ -258,6 +258,7 @@ async def _execute_story_inner(
 
     from langgraph.checkpoint.sqlite import SqliteSaver
     db_path = os.path.join(working_directory, ".memory", "langgraph_checkpoints.db")
+    sat_db_path = os.path.join(working_directory, ".memory", "checkpoints.db")
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
     with SqliteSaver.from_conn_string(db_path) as checkpointer:
@@ -338,7 +339,7 @@ async def _execute_story_inner(
 
                     # Update story-level checkpoint
                     try:
-                        checkpoint = read_checkpoint(db_path, task_id)
+                        checkpoint = read_checkpoint(sat_db_path, task_id)
                         if checkpoint:
                             if story_id not in checkpoint.completed_stories:
                                 checkpoint.completed_stories.append(story_id)
@@ -351,7 +352,7 @@ async def _execute_story_inner(
                                 completed_stories=[story_id],
                                 pending_stories=[]
                             )
-                        write_checkpoint(db_path, checkpoint)
+                        write_checkpoint(sat_db_path, checkpoint)
                         logger.info(f"Updated checkpoint for task {task_id} after story {story_id}")
                     except Exception as cp_err:
                         logger.warning(f"Failed to update story-level checkpoint: {cp_err}")
