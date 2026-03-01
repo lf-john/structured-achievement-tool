@@ -138,6 +138,8 @@ async def execute_story(
     max_attempts: int = MAX_ATTEMPTS_PER_STORY,
     mediator_enabled: bool = False,
     cancellation_event: Optional[asyncio.Event] = None,
+    audit_journal=None,
+    task_file: Optional[str] = None,
 ) -> StoryResult:
     """Execute a story through its workflow with retry logic.
 
@@ -156,6 +158,8 @@ async def execute_story(
         max_attempts: Max retries per story
         mediator_enabled: Enable mediator review
         cancellation_event: Set this event to request graceful cancellation
+        audit_journal: Optional audit journal (accepted for API compatibility)
+        task_file: Optional path to the originating task file
 
     Returns:
         StoryResult with success/failure status
