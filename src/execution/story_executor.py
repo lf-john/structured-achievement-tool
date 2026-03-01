@@ -257,7 +257,7 @@ async def _execute_story_inner(
     story_title = story.get("title", "Untitled")
 
     from langgraph.checkpoint.sqlite import SqliteSaver
-    db_path = os.path.join(working_directory, ".memory", "checkpoints.db")
+    db_path = os.path.join(working_directory, ".memory", "langgraph_checkpoints.db")
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
     with SqliteSaver.from_conn_string(db_path) as checkpointer:
