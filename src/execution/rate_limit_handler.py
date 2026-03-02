@@ -173,6 +173,17 @@ class RateLimitHandler:
             "entries": entries,
         }
 
+    # Aliases for backwards compatibility / test expectations
+    def enqueue(self, task_file: str, story_id: str, reason: str = "rate_limit") -> RetryEntry:
+        return self.queue_retry(task_file=task_file, story_id=story_id, reason=reason)
+
+    def get_ready(self) -> list:
+        return self.get_ready_tasks()
+
+    @property
+    def queue(self) -> list:
+        return self._queue
+
     def _find_entry(self, task_file: str) -> Optional[RetryEntry]:
         """Find an existing queue entry by task file path."""
         for entry in self._queue:
