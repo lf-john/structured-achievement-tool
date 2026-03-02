@@ -34,9 +34,9 @@ DEFAULT_FAILURE_PATTERNS = [
 MAX_STDERR_LINES = 100
 MAX_STDOUT_LINES = 80
 DEFAULT_LOG_TAIL_LINES = 50
-DEFAULT_LOG_FILE = os.path.expanduser(
-    "~/projects/structured-achievement-tool/logs/sat.log"
-)
+from src.core.paths import SAT_LOG, SAT_TASKS_DIR
+
+DEFAULT_LOG_FILE = str(SAT_LOG)
 
 
 @dataclass
@@ -65,7 +65,7 @@ class FailureMonitor:
 
     def __init__(
         self,
-        output_dir: str = "/home/johnlane/GoogleDrive/DriveSyncFiles/sat-tasks/debug",
+        output_dir: str = str(SAT_TASKS_DIR / "debug"),
         rate_limit_seconds: int = 600,  # 10 minutes
         patterns: Optional[list[str]] = None,
     ):

@@ -4,6 +4,7 @@ Notification Service — Push notifications via ntfy + email via SMTP (SES-ready
 Extracted from orchestrator._send_notification() and extended with email support.
 """
 
+import json
 import os
 import logging
 import smtplib
@@ -19,18 +20,33 @@ logger = logging.getLogger(__name__)
 class Notifier:
     """Send notifications via ntfy and/or email."""
 
+    # Priority levels in ascending order
+    PRIORITY_LEVELS = {"min": 0, "low": 1, "default": 2, "high": 3, "urgent": 4}
+
     def __init__(
         self,
         ntfy_topic: Optional[str] = None,
         ntfy_server: Optional[str] = None,
+        ntfy_min_priority: Optional[str] = None,
         smtp_host: Optional[str] = None,
         smtp_port: int = 587,
         smtp_user: Optional[str] = None,
         smtp_password: Optional[str] = None,
         notify_email: Optional[str] = None,
+        config: Optional[dict] = None,
     ):
-        self.ntfy_topic = ntfy_topic or os.environ.get("NTFY_TOPIC", "johnlane-claude-tasks")
+        # Load notification config from config.json if not provided
+        if config is None:
+            config = self._load_notification_config()
+        self._config = config
+
+        self.ntfy_topic = ntfy_topic or os.environ.get("NTFY_TOPIC", "")
         self.ntfy_server = ntfy_server or os.environ.get("NTFY_SERVER", "https://ntfy.sh")
+        self.ntfy_min_priority = (
+            ntfy_min_priority
+            or config.get("ntfy_min_priority")
+            or os.environ.get("SAT_NTFY_MIN_PRIORITY", "default")
+        )
         self.smtp_host = smtp_host or os.environ.get("SAT_SMTP_HOST", "")
         self.smtp_port = smtp_port
         self.smtp_user = smtp_user or os.environ.get("SAT_SMTP_USER", "")
@@ -38,9 +54,38 @@ class Notifier:
         self.notify_email = notify_email or os.environ.get("SAT_NOTIFY_EMAIL", "")
         self._email_warning_logged = False
 
+    @staticmethod
+    def _load_notification_config() -> dict:
+        """Load the notifications section from config.json."""
+        try:
+            from src.core.paths import CONFIG_JSON
+            config_path = str(CONFIG_JSON)
+        except ImportError:
+            config_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                "config.json",
+            )
+        try:
+            with open(config_path, "r") as f:
+                return json.load(f).get("notifications", {})
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return {}
+
     def send_ntfy(self, title: str, message: str, priority: str = "default", tags: str = "") -> bool:
-        """Send a push notification via ntfy.sh."""
+        """Send a push notification via ntfy.sh.
+
+        Respects SAT_NTFY_MIN_PRIORITY: notifications below the minimum
+        priority are silently dropped. Set to 'high' to only receive
+        important notifications (failures, escalations, human action required).
+        """
         if not self.ntfy_topic:
+            return False
+
+        # Filter by minimum priority
+        msg_level = self.PRIORITY_LEVELS.get(priority, 2)
+        min_level = self.PRIORITY_LEVELS.get(self.ntfy_min_priority, 2)
+        if msg_level < min_level:
+            logger.debug(f"Ntfy filtered: {title} (priority={priority} < min={self.ntfy_min_priority})")
             return False
 
         url = f"{self.ntfy_server}/{self.ntfy_topic}"
@@ -126,10 +171,17 @@ class Notifier:
         )
 
     def notify_story_complete(self, story_id: str, story_title: str):
-        """Notify that a story completed successfully."""
+        """Notify that a story completed successfully.
+
+        Skipped unless config notify_on_story_complete is true (default: false)
+        to avoid excessive notifications during multi-story tasks.
+        """
+        if not self._config.get("notify_on_story_complete", False):
+            return
         self.send_ntfy(
             title=f"SAT: Story Complete",
             message=f"{story_id}: {story_title}",
+            priority="high",
             tags="tada",
         )
 

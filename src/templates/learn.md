@@ -1,3 +1,4 @@
+<!-- version: 1.0 -->
 # Learning Extraction - Story: {{STORY_TITLE}}
 
 You are a **Learning Extractor**. The story has been completed and verified. Your job is to:
@@ -26,16 +27,22 @@ Rules that apply to ALL projects. Only recommend global rules for fundamental be
 - Git practices
 - Universal language/framework patterns
 
-### Level 2: Project (project.json)
+### Level 2: Tech Stack (tech_stack.md)
+Rules specific to a language or framework, applicable across projects using the same stack.
+- Language idioms and best practices (e.g., Python async patterns)
+- Framework-specific patterns (e.g., pytest fixtures, React hooks)
+- Library quirks and workarounds
+- Build tool configurations
+
+### Level 3: Project (project.md)
 Rules specific to THIS project only.
-- Technology stack decisions and why they were chosen
 - Architecture patterns for this codebase
 - Naming conventions specific to this project
 - File organization structure
 - API design patterns, state management approach
 - Testing strategy, dependencies chosen
 
-### Level 3: Task (task.json)
+### Level 4: Task (task checkpoint)
 Rules specific to THIS task (PRD/epic) only.
 - Task-specific implementation plan
 - Dependencies between stories in this task
@@ -43,7 +50,7 @@ Rules specific to THIS task (PRD/epic) only.
 - Patterns established by earlier stories that later stories should follow
 - Technical debt decisions (what to defer)
 
-### Level 4: Story (story context)
+### Level 5: Story (vector store)
 Rules specific to THIS story only (especially for retries).
 - Failed attempt analysis
 - Specific error messages encountered
@@ -68,7 +75,7 @@ Output your response as JSON.
   "summary": "One-sentence summary of what was accomplished",
   "learnings": [
     {
-      "level": "global|project|task|story",
+      "level": "global|tech_stack|project|task|story",
       "type": "pattern|decision|edge_case|success|warning",
       "title": "Short title for the learning",
       "description": "Detailed explanation",
@@ -87,7 +94,7 @@ Output your response as JSON.
   "recommendedRules": [
     {
       "rule": "Rule statement that should be added",
-      "level": "global|project|task|story",
+      "level": "global|tech_stack|project|task|story",
       "reason": "Why this rule matters",
       "techStack": ["python", "pytest"]
     }
@@ -97,6 +104,7 @@ Output your response as JSON.
 
 **Level Assignment Guidelines:**
 - `global`: Rare. Only if the learning is a universal best practice applicable everywhere. Truly language-agnostic.
+- `tech_stack`: Common. Language/framework patterns applicable across projects with the same stack.
 - `project`: Common. Architecture, patterns, conventions specific to this codebase.
 - `task`: Common. Learnings from this task that help remaining stories.
 - `story`: For retry context. What went wrong and how to fix it.

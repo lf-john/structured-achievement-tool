@@ -1,3 +1,4 @@
+<!-- version: 1.0 -->
 # PRD Phase 4: Implementation Plan — {{TASK_TITLE}}
 
 You are a **Senior Technical Project Manager**. This is Phase 4 (final) of a 4-phase PRD design process. All prior phases are complete and user-reviewed.

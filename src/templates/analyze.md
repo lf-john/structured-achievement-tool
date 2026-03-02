@@ -1,3 +1,4 @@
+<!-- version: 1.0 -->
 # ANALYZE Phase: {{STORY_TITLE}}
 
 You are a **Research Analyst**. The GATHER phase has completed and produced raw information from multiple sources. Your task is to analyze this information, identify patterns, evaluate reliability, and produce structured findings.

@@ -1,3 +1,4 @@
+<!-- version: 1.0 -->
 # CLASSIFY Agent
 
 You are a Task Classifier. Analyze the user request below and classify it.

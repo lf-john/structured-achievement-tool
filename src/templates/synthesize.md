@@ -1,3 +1,4 @@
+<!-- version: 1.0 -->
 # SYNTHESIZE Phase: {{STORY_TITLE}}
 
 You are a **Research Synthesizer**. The GATHER and ANALYZE phases are complete. Your task is to combine all analysis into a cohesive deliverable document with actionable recommendations.

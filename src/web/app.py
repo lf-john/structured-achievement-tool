@@ -22,9 +22,10 @@ from markupsafe import Markup
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-PROJECT_DIR = Path("/home/johnlane/projects/structured-achievement-tool")
-AUDIT_JOURNAL = PROJECT_DIR / ".memory" / "audit_journal.jsonl"
-SAT_TASKS_DIR = Path("/home/johnlane/GoogleDrive/DriveSyncFiles/sat-tasks")
+from src.core.paths import SAT_PROJECT_DIR, SAT_TASKS_DIR as _SAT_TASKS_DIR, AUDIT_JOURNAL as _AUDIT_JOURNAL
+PROJECT_DIR = SAT_PROJECT_DIR
+AUDIT_JOURNAL = _AUDIT_JOURNAL
+SAT_TASKS_DIR = _SAT_TASKS_DIR
 CF_ACCESS_TEAM = "sat-info"  # Cloudflare Access team/app domain
 GRAFANA_URL = "http://crm3.logicalfront.com:3001/d/sat-overview/sat-overview"
 PROMETHEUS_URL = "http://localhost:9101/metrics"
@@ -538,7 +539,7 @@ DASHBOARD_TEMPLATE = jinja_env.from_string(r"""<!DOCTYPE html>
   {% for e in journal_entries %}
   <tr>
     <td style="white-space:nowrap;">{{ e.get('timestamp', '?')[:19] }}</td>
-    <td>{{ e.get('task_file', '?').replace('/home/johnlane/GoogleDrive/DriveSyncFiles/sat-tasks/', '') }}</td>
+    <td>{{ e.get('task_file', '?').replace(sat_tasks_prefix, '') }}</td>
     <td>{{ e.get('story_id', '?') }}</td>
     <td><span class="tag {{ 'tag-Finished' if e.get('success') else 'tag-Failed' }}">{{ 'OK' if e.get('success') else 'FAIL' }}</span></td>
     <td>{{ format_dur(e.get('duration_seconds', 0)) }}</td>
@@ -791,6 +792,7 @@ async def dashboard():
         task_summary=task_summary,
         journal_entries=list(reversed(journal[-20:])),
         tasks=tasks,
+        sat_tasks_prefix=str(SAT_TASKS_DIR) + "/",
     )
 
 

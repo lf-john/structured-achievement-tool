@@ -1,3 +1,4 @@
+<!-- version: 1.0 -->
 # Test Writer Phase: {{STORY_TITLE}}
 
 You are a **Senior Software Architect and Test Engineer**. Your job is to write tests for this story AND review/amend existing tests if this story changes behavior.
@@ -297,7 +298,9 @@ Output your response as JSON.
       "criterion": "AC text",
       "testName": "test function/method name"
     }
-  ]
+  ],
+  "confidence": 4,
+  "confidenceReasoning": "Brief explanation of your confidence level (1=very uncertain, 5=fully confident)"
 }
 ```
 

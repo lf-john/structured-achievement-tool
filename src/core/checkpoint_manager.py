@@ -14,6 +14,13 @@ from typing import List, Dict, Any, Optional
 logger = logging.getLogger(__name__)
 
 
+# Standard status values for checkpoint tracking
+STATUS_IN_PROGRESS = "in_progress"
+STATUS_WAITING_FOR_HUMAN = "waiting_for_human"
+STATUS_COMPLETED = "completed"
+STATUS_FAILED = "failed"
+
+
 class Checkpoint:
     """
     Dataclass representing a workflow checkpoint.
@@ -29,7 +36,8 @@ class Checkpoint:
         completed_stories: List[str],
         pending_stories: List[str],
         timestamp: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        status: str = STATUS_IN_PROGRESS,
     ):
         """
         Initialize a Checkpoint.
@@ -57,6 +65,7 @@ class Checkpoint:
         self.pending_stories = pending_stories if pending_stories else []
         self.timestamp = timestamp or datetime.utcnow().isoformat()
         self.metadata = metadata if metadata else {}
+        self.status = status
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert checkpoint to dictionary for serialization."""
@@ -66,7 +75,8 @@ class Checkpoint:
             "completed_stories": self.completed_stories,
             "pending_stories": self.pending_stories,
             "timestamp": self.timestamp,
-            "metadata": self.metadata
+            "metadata": self.metadata,
+            "status": self.status,
         }
 
     @classmethod
@@ -78,7 +88,8 @@ class Checkpoint:
             completed_stories=data.get("completed_stories", []),
             pending_stories=data.get("pending_stories", []),
             timestamp=data.get("timestamp"),
-            metadata=data.get("metadata", {})
+            metadata=data.get("metadata", {}),
+            status=data.get("status", STATUS_IN_PROGRESS),
         )
 
     def __eq__(self, other):
@@ -91,12 +102,13 @@ class Checkpoint:
             self.completed_stories == other.completed_stories and
             self.pending_stories == other.pending_stories and
             self.timestamp == other.timestamp and
-            self.metadata == other.metadata
+            self.metadata == other.metadata and
+            self.status == other.status
         )
 
     def __repr__(self):
         """String representation."""
-        return f"Checkpoint(task_id={self.task_id}, phase={self.current_phase})"
+        return f"Checkpoint(task_id={self.task_id}, phase={self.current_phase}, status={self.status})"
 
     def __getitem__(self, key):
         """Allow subscript access to checkpoint fields."""
@@ -116,6 +128,8 @@ class Checkpoint:
             self.timestamp = value
         elif key == "metadata":
             self.metadata = value
+        elif key == "status":
+            self.status = value
         else:
             raise KeyError(f"Invalid checkpoint field: {key}")
 
@@ -152,9 +166,16 @@ def init_db(db_path: str):
                 pending_stories TEXT NOT NULL,
                 timestamp TEXT NOT NULL,
                 metadata TEXT NOT NULL,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                status TEXT NOT NULL DEFAULT 'in_progress'
             )
         """)
+
+        # Migration: add status column if missing (existing databases)
+        try:
+            cursor.execute("SELECT status FROM checkpoints LIMIT 0")
+        except sqlite3.OperationalError:
+            cursor.execute("ALTER TABLE checkpoints ADD COLUMN status TEXT NOT NULL DEFAULT 'in_progress'")
 
         # Create index on current_phase for efficient filtering
         cursor.execute("""
@@ -208,14 +229,15 @@ def write_checkpoint(db_path: str, checkpoint: Checkpoint):
         cursor.execute("""
             INSERT INTO checkpoints (
                 task_id, current_phase, completed_stories,
-                pending_stories, timestamp, metadata
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                pending_stories, timestamp, metadata, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(task_id) DO UPDATE SET
                 current_phase = excluded.current_phase,
                 completed_stories = excluded.completed_stories,
                 pending_stories = excluded.pending_stories,
                 timestamp = excluded.timestamp,
                 metadata = excluded.metadata,
+                status = excluded.status,
                 updated_at = CURRENT_TIMESTAMP
         """, (
             checkpoint.task_id,
@@ -223,7 +245,8 @@ def write_checkpoint(db_path: str, checkpoint: Checkpoint):
             completed_stories_json,
             pending_stories_json,
             checkpoint.timestamp,
-            metadata_json
+            metadata_json,
+            checkpoint.status,
         ))
 
         conn.commit()
@@ -256,7 +279,7 @@ def read_checkpoint(db_path: str, task_id: str) -> Optional[Checkpoint]:
 
         cursor.execute("""
             SELECT task_id, current_phase, completed_stories,
-                   pending_stories, timestamp, metadata
+                   pending_stories, timestamp, metadata, status
             FROM checkpoints
             WHERE task_id = ?
         """, (task_id,))
@@ -269,7 +292,7 @@ def read_checkpoint(db_path: str, task_id: str) -> Optional[Checkpoint]:
             return None
 
         # Parse JSON fields
-        task_id, current_phase, completed_stories_json, pending_stories_json, timestamp, metadata_json = row
+        task_id, current_phase, completed_stories_json, pending_stories_json, timestamp, metadata_json, status = row
         completed_stories = json.loads(completed_stories_json) if completed_stories_json else []
         pending_stories = json.loads(pending_stories_json) if pending_stories_json else []
         metadata = json.loads(metadata_json) if metadata_json else {}
@@ -280,7 +303,8 @@ def read_checkpoint(db_path: str, task_id: str) -> Optional[Checkpoint]:
             completed_stories=completed_stories,
             pending_stories=pending_stories,
             timestamp=timestamp,
-            metadata=metadata
+            metadata=metadata,
+            status=status or STATUS_IN_PROGRESS,
         )
     except sqlite3.Error as e:
         logger.error(f"Failed to read checkpoint: {e}")
@@ -309,14 +333,14 @@ def list_checkpoints(db_path: str) -> List[Checkpoint]:
 
         cursor.execute("""
             SELECT task_id, current_phase, completed_stories,
-                   pending_stories, timestamp, metadata
+                   pending_stories, timestamp, metadata, status
             FROM checkpoints
             ORDER BY timestamp DESC
         """)
 
         checkpoints = []
         for row in cursor.fetchall():
-            task_id, current_phase, completed_stories_json, pending_stories_json, timestamp, metadata_json = row
+            task_id, current_phase, completed_stories_json, pending_stories_json, timestamp, metadata_json, status = row
             completed_stories = json.loads(completed_stories_json) if completed_stories_json else []
             pending_stories = json.loads(pending_stories_json) if pending_stories_json else []
             metadata = json.loads(metadata_json) if metadata_json else {}
@@ -327,7 +351,8 @@ def list_checkpoints(db_path: str) -> List[Checkpoint]:
                 completed_stories=completed_stories,
                 pending_stories=pending_stories,
                 timestamp=timestamp,
-                metadata=metadata
+                metadata=metadata,
+                status=status or STATUS_IN_PROGRESS,
             ))
 
         conn.close()

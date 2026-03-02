@@ -1,6 +1,7 @@
 # tests/utils/test_ollama_client.py
 import unittest
 from unittest.mock import patch, MagicMock
+import requests
 from src.utils.ollama_client import OllamaClient
 
 class TestOllamaClient(unittest.TestCase):

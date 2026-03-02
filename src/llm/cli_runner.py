@@ -20,6 +20,20 @@ from src.execution.session_continuator import SessionContinuator
 
 logger = logging.getLogger(__name__)
 
+# Lazy-initialized cost tracker singleton
+_cost_tracker = None
+
+
+def _get_cost_tracker():
+    global _cost_tracker
+    if _cost_tracker is None:
+        try:
+            from src.llm_cost_tracker import LLMCostTracker
+            _cost_tracker = LLMCostTracker()
+        except Exception as e:
+            logger.debug(f"Cost tracker unavailable: {e}")
+    return _cost_tracker
+
 DEFAULT_TIMEOUT = 600  # 10 minutes
 HEALTH_CHECK_TIMEOUT = 30
 
@@ -47,6 +61,24 @@ RATE_LIMIT_PATTERN = re.compile(
     r'rate.?limit|too many requests|error[:\s]+429|status[:\s]+429|code[:\s]+429|HTTP/\S+\s+429',
     re.IGNORECASE,
 )
+
+
+def classify_error_category(error_code: Optional[int], stderr: str) -> str:
+    """Classify an API error into a category for circuit breaker routing."""
+    from src.llm.routing_engine import ErrorCategory
+    if error_code == 429:
+        return ErrorCategory.RATE_LIMIT
+    elif error_code in (401, 403):
+        return ErrorCategory.AUTH_ERROR
+    elif error_code in (500, 502, 503):
+        return ErrorCategory.SERVER_ERROR
+    elif error_code == 408:
+        return ErrorCategory.TIMEOUT
+    elif "timeout" in stderr.lower() or "timed out" in stderr.lower():
+        return ErrorCategory.TIMEOUT
+    elif "connection" in stderr.lower() or "refused" in stderr.lower():
+        return ErrorCategory.CONNECTION
+    return ErrorCategory.UNKNOWN
 
 
 def _detect_api_error(stdout: str, stderr: str) -> tuple[bool, Optional[int]]:
@@ -230,6 +262,26 @@ async def invoke(
             logger.warning(f"API error stderr (first 500): {stderr[:500]}")
         elif process.returncode != 0:
             logger.warning(f"CLI failed for {provider.name}: exit_code={process.returncode}")
+
+        # Log cost for this invocation
+        tracker = _get_cost_tracker()
+        if tracker and not is_api_error:
+            try:
+                prompt_chars = len(prompt or "") if prompt else 0
+                if prompt_file:
+                    try:
+                        prompt_chars = os.path.getsize(prompt_file)
+                    except OSError:
+                        pass
+                tracker.record_invocation(
+                    model_id=provider.model_id,
+                    provider_name=provider.name,
+                    prompt_chars=prompt_chars,
+                    output_chars=len(stdout),
+                    duration_seconds=duration,
+                )
+            except Exception as e:
+                logger.debug(f"Cost tracking failed: {e}")
 
         # Clean up stream file on success (partial output preserved on timeout)
         if stream_output_file and not is_api_error:

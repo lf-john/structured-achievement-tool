@@ -1,74 +1,79 @@
 #!/bin/bash
+# Verification script for US-002: Seven Sweeps SAT-compatible quality gate template
 set -e
 
-# Run pytest or python script to verify the logic.
-cat << 'PY_EOF' > test_checkpoint_integration.py
-import sys
-import os
-import asyncio
-from unittest.mock import MagicMock, patch
+TARGET="$HOME/projects/marketing-automation/templates/quality-gate/seven-sweeps-sat.md"
 
-sys.path.insert(0, os.path.abspath("."))
-from src.core.checkpoint_manager import init_db, read_checkpoint, Checkpoint, write_checkpoint
-from src.execution.story_executor import _execute_story_inner
-import shutil
+# 1. File exists
+if [ ! -f "$TARGET" ]; then
+  echo "FAIL: Template file not found at $TARGET"
+  exit 1
+fi
 
-async def main():
-    working_dir = "/tmp/sat_test_us_002"
-    if os.path.exists(working_dir):
-        shutil.rmtree(working_dir)
-    os.makedirs(working_dir)
+# 2. All 7 sweeps present with numeric scoring
+SWEEPS=("clarity" "observation_hook" "problem_resonance" "proof_strength" "cta_precision" "brand_voice" "personalization_depth")
+for sweep in "${SWEEPS[@]}"; do
+  if ! grep -qi "$sweep" "$TARGET"; then
+    echo "FAIL: Sweep '$sweep' not found in template"
+    exit 1
+  fi
+done
 
-    db_path = os.path.join(working_dir, ".memory", "checkpoints.db")
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    
-    # Init DB and initial checkpoint
-    init_db(db_path)
-    chk = Checkpoint(
-        task_id="TASK-ABC",
-        current_phase="EXECUTION",
-        completed_stories=[],
-        pending_stories=["STORY-XYZ", "STORY-123"]
-    )
-    write_checkpoint(db_path, chk)
-    
-    # Mock routing engine and graph
-    mock_routing = MagicMock()
-    mock_graph = MagicMock()
-    mock_graph.invoke.return_value = {"phase_outputs": [{"status": "complete"}], "verify_passed": True}
-    mock_graph.get_state.return_value = MagicMock(values=None)
+# 3. Scoring scale 1-5 documented
+if ! grep -q "1-5\|1.5\|score.*[1-5]\|[1-5].*scale" "$TARGET"; then
+  echo "FAIL: 1-5 scoring scale not documented"
+  exit 1
+fi
 
-    with patch("src.execution.story_executor.get_workflow_for_story", return_value=mock_graph), \
-         patch("src.execution.story_executor.get_current_commit", return_value="hash"):
-         
-         await _execute_story_inner(
-             story={"id": "STORY-XYZ", "title": "Test Story"},
-             task_id="TASK-ABC",
-             task_description="test",
-             working_directory=working_dir,
-             routing_engine=mock_routing,
-             max_attempts=1
-         )
-         
-    # Verify
-    updated_chk = read_checkpoint(db_path, "TASK-ABC")
-    if updated_chk is None:
-        print("Checkpoint not found!")
-        sys.exit(1)
-        
-    if "STORY-XYZ" not in updated_chk.completed_stories:
-        print(f"STORY-XYZ not in completed_stories. Current: {updated_chk.completed_stories}")
-        sys.exit(1)
-        
-    if "STORY-XYZ" in updated_chk.pending_stories:
-        print("STORY-XYZ still in pending_stories")
-        sys.exit(1)
-        
-    print("Integration test passed!")
-    
-if __name__ == "__main__":
-    asyncio.run(main())
-PY_EOF
+# 4. JSON schema present
+if ! grep -q '"overall_pass"' "$TARGET"; then
+  echo "FAIL: overall_pass field not in JSON schema"
+  exit 1
+fi
+if ! grep -q '"overall_score"' "$TARGET"; then
+  echo "FAIL: overall_score field not in JSON schema"
+  exit 1
+fi
+if ! grep -q '"revised_copy"' "$TARGET"; then
+  echo "FAIL: revised_copy field not in JSON schema"
+  exit 1
+fi
+if ! grep -q '"issues"' "$TARGET"; then
+  echo "FAIL: issues array not in JSON schema"
+  exit 1
+fi
 
-source venv/bin/activate
-python3 test_checkpoint_integration.py
+# 5. Scoring thresholds documented
+if ! grep -q ">= 3\|>= 70\|>=.*3\|>=.*70" "$TARGET"; then
+  echo "FAIL: Scoring thresholds (>= 3 per sweep, >= 70 overall) not documented"
+  exit 1
+fi
+
+# 6. Both passing and failing example JSON present
+if ! grep -q '"overall_pass": true' "$TARGET"; then
+  echo "FAIL: Passing example (overall_pass: true) not found"
+  exit 1
+fi
+if ! grep -q '"overall_pass": false' "$TARGET"; then
+  echo "FAIL: Failing example (overall_pass: false) not found"
+  exit 1
+fi
+
+# 7. Logical Front proof points present
+if ! grep -q "1,000,000\|1M+" "$TARGET"; then
+  echo "FAIL: Logical Front 1M+ deployments proof point not present"
+  exit 1
+fi
+if ! grep -q "321" "$TARGET"; then
+  echo "FAIL: Logical Front 321 customers proof point not present"
+  exit 1
+fi
+
+# 8. SAT integration instructions present
+if ! grep -qi "SAT\|json.loads\|quality.gate\|check_quality_gate" "$TARGET"; then
+  echo "FAIL: SAT workflow integration section not found"
+  exit 1
+fi
+
+echo "PASS: All acceptance criteria verified for seven-sweeps-sat.md"
+exit 0

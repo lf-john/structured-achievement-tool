@@ -15,10 +15,10 @@ from src.llm.providers import (
 
 
 class TestProviderRegistry:
-    def test_all_11_providers_registered(self):
+    def test_all_13_providers_registered(self):
         expected = {
             "opus", "sonnet", "haiku",
-            "gemini_pro", "glm5", "gemini_flash", "glm_flash",
+            "gemini_31_pro", "gemini_pro", "glm5", "gemini_flash", "gemini_25_flash", "glm_flash",
             "qwen3_8b", "deepseek_r1", "qwen25_coder", "nemotron",
         }
         assert set(PROVIDERS.keys()) == expected
@@ -81,4 +81,4 @@ class TestListProviders:
     def test_cloud_only(self):
         cloud = list_providers(cloud_only=True)
         assert all(not p.local for p in cloud)
-        assert len(cloud) == 7
+        assert len(cloud) == 9

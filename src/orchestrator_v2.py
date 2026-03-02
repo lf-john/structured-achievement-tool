@@ -30,6 +30,7 @@ from src.llm.prompt_builder import load_template, substitute_placeholders, TEMPL
 from src.llm.response_parser import extract_json
 from src.llm.cli_runner import invoke as cli_invoke
 from src.db.database_manager import DatabaseManager
+from src.core.checkpoint_manager import read_checkpoint
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +141,13 @@ class OrchestratorV2:
         task_dir = os.path.dirname(file_path)
         task_id = os.path.basename(task_dir)
 
+        # Set task-level correlation ID for hierarchical logging
+        try:
+            from src.logging_config import set_correlation_id
+            set_correlation_id(task_id=task_id)
+        except Exception:
+            pass
+
         with open(file_path, "r") as f:
             user_request = f.read()
 
@@ -191,6 +199,18 @@ class OrchestratorV2:
         execution_levels = dag.get_execution_levels()
         logger.info(f"Execution plan: {len(execution_levels)} levels")
 
+        # Read checkpoint to skip already-completed stories on retry
+        completed_stories: set[str] = set()
+        try:
+            checkpoint_db = os.path.join(self.project_path, ".memory", "checkpoints.db")
+            if os.path.exists(checkpoint_db):
+                checkpoint = read_checkpoint(checkpoint_db, task_id)
+                if checkpoint and checkpoint.completed_stories:
+                    completed_stories = set(checkpoint.completed_stories)
+                    logger.info(f"Checkpoint found: {len(completed_stories)} stories already completed")
+        except Exception as e:
+            logger.warning(f"Failed to read checkpoint for skip logic: {e}")
+
         results: list[StoryResult] = []
         cancellation_event = asyncio.Event()
 
@@ -200,6 +220,17 @@ class OrchestratorV2:
             # Execute stories in this level concurrently
             level_tasks = []
             for story_id in level:
+                # Skip already-completed stories (partial results from prior run)
+                if story_id in completed_stories:
+                    logger.info(f"Skipping already-completed story {story_id}")
+                    results.append(StoryResult(
+                        story_id=story_id,
+                        success=True,
+                        attempts=0,
+                        reason="skipped (completed in prior run)",
+                    ))
+                    continue
+
                 story = next((s for s in stories if s["id"] == story_id), None)
                 if not story:
                     continue
@@ -254,6 +285,28 @@ class OrchestratorV2:
             except Exception as e:
                 logger.warning(f"Failed to log audit record: {e}")
 
+            # Embed story-level LEARN summary in vector memory
+            if self.vector_store and r.success:
+                try:
+                    learn_output = ""
+                    for po in r.phase_outputs:
+                        if po.get("phase") == "LEARN" and po.get("output"):
+                            learn_output = po["output"]
+                            break
+                    if learn_output:
+                        story_doc = f"Story: {r.story_id}\nTask: {task_id}\n\nLearning:\n{learn_output[:3000]}"
+                        story_metadata = {
+                            "task_id": task_id,
+                            "story_id": r.story_id,
+                            "task_type": task_type,
+                            "doc_type": "story_learning",
+                            "success": True,
+                        }
+                        self.vector_store.add_document(story_doc, story_metadata)
+                        logger.info(f"Story learning embedded for {r.story_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to embed story learning: {e}")
+
         # Create debug stories for failed tasks via failure monitor
         if not success:
             for r in results:
@@ -272,13 +325,33 @@ class OrchestratorV2:
                     except Exception as e:
                         logger.warning(f"Failed to create debug story: {e}")
 
-        # Write execution log
+        # Write execution log — include per-story failure details for user visibility
         log_parts = [f"## Execution Results for {task_id}\n"]
         for r in results:
-            status = "OK" if r.success else "FAILED"
-            log_parts.append(f"- **{r.story_id}**: {status} (attempts: {r.attempts})")
+            status_label = "OK" if r.success else "FAILED"
+            log_parts.append(f"- **{r.story_id}**: {status_label} (attempts: {r.attempts})")
             if r.reason:
                 log_parts.append(f"  Reason: {r.reason}")
+
+        # Per-story failure details (Enhancement: incremental output)
+        failed_stories = [r for r in results if not r.success and r.phase_outputs]
+        if failed_stories:
+            log_parts.append("\n---\n")
+            log_parts.append("## Failed Story Details\n")
+            for r in failed_stories:
+                log_parts.append(f"### {r.story_id}\n")
+                for po in r.phase_outputs:
+                    phase = po.get("phase", "?")
+                    po_status = po.get("status", "?")
+                    provider = po.get("provider_used", "?")
+                    duration = po.get("duration_seconds", 0)
+                    log_parts.append(f"- **{phase}**: {po_status} (provider: {provider}, {duration:.1f}s)")
+                    # Include failure context from the last failed phase
+                    if po_status == "failed" and po.get("output"):
+                        output_preview = po["output"][:500]
+                        log_parts.append(f"  ```\n  {output_preview}\n  ```")
+                log_parts.append("")
+
         log_content = "\n".join(log_parts)
 
         await self._write_response(task_dir, log_content)

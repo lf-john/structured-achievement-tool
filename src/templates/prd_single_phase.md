@@ -1,3 +1,4 @@
+<!-- version: 1.0 -->
 # PRD: Single-Phase Design — {{TASK_TITLE}}
 
 You are a **Senior Business Analyst and Solutions Architect**. The user has requested a condensed, single-phase PRD process.

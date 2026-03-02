@@ -12,12 +12,23 @@ Config overrides via phase_models in config.json bypass these rules.
 import json
 import os
 import logging
+import subprocess
 import time
 from typing import Optional, Tuple
 
 from src.llm.providers import ProviderConfig, PROVIDERS, get_provider, is_provider_available
 
 logger = logging.getLogger(__name__)
+
+
+# Error categories for circuit breaker classification
+class ErrorCategory:
+    RATE_LIMIT = "rate_limit"     # 429 — existing handling
+    TIMEOUT = "timeout"           # Process timeout
+    SERVER_ERROR = "server_error" # 500, 502, 503
+    AUTH_ERROR = "auth_error"     # 401, 403
+    CONNECTION = "connection"     # Connection refused, DNS failure
+    UNKNOWN = "unknown"
 
 
 # Agent complexity ratings from 044_definitive_implementation_plan.md
@@ -64,8 +75,9 @@ AGENTIC_AGENTS = {
 class RoutingEngine:
     """Select the best LLM provider for an agent based on complexity rules."""
 
-    # Cooldown period (seconds) after a 429 before retrying the same provider
-    RATE_LIMIT_COOLDOWN = 120
+    # Cooldown period (seconds) after a 429 before attempting a health probe.
+    # After cooldown expires, a single probe request is sent before fully resuming.
+    RATE_LIMIT_COOLDOWN = 300  # 5 minutes
 
     # Gemini-specific cascade: ordered list of Gemini providers to try.
     # When one hits 429, try the next. If ALL hit 429, cooldown for 30 min.
@@ -78,13 +90,24 @@ class RoutingEngine:
     PAUSE_ALL_WINDOW = 60  # seconds
     PAUSE_ALL_DURATION = 120  # seconds
 
+    # Circuit breaker cooldowns by provider class and error category
+    CIRCUIT_BREAKER_THRESHOLD = 3  # Failures before circuit opens
+    OLLAMA_CIRCUIT_COOLDOWN = 60   # 1 minute (Ollama restarts fast)
+    CLOUD_CIRCUIT_COOLDOWN = 300   # 5 minutes
+    AUTH_CIRCUIT_COOLDOWN = 1800   # 30 minutes (key probably revoked)
+
     def __init__(self, config_path: Optional[str] = None):
         self.config = {}
         self.phase_overrides = {}
         # Track rate-limited providers: {provider_name: timestamp_of_429}
         self._rate_limited: dict[str, float] = {}
+        # Providers awaiting health probe: cooldown expired but not yet confirmed healthy
+        self._probe_pending: set[str] = set()
         # Pause-all state
         self._paused_until: float = 0.0
+        # Generalized circuit breaker state
+        # {provider_name: {"failures": int, "opened_at": float, "cooldown": float, "last_error": str}}
+        self._circuit_state: dict[str, dict] = {}
 
         if config_path and os.path.exists(config_path):
             with open(config_path, "r") as f:
@@ -154,9 +177,13 @@ class RoutingEngine:
 
         Uses GEMINI_CASCADE_COOLDOWN for Gemini providers when all Gemini models
         are rate-limited, otherwise uses RATE_LIMIT_COOLDOWN.
+
+        When cooldown expires, the provider enters "probe pending" state rather
+        than being immediately available. Call mark_probe_success() after a
+        successful request to fully clear the rate limit.
         """
         if provider_name not in self._rate_limited:
-            return False
+            return provider_name in self._probe_pending
         elapsed = time.monotonic() - self._rate_limited[provider_name]
         # Use longer cooldown when all Gemini models are exhausted
         if self._is_gemini(provider_name) and self._all_gemini_rate_limited():
@@ -164,9 +191,142 @@ class RoutingEngine:
         else:
             cooldown = self.RATE_LIMIT_COOLDOWN
         if elapsed >= cooldown:
+            # Cooldown expired — move to probe-pending state
             del self._rate_limited[provider_name]
+            self._probe_pending.add(provider_name)
+            logger.info(f"Provider {provider_name} cooldown expired, awaiting health probe")
+            return False  # Allow one request through as a probe
+        return True
+
+    def is_probe_pending(self, provider_name: str) -> bool:
+        """Check if a provider is in probe-pending state (cooldown expired, not yet confirmed)."""
+        return provider_name in self._probe_pending
+
+    def mark_probe_success(self, provider_name: str):
+        """Mark a provider's health probe as successful — fully resume traffic."""
+        self._probe_pending.discard(provider_name)
+        logger.info(f"Provider {provider_name} health probe succeeded, fully resumed")
+
+    def mark_probe_failure(self, provider_name: str):
+        """Mark a provider's health probe as failed — re-enter cooldown."""
+        self._probe_pending.discard(provider_name)
+        self._rate_limited[provider_name] = time.monotonic()
+        logger.warning(f"Provider {provider_name} health probe failed, re-entering {self.RATE_LIMIT_COOLDOWN}s cooldown")
+
+    # --- Generalized Circuit Breaker (Enhancement #1 + #8) ---
+
+    def mark_failure(self, provider_name: str, error_category: str = ErrorCategory.UNKNOWN):
+        """Record a non-429 failure for a provider.
+
+        After CIRCUIT_BREAKER_THRESHOLD consecutive failures, the provider
+        enters "open circuit" state with a cooldown based on provider class
+        and error category. For Ollama, attempts a restart before opening.
+        """
+        state = self._circuit_state.setdefault(provider_name, {
+            "failures": 0, "opened_at": 0.0, "cooldown": 0.0, "last_error": "",
+        })
+        state["failures"] += 1
+        state["last_error"] = error_category
+
+        if state["failures"] < self.CIRCUIT_BREAKER_THRESHOLD:
+            logger.info(
+                f"Provider {provider_name} failure {state['failures']}/{self.CIRCUIT_BREAKER_THRESHOLD} "
+                f"(category={error_category})"
+            )
+            return
+
+        # Threshold reached — determine cooldown by provider class + error type
+        provider = PROVIDERS.get(provider_name)
+        if provider and provider.local:
+            # Ollama: attempt restart before opening circuit
+            if self._attempt_ollama_restart():
+                state["failures"] = 0
+                logger.info(f"Ollama restarted successfully, resetting circuit for {provider_name}")
+                return
+            cooldown = self.OLLAMA_CIRCUIT_COOLDOWN
+        elif error_category == ErrorCategory.AUTH_ERROR:
+            cooldown = self.AUTH_CIRCUIT_COOLDOWN
+        else:
+            cooldown = self.CLOUD_CIRCUIT_COOLDOWN
+
+        state["opened_at"] = time.monotonic()
+        state["cooldown"] = cooldown
+        logger.warning(
+            f"Circuit breaker OPEN for {provider_name}: {state['failures']} failures "
+            f"(category={error_category}), cooldown={cooldown}s"
+        )
+
+    def mark_success(self, provider_name: str):
+        """Record a successful invocation — reset failure counter."""
+        if provider_name in self._circuit_state:
+            self._circuit_state[provider_name]["failures"] = 0
+            self._circuit_state[provider_name]["opened_at"] = 0.0
+        # Also clear probe pending if applicable
+        self._probe_pending.discard(provider_name)
+
+    def is_circuit_open(self, provider_name: str) -> bool:
+        """Check if a provider's circuit breaker is open (should not be called)."""
+        state = self._circuit_state.get(provider_name)
+        if not state or state["opened_at"] == 0.0:
+            return False
+        elapsed = time.monotonic() - state["opened_at"]
+        if elapsed >= state["cooldown"]:
+            # Cooldown expired — enter half-open (allow one probe)
+            state["opened_at"] = 0.0
+            state["failures"] = 0
+            self._probe_pending.add(provider_name)
+            logger.info(f"Circuit breaker for {provider_name} cooldown expired, entering half-open")
             return False
         return True
+
+    def _attempt_ollama_restart(self) -> bool:
+        """Attempt to restart Ollama service. Returns True if restart succeeded."""
+        try:
+            result = subprocess.run(
+                ["systemctl", "--user", "restart", "ollama"],
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode == 0:
+                logger.info("Ollama service restarted via circuit breaker")
+                time.sleep(5)  # Wait for model loading
+                return True
+            logger.warning(f"Ollama restart failed: {result.stderr}")
+        except Exception as e:
+            logger.warning(f"Ollama restart attempt failed: {e}")
+        return False
+
+    # --- Failure Escalation (Enhancement #9) ---
+
+    def select_with_escalation(
+        self,
+        agent_name: str,
+        attempt_number: int = 1,
+        failure_is_persistent: bool = False,
+        story_complexity: Optional[int] = None,
+        is_code_task: bool = False,
+    ) -> ProviderConfig:
+        """Select provider with automatic escalation on persistent failures.
+
+        Only escalates for persistent (quality) failures, not transient
+        (infrastructure) failures. Transient failures need circuit breaking,
+        not a more powerful model.
+
+        Escalation: +1 complexity per 2 persistent failures, capped at +3.
+        """
+        if failure_is_persistent and attempt_number > 1:
+            escalation = min((attempt_number - 1) // 2, 3)
+        else:
+            escalation = 0
+
+        effective_complexity = story_complexity
+        if effective_complexity is not None and escalation > 0:
+            effective_complexity = min(effective_complexity + escalation, 10)
+            logger.info(
+                f"Escalating {agent_name}: attempt={attempt_number}, "
+                f"complexity {story_complexity} → {effective_complexity} (+{escalation})"
+            )
+
+        return self.select(agent_name, effective_complexity, is_code_task)
 
     def get_complexity(self, agent_name: str, story_complexity: Optional[int] = None) -> int:
         """Get the complexity rating for an agent.
@@ -265,12 +425,14 @@ class RoutingEngine:
             logger.warning(f"No eligible model for {agent_name} (complexity={complexity}), falling back to {default}")
             return get_provider(default)
 
-        # Sort by preference: non-rate-limited first, local first, cheapest first, highest power first
+        # Sort by preference: healthy first, non-rate-limited, local, cheapest, highest power
         def sort_key(p: ProviderConfig):
             cost_order = {"free": 0, "minimal": 1, "low": 2, "medium": 3, "high": 4}
             power = p.code_power if is_code_task else p.power
+            circuit_open = 2 if self.is_circuit_open(p.name) else 0
             rate_limited = 1 if self._is_rate_limited(p.name) else 0
             return (
+                circuit_open,                    # Circuit-broken last
                 rate_limited,                    # Non-rate-limited first
                 0 if p.local else 1,             # Local first
                 cost_order.get(p.cost_tier, 5),  # Cheapest first
@@ -279,7 +441,9 @@ class RoutingEngine:
 
         eligible.sort(key=sort_key)
         selected = eligible[0]
-        if self._is_rate_limited(selected.name):
+        if self.is_circuit_open(selected.name):
+            logger.warning(f"All eligible providers circuit-broken for {agent_name}, using {selected.name} anyway")
+        elif self._is_rate_limited(selected.name):
             logger.warning(f"All eligible providers rate-limited for {agent_name}, using {selected.name} anyway")
         else:
             logger.debug(f"Routing {agent_name} (complexity={complexity}) → {selected.name} (power={selected.power})")

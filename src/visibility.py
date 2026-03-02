@@ -106,6 +106,60 @@ class TaskVisibility:
             for t, c in sorted(type_counts.items(), key=lambda x: -x[1]):
                 lines.append(f"  {t}: {c}")
 
+        # Debug reproduction stats
+        repro_events = [
+            e for e in events
+            if e.get("event_type") == "debug_reproduction"
+        ]
+        if repro_events:
+            methods = {}
+            for e in repro_events:
+                m = e.get("data", {}).get("method", "unknown") if isinstance(e.get("data"), dict) else "unknown"
+                methods[m] = methods.get(m, 0) + 1
+            lines.append("")
+            lines.append("Debug reproduction methods:")
+            for m, c in sorted(methods.items(), key=lambda x: -x[1]):
+                lines.append(f"  {m}: {c}")
+
+        # G-Eval provider performance (Enhancement #11)
+        try:
+            from src.evaluation.geval_scorer import get_provider_performance, get_low_scoring_details
+            perf = get_provider_performance()
+            if perf:
+                lines.append("")
+                lines.append("Provider quality scores (G-Eval):")
+                for provider, agents in sorted(perf.items()):
+                    for agent_type, scores in sorted(agents.items()):
+                        avg = scores["avg_score"]
+                        count = scores["sample_count"]
+                        low = scores["low_scores"]
+                        flag = " *** LOW ***" if avg <= 2.0 else ""
+                        lines.append(
+                            f"  {provider}/{agent_type}: avg={avg}/5 "
+                            f"(n={count}, low_scores={low}){flag}"
+                        )
+                        # Show per-score counts for providers with any score < 2
+                        dist = scores.get("score_distribution")
+                        if dist:
+                            for dim in ("completeness", "correctness", "format_compliance"):
+                                dim_counts = dist.get(dim, {})
+                                if dim_counts:
+                                    counts_str = " ".join(
+                                        f"{s}:{c}" for s, c in sorted(dim_counts.items())
+                                    )
+                                    lines.append(f"    {dim}: {counts_str}")
+
+            # Detailed low-score invocations (available via monitoring tool: `python -m src.visibility summary`)
+            low_scores = get_low_scoring_details()
+            if low_scores:
+                lines.append("")
+                lines.append(f"Low quality invocations (score <= 2): {len(low_scores)} total")
+                lines.append("  (Run `python -m src.visibility summary` for full details)")
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"G-Eval digest failed: {e}")
+
         return "\n".join(lines)
 
     def format_task_report(self, task_id: str) -> str:
@@ -147,6 +201,9 @@ def main():
     sub.add_parser("active", help="Active work")
     sub.add_parser("blocked", help="Blocked stories")
     sub.add_parser("summary", help="Daily summary")
+    sub.add_parser("quality", help="G-Eval quality details (low-scoring invocations)")
+    sub.add_parser("calibration", help="Agent self-assessment accuracy (confidence vs G-Eval)")
+    sub.add_parser("enhancements", help="Enhancement suggestions logged by agents")
 
     p_report = sub.add_parser("report", help="Task report")
     p_report.add_argument("task_id", help="Task ID")
@@ -172,6 +229,82 @@ def main():
         print(json.dumps(blocked, indent=2))
     elif args.command == "summary":
         print(vis.generate_daily_summary())
+    elif args.command == "quality":
+        try:
+            from src.evaluation.geval_scorer import get_low_scoring_details, get_provider_performance
+            perf = get_provider_performance()
+            if perf:
+                print("Provider Quality Scores (G-Eval)\n")
+                for provider, agents in sorted(perf.items()):
+                    for agent_type, scores in sorted(agents.items()):
+                        print(f"  {provider}/{agent_type}: avg={scores['avg_score']}/5 (n={scores['sample_count']})")
+                        dist = scores.get("score_distribution")
+                        if dist:
+                            for dim in ("completeness", "correctness", "format_compliance"):
+                                dim_counts = dist.get(dim, {})
+                                if dim_counts:
+                                    counts_str = " ".join(f"{s}:{c}" for s, c in sorted(dim_counts.items()))
+                                    print(f"    {dim}: {counts_str}")
+            low = get_low_scoring_details()
+            if low:
+                print(f"\nLow Quality Invocations (score <= 2 on any dimension): {len(low)}\n")
+                for ls in low:
+                    print(
+                        f"  [{ls['timestamp'][:16]}] {ls['provider']}/{ls['agent_type']}: "
+                        f"complete={ls['completeness']} correct={ls['correctness']} "
+                        f"format={ls['format_compliance']}"
+                    )
+                    if ls.get("notes"):
+                        print(f"    Notes: {ls['notes']}")
+            elif not perf:
+                print("No G-Eval scores available yet.")
+        except ImportError:
+            print("G-Eval scorer module not available.")
+    elif args.command == "calibration":
+        try:
+            from src.evaluation.geval_scorer import get_calibration_report
+            report = get_calibration_report()
+            if report:
+                print("Agent Self-Assessment Calibration\n")
+                print(f"{'Provider':<20} {'Agent Type':<15} {'Samples':>7} {'Confidence':>10} {'G-Eval':>7} {'Delta':>7}")
+                print("-" * 70)
+                for r in report:
+                    delta_str = f"{r['avg_delta']:+.2f}"
+                    flag = ""
+                    if abs(r["avg_delta"]) >= 1.5:
+                        flag = " *** MISCALIBRATED ***"
+                    elif r["avg_delta"] >= 0.5:
+                        flag = " (overconfident)"
+                    elif r["avg_delta"] <= -0.5:
+                        flag = " (underconfident)"
+                    print(
+                        f"{r['provider']:<20} {r['agent_type']:<15} "
+                        f"{r['sample_count']:>7} {r['avg_confidence']:>10.1f} "
+                        f"{r['avg_geval']:>7.1f} {delta_str:>7}{flag}"
+                    )
+                print("\nDelta = confidence - G-Eval avg. Positive = overconfident.")
+            else:
+                print("No calibration data yet. Agents need to report confidence scores.")
+        except ImportError:
+            print("G-Eval scorer module not available.")
+    elif args.command == "enhancements":
+        import os as _os
+        enh_file = _os.path.join(
+            _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+            ".memory", "enhancements.jsonl"
+        )
+        if _os.path.exists(enh_file):
+            with open(enh_file, "r") as f:
+                entries = [json.loads(line) for line in f if line.strip()]
+            if entries:
+                print(f"Enhancement Suggestions ({len(entries)} total)\n")
+                for e in entries[-50:]:  # Show last 50
+                    print(f"  [{e.get('ts', '')[:16]}] {e.get('phase', '?')}/{e.get('story_id', '?')}")
+                    print(f"    {e.get('enhancement', '')}")
+            else:
+                print("No enhancements logged yet.")
+        else:
+            print("No enhancements file found. Agents haven't logged any yet.")
     elif args.command == "report":
         print(vis.format_task_report(args.task_id))
     elif args.command == "events":

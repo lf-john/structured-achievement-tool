@@ -9,8 +9,10 @@ Sends ntfy notifications when issues are detected.
 import os
 import json
 import time
+import hashlib
 import subprocess
 import logging
+import shutil
 from datetime import datetime, timedelta
 from typing import Optional
 from pathlib import Path
@@ -18,11 +20,11 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 AUDIT_DIR = ".memory/audits"
-TASK_DIRS = [
-    "/home/johnlane/GoogleDrive/DriveSyncFiles/sat-tasks",
-]
-NTFY_TOPIC = "johnlane-claude-tasks"
-NTFY_SERVER = "https://ntfy.sh"
+from src.core.paths import SAT_TASKS_DIR
+
+TASK_DIRS = [str(SAT_TASKS_DIR)]
+NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
+NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
 
 # Set D-Bus env for systemctl --user from cron context
 UID = os.getuid()
@@ -30,9 +32,57 @@ os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{UID}")
 os.environ.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{UID}/bus")
 
 
+MAINTENANCE_AUDIT_LOG = ".memory/maintenance_audit.jsonl"
+MAINTENANCE_AUDIT_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+class MaintenanceAuditLog:
+    """Append-only JSONL audit log for maintenance operations."""
+
+    def __init__(self, path: str = MAINTENANCE_AUDIT_LOG,
+                 max_bytes: int = MAINTENANCE_AUDIT_MAX_BYTES):
+        self.path = path
+        self.max_bytes = max_bytes
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    def write(self, source: str, action: str, details: Optional[dict] = None,
+              llm_response_hash: Optional[str] = None):
+        """Append one audit entry, rotating if the file exceeds max_bytes."""
+        self._rotate_if_needed()
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "source": source,
+            "action": action,
+            "details": details,
+            "llm_response_hash": llm_response_hash,
+        }
+        try:
+            with open(self.path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, default=str) + "\n")
+        except OSError as e:
+            logger.error("Failed to write maintenance audit log: %s", e)
+
+    def _rotate_if_needed(self):
+        """Rotate log file if it exceeds max_bytes. Keep 1 backup."""
+        try:
+            if os.path.exists(self.path) and os.path.getsize(self.path) > self.max_bytes:
+                backup = self.path + ".1"
+                shutil.move(self.path, backup)
+                logger.info("Rotated maintenance audit log to %s", backup)
+        except OSError as e:
+            logger.warning("Failed to rotate maintenance audit log: %s", e)
+
+    @staticmethod
+    def hash_response(response: str) -> str:
+        """SHA-256 hash of a raw LLM response string."""
+        return hashlib.sha256(response.encode("utf-8")).hexdigest()
+
+
 class SystemAuditor:
-    def __init__(self, audit_dir: str = AUDIT_DIR):
+    def __init__(self, audit_dir: str = AUDIT_DIR,
+                 maintenance_log: Optional[MaintenanceAuditLog] = None):
         self.audit_dir = audit_dir
+        self.audit_log = maintenance_log or MaintenanceAuditLog()
         os.makedirs(audit_dir, exist_ok=True)
 
     def collect_inputs(self) -> dict:
@@ -133,12 +183,32 @@ class SystemAuditor:
         """Execute a full audit cycle. Returns audit result."""
         timestamp = datetime.now().isoformat()
 
+        self.audit_log.write(
+            source="audit_cronjob", action="audit_started",
+            details={"timestamp": timestamp},
+        )
+
         inputs = self.collect_inputs()
         prompt = self.build_audit_prompt(inputs)
 
         # Invoke LLM via ollama CLI
         llm_response = self._invoke_llm(prompt)
+        response_hash = MaintenanceAuditLog.hash_response(llm_response)
         result = self.parse_audit_response(llm_response)
+
+        self.audit_log.write(
+            source="audit_cronjob", action="llm_response_received",
+            details={"status": result.get("status", "unknown")},
+            llm_response_hash=response_hash,
+        )
+
+        # Log detected issues
+        issues = result.get("issues", [])
+        if issues:
+            self.audit_log.write(
+                source="audit_cronjob", action="issues_detected",
+                details={"issues": issues},
+            )
 
         result["timestamp"] = timestamp
         result["inputs"] = inputs
@@ -274,6 +344,11 @@ class SystemAuditor:
         status = result.get("status", "ok")
         if status == "ok":
             return
+
+        self.audit_log.write(
+            source="audit_cronjob", action="notification_sent",
+            details={"status": status, "issue_count": len(result.get("issues", []))},
+        )
 
         issues = result.get("issues", [])
         recommendations = result.get("recommendations", [])

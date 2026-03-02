@@ -1,10 +1,17 @@
 import json
+import logging
 import os
+import shutil
 from datetime import datetime
 from typing import List, Optional
 from pathlib import Path
 
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+# Rotate the journal when it exceeds this size (bytes)
+MAX_JOURNAL_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
 class AuditRecord(BaseModel):
@@ -25,7 +32,33 @@ class AuditJournal:
             with open(str(self.journal_file_path), "w", encoding="utf-8") as f:
                 pass
 
+    def _maybe_rotate(self):
+        """Rotate the journal file if it exceeds MAX_JOURNAL_SIZE.
+
+        Keeps one rotated backup (.1) and starts a fresh journal.
+        """
+        try:
+            if not self.journal_file_path.exists():
+                return
+            size = self.journal_file_path.stat().st_size
+            if size < MAX_JOURNAL_SIZE:
+                return
+
+            rotated = Path(str(self.journal_file_path) + ".1")
+            # Remove old rotated file if it exists
+            if rotated.exists():
+                rotated.unlink()
+            # Rename current → .1
+            shutil.move(str(self.journal_file_path), str(rotated))
+            # Create fresh empty journal
+            with open(str(self.journal_file_path), "w", encoding="utf-8") as f:
+                pass
+            logger.info(f"Rotated audit journal ({size // 1024}KB) → {rotated.name}")
+        except OSError as e:
+            logger.warning(f"Audit journal rotation failed: {e}")
+
     def log(self, record: AuditRecord):
+        self._maybe_rotate()
         with open(str(self.journal_file_path), "a", encoding="utf-8") as f:
             f.write(record.model_dump_json() + "\n")
             f.flush()

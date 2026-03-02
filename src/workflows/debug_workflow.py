@@ -1,140 +1,271 @@
 """
 DebugWorkflow — LangGraph state machine for debugging tasks.
 
-Defines the core states: REPRODUCE, DIAGNOSE, ROUTING,
-and outcome branches: dev, config, maint, report.
+Flow: REPRODUCE → DIAGNOSE → ROUTING → [dev | config | maint | report]
+
+Each outcome branch delegates to the appropriate specialized workflow:
+- dev: DevTDDWorkflow (ARCHITECT → PLAN → TEST → CODE → VERIFY → LEARN)
+- config: ConfigTDDWorkflow (PLAN → TEST → EXECUTE → VERIFY_SCRIPT → LEARN)
+- maint: MaintenanceWorkflow (PLAN → TEST → EXECUTE → VERIFY → LEARN)
+- report: ResearchWorkflow (GATHER → ANALYZE → SYNTHESIZE)
+
+The debug context (failure_context, reproduction details, diagnosis) is
+injected into the story description so the sub-workflow's LLM phases have
+full awareness of what went wrong and why.
 """
 
 import logging
+from functools import partial
 from typing import Literal, Optional
 
 from langgraph.graph import StateGraph, END
 
-from src.workflows.base_workflow import BaseWorkflow, phase_node # Import phase_node for LLM-driven nodes
+from src.workflows.base_workflow import BaseWorkflow, phase_node
 from src.workflows.state import StoryState
 from src.llm.routing_engine import RoutingEngine
 
 logger = logging.getLogger(__name__)
 
-# This function simulates the reproduction of a failure for the DebugWorkflow.
-def simulate_reproduction(failure_context: str) -> dict:
+
+def simulate_reproduction(failure_context: str, working_directory: str = None) -> dict:
     """
-    Simulates an attempt to reproduce a failure based on the provided context.
-    This is a placeholder for actual reproduction logic.
+    Attempt to reproduce a failure by re-running the failing test.
+
+    Strategy:
+    1. Extract test file/function from failure context
+    2. Re-run the test to confirm the failure still exists
+    3. Fall back to keyword heuristic if no test can be identified
     """
-    if "Error" in failure_context or "Failure" in failure_context or "fault" in failure_context:
-        return {"status": "reproduced", "details": f"Simulated reproduction of: {failure_context[:50]}..."}
-    elif not failure_context.strip():
-        return {"status": "not_applicable", "details": "No failure context provided for reproduction attempt."}
-    else:
-        return {"status": "not_reproduced", "details": f"Could not reproduce failure with context: {failure_context[:50]}..."}
+    if not failure_context.strip():
+        return {"status": "not_applicable", "details": "No failure context provided."}
+
+    # Try to extract a test file reference from the failure context
+    import re
+    import subprocess
+
+    test_file_match = re.search(
+        r'(tests?/\S+\.py)(?:::(\S+))?',
+        failure_context,
+    )
+
+    if test_file_match and working_directory:
+        test_file = test_file_match.group(1)
+        test_func = test_file_match.group(2)
+        test_target = f"{test_file}::{test_func}" if test_func else test_file
+
+        try:
+            result = subprocess.run(
+                ["python", "-m", "pytest", test_target, "-x", "--tb=short", "-q"],
+                cwd=working_directory,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode != 0:
+                return {
+                    "status": "reproduced",
+                    "method": "test_reexecution",
+                    "test_target": test_target,
+                    "details": f"Test failure reproduced by re-running {test_target}:\n{result.stdout[-500:]}",
+                }
+            else:
+                return {
+                    "status": "not_reproduced",
+                    "method": "test_reexecution",
+                    "test_target": test_target,
+                    "details": f"Test {test_target} now passes — failure may be transient.",
+                }
+        except subprocess.TimeoutExpired:
+            return {
+                "status": "reproduced",
+                "method": "test_reexecution",
+                "test_target": test_target,
+                "details": f"Test {test_target} timed out (>120s) — likely stuck or resource-bound.",
+            }
+        except Exception as e:
+            logger.warning(f"Test re-execution failed: {e}")
+            # Fall through to keyword heuristic
+
+    # Fallback: keyword heuristic
+    error_indicators = [
+        "error", "failure", "fault", "exception", "traceback",
+        "failed", "crash", "timeout", "refused", "denied",
+    ]
+    if any(term in failure_context.lower() for term in error_indicators):
+        return {
+            "status": "reproduced",
+            "method": "keyword_heuristic",
+            "details": f"Failure pattern detected in context: {failure_context[:200]}",
+        }
+    return {
+        "status": "not_reproduced",
+        "method": "keyword_heuristic",
+        "details": f"Could not reproduce failure from context: {failure_context[:200]}",
+    }
 
 
 def categorize_diagnosis(reproduction_details: str) -> dict:
     """
-    Categorizes a diagnosed issue into one of four outcomes: development, config, maintenance, or review.
-
-    Returns:
-        dict with "category" and "reasoning" keys
+    Categorize a diagnosed issue into one of four outcomes.
     """
     details_lower = reproduction_details.lower()
 
-    # Check for maintenance issues (system resource/infrastructure problems)
-    if any(term in details_lower for term in ["disk", "space", "memory", "permissions", "service", "restart"]):
+    if any(term in details_lower for term in [
+        "disk", "space", "memory", "permissions", "service", "restart",
+        "oom", "quota", "mount", "pid",
+    ]):
         return {
             "category": "maintenance",
-            "reasoning": "System resource or infrastructure issue requiring maintenance"
+            "reasoning": "System resource or infrastructure issue requiring maintenance",
         }
 
-    # Check for configuration issues
-    if any(term in details_lower for term in ["config", "parameter", "port", "invalid"]):
+    if any(term in details_lower for term in [
+        "config", "parameter", "port", "invalid", "env", "setting",
+        "credential", "key", "path",
+    ]):
         return {
             "category": "config",
-            "reasoning": "Configuration parameter or setting issue"
+            "reasoning": "Configuration parameter or setting issue",
         }
 
-    # Check for non-reproducible/informational issues
     if "not reproduced" in details_lower or "not_reproduced" in details_lower:
         return {
             "category": "review",
-            "reasoning": "Non-reproducible issue - informational only"
+            "reasoning": "Non-reproducible issue — informational review only",
         }
 
-    # Default to development (code-level issues)
     return {
         "category": "development",
-        "reasoning": "Code-level issue requiring development fix"
+        "reasoning": "Code-level issue requiring development fix",
     }
 
-# Placeholder node functions - these will contain actual logic later
-def reproduce(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
-    logger.info("Entering REPRODUCE state.")
-    failure_context = state.get("failure_context", "")
-    reproduction_outcome = simulate_reproduction(failure_context)
 
-    state["reproduction_status"] = reproduction_outcome["status"]
-    state["reproduction_details"] = reproduction_outcome["details"]
-    logger.info(f"Reproduction attempt status: {reproduction_outcome['status']}")
-    logger.info(f"Reproduction attempt details: {reproduction_outcome['details']}")
+def _enrich_story_with_debug_context(state: StoryState) -> StoryState:
+    """Inject debug context into the story description so sub-workflow LLM
+    phases understand the failure being debugged."""
+    story = dict(state.get("story", {}))
+    original_desc = story.get("description", "")
+
+    debug_context = (
+        f"\n\n---\n**Debug Context (auto-injected)**\n"
+        f"- Reproduction status: {state.get('reproduction_status', 'unknown')}\n"
+        f"- Reproduction details: {state.get('reproduction_details', 'N/A')}\n"
+        f"- Diagnosis: {state.get('diagnosis_category', 'unknown')} — "
+        f"{state.get('diagnosis_reasoning', 'N/A')}\n"
+        f"- Original failure: {state.get('failure_context', 'N/A')[:500]}\n"
+        f"---\n"
+    )
+    story["description"] = original_desc + debug_context
+    state["story"] = story
     return state
+
+
+# --- Core node functions ---
+
+def reproduce(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
+    logger.info("Debug: REPRODUCE — attempting to reproduce failure")
+    failure_context = state.get("failure_context", "")
+    working_dir = state.get("working_directory")
+    outcome = simulate_reproduction(failure_context, working_directory=working_dir)
+    state["reproduction_status"] = outcome["status"]
+    state["reproduction_details"] = outcome["details"]
+    state["reproduction_method"] = outcome.get("method", "keyword_heuristic")
+    logger.info(f"Debug: reproduction={outcome['status']} method={outcome.get('method', 'keyword_heuristic')}")
+
+    # Log reproduction event for daily digest monitoring
+    try:
+        from src.db.database_manager import DatabaseManager
+        db = DatabaseManager()
+        db.log_event(
+            event_type="debug_reproduction",
+            data={
+                "status": outcome["status"],
+                "method": outcome.get("method", "keyword_heuristic"),
+                "story_id": state.get("story", {}).get("id", "unknown"),
+            },
+        )
+    except Exception:
+        pass  # Best-effort monitoring
+
+    return state
+
 
 def diagnose(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
-    logger.info("Entering DIAGNOSE state.")
-
-    # Get reproduction details to use for diagnosis
+    logger.info("Debug: DIAGNOSE — categorizing issue")
     reproduction_details = state.get("reproduction_details", "")
-
-    # Categorize the diagnosed issue
     diagnosis = categorize_diagnosis(reproduction_details)
-
-    # Update state with diagnosis information
     state["diagnosis_category"] = diagnosis["category"]
     state["diagnosis_reasoning"] = diagnosis["reasoning"]
-
-    logger.info(f"Diagnosis: {diagnosis['category']} - {diagnosis['reasoning']}")
-
+    logger.info(f"Debug: diagnosis={diagnosis['category']} — {diagnosis['reasoning']}")
     return state
+
 
 def routing(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
-    logger.info("Entering ROUTING state.")
-    # Placeholder for actual routing logic, the decision will be made by routing_decision
+    logger.info("Debug: ROUTING — preparing for sub-workflow dispatch")
+    return _enrich_story_with_debug_context(state)
+
+
+# --- Outcome branch nodes ---
+
+def _run_sub_workflow(state: StoryState, workflow_cls, routing_engine: RoutingEngine) -> StoryState:
+    """Instantiate and run a sub-workflow, returning the merged state."""
+    try:
+        sub_wf = workflow_cls(routing_engine=routing_engine)
+        compiled = sub_wf.compile()
+        result = compiled.invoke(dict(state))
+        # Merge sub-workflow outputs back into our state
+        state.update(result)
+        logger.info(f"Debug: sub-workflow {workflow_cls.__name__} completed")
+    except Exception as e:
+        logger.error(f"Debug: sub-workflow {workflow_cls.__name__} failed: {e}")
+        state["failure_context"] = (
+            state.get("failure_context", "") +
+            f"\nSub-workflow {workflow_cls.__name__} error: {e}"
+        )
     return state
 
-def dev_workflow(state: StoryState) -> StoryState:
-    logger.info("Entering DEV_WORKFLOW state.")
-    # Placeholder for kicking off a Dev TDD workflow
-    return state
 
-def config_workflow(state: StoryState) -> StoryState:
-    logger.info("Entering CONFIG_WORKFLOW state.")
-    # Placeholder for kicking off a Config TDD workflow
-    return state
+def dev_workflow(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
+    """Route to DevTDDWorkflow for code-level fixes."""
+    logger.info("Debug: dispatching to DevTDDWorkflow")
+    from src.workflows.dev_tdd_workflow import DevTDDWorkflow
+    return _run_sub_workflow(state, DevTDDWorkflow, routing_engine)
 
-def maint_workflow(state: StoryState) -> StoryState:
-    logger.info("Entering MAINT_WORKFLOW state.")
-    # Placeholder for kicking off a Maintenance workflow
-    return state
 
-def report_workflow(state: StoryState) -> StoryState:
-    logger.info("Entering REPORT_WORKFLOW state.")
-    # Placeholder for generating a report
-    return state
+def config_workflow(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
+    """Route to ConfigTDDWorkflow for configuration fixes."""
+    logger.info("Debug: dispatching to ConfigTDDWorkflow")
+    from src.workflows.config_tdd_workflow import ConfigTDDWorkflow
+    return _run_sub_workflow(state, ConfigTDDWorkflow, routing_engine)
+
+
+def maint_workflow(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
+    """Route to MaintenanceWorkflow for infrastructure fixes."""
+    logger.info("Debug: dispatching to MaintenanceWorkflow")
+    from src.workflows.maintenance_workflow import MaintenanceWorkflow
+    return _run_sub_workflow(state, MaintenanceWorkflow, routing_engine)
+
+
+def report_workflow(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
+    """Route to ResearchWorkflow for non-reproducible issues (investigation)."""
+    logger.info("Debug: dispatching to ResearchWorkflow for investigation")
+    from src.workflows.research_workflow import ResearchWorkflow
+    return _run_sub_workflow(state, ResearchWorkflow, routing_engine)
+
 
 class DebugWorkflow(BaseWorkflow):
     """
-    Implements the Debugging Workflow state machine.
+    Debugging workflow: REPRODUCE → DIAGNOSE → ROUTING → sub-workflow.
+
+    After diagnosis, routes to the appropriate specialized workflow that
+    actually performs the fix or investigation.
     """
+
     def __init__(self, routing_engine: Optional[RoutingEngine] = None):
         super().__init__(routing_engine)
-        # Compile the workflow graph and store as app
         self.app = self.compile()
 
     def routing_decision(self, state: StoryState) -> Literal["dev", "config", "maint", "report"]:
-        """
-        Routes the debugging task to the appropriate specialized workflow
-        based on the output of the DIAGNOSE phase.
-        """
-        # Use the diagnosis category computed by the diagnose node
         category = state.get("diagnosis_category", "development")
         category_map = {
             "development": "dev",
@@ -143,58 +274,37 @@ class DebugWorkflow(BaseWorkflow):
             "review": "report",
         }
         decision = category_map.get(category, "dev")
-        logger.info(f"Routing decision: {decision} (from diagnosis: {category})")
+        logger.info(f"Debug: routing decision={decision} (diagnosis={category})")
         return decision
 
     def run(self, state: StoryState) -> StoryState:
-        """
-        Run the DebugWorkflow with the given initial state.
-
-        Args:
-            state: The initial StoryState
-
-        Returns:
-            The final StoryState after the workflow completes
-        """
         return self.app.invoke(state)
 
     def build_graph(self) -> StateGraph:
-        """
-        Builds and returns the LangGraph StateGraph for the DebugWorkflow.
-        """
         workflow = StateGraph(StoryState)
+        re = self.routing_engine
 
-        # Add nodes for the core stages
-        workflow.add_node("reproduce", lambda state: reproduce(state, self.routing_engine))
-        workflow.add_node("diagnose", lambda state: diagnose(state, self.routing_engine))
-        workflow.add_node("routing", lambda state: routing(state, self.routing_engine))
+        # Core stages
+        workflow.add_node("reproduce", lambda s: reproduce(s, re))
+        workflow.add_node("diagnose", lambda s: diagnose(s, re))
+        workflow.add_node("routing", lambda s: routing(s, re))
 
-        # Add nodes for the outcome branches
-        workflow.add_node("dev", dev_workflow)
-        workflow.add_node("config", config_workflow)
-        workflow.add_node("maint", maint_workflow)
-        workflow.add_node("report", report_workflow)
+        # Outcome branches — each invokes its full sub-workflow
+        workflow.add_node("dev", lambda s: dev_workflow(s, re))
+        workflow.add_node("config", lambda s: config_workflow(s, re))
+        workflow.add_node("maint", lambda s: maint_workflow(s, re))
+        workflow.add_node("report", lambda s: report_workflow(s, re))
 
-        # Define the entry point
         workflow.set_entry_point("reproduce")
-
-        # Define transitions
         workflow.add_edge("reproduce", "diagnose")
         workflow.add_edge("diagnose", "routing")
 
-        # Conditional transitions from ROUTING
         workflow.add_conditional_edges(
             "routing",
             self.routing_decision,
-            {
-                "dev": "dev",
-                "config": "config",
-                "maint": "maint",
-                "report": "report",
-            },
+            {"dev": "dev", "config": "config", "maint": "maint", "report": "report"},
         )
 
-        # End points for the outcome branches (for now)
         workflow.add_edge("dev", END)
         workflow.add_edge("config", END)
         workflow.add_edge("maint", END)

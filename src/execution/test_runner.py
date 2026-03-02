@@ -223,9 +223,22 @@ def get_test_command(
         _, best_path = candidates[0]
         return f"pytest {best_path} -v"
 
-    # Project-level command
+    # Project-level command (from DB or parameter)
     if project_test_command:
         return project_test_command
+
+    # Try to load from project DB
+    try:
+        from src.db.database_manager import DatabaseManager
+        db = DatabaseManager()
+        projects = db.get_all_projects()
+        for proj in projects:
+            if proj.get("project_dir") and working_directory.startswith(proj["project_dir"]):
+                if proj.get("test_command"):
+                    return proj["test_command"]
+                break
+    except Exception:
+        pass
 
     return "pytest tests/ -v"
 

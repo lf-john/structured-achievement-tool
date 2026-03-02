@@ -24,7 +24,7 @@ from src.llm.response_parser import MediatorResponse, MediatorDecision
 logger = logging.getLogger(__name__)
 
 # Phases where mediator can fire
-TRIGGER_PHASES = {"CODE", "VERIFY", "FIX"}
+TRIGGER_PHASES = {"TDD_RED", "CODE", "VERIFY", "FIX"}
 
 # File categorization patterns
 TEST_FILE_PATTERNS = [

@@ -52,7 +52,7 @@ class TestSendNtfy:
     @patch("src.notifications.notifier.requests.post")
     def test_sends_notification(self, mock_post):
         mock_post.return_value.status_code = 200
-        notifier = Notifier(ntfy_topic="test-topic")
+        notifier = Notifier(ntfy_topic="test-topic", config={})
         result = notifier.send_ntfy("Title", "Message")
         assert result is True
         mock_post.assert_called_once()
@@ -60,7 +60,7 @@ class TestSendNtfy:
     @patch("src.notifications.notifier.requests.post")
     def test_returns_false_on_failure(self, mock_post):
         mock_post.side_effect = Exception("Network error")
-        notifier = Notifier(ntfy_topic="test-topic")
+        notifier = Notifier(ntfy_topic="test-topic", config={})
         result = notifier.send_ntfy("Title", "Message")
         assert result is False
 
@@ -69,7 +69,7 @@ class TestHumanNotificationHelpers:
     @patch("src.notifications.notifier.requests.post")
     def test_notify_human_action_required(self, mock_post):
         mock_post.return_value.status_code = 200
-        notifier = Notifier(ntfy_topic="test")
+        notifier = Notifier(ntfy_topic="test", config={})
         notifier.notify_human_action_required(
             "US-050", "Configure DNS", "assignment", "/path/to/signal"
         )
@@ -80,14 +80,14 @@ class TestHumanNotificationHelpers:
     @patch("src.notifications.notifier.requests.post")
     def test_notify_human_response_received(self, mock_post):
         mock_post.return_value.status_code = 200
-        notifier = Notifier(ntfy_topic="test")
+        notifier = Notifier(ntfy_topic="test", config={})
         notifier.notify_human_response_received("US-050", "assignment")
         mock_post.assert_called_once()
 
     @patch("src.notifications.notifier.requests.post")
     def test_notify_escalation_sends_ntfy(self, mock_post):
         mock_post.return_value.status_code = 200
-        notifier = Notifier(ntfy_topic="test")
+        notifier = Notifier(ntfy_topic="test", config={})
         notifier.notify_escalation("US-050", "DNS Config", "ImportError")
         mock_post.assert_called_once()
 

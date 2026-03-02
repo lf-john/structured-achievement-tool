@@ -53,8 +53,8 @@ source venv/bin/activate
 ### Running Tests
 
 ```bash
-# All tests (excludes 2 known-broken import tests)
-pytest tests/ --ignore=tests/test_US_001_full_sat_loop_integration.py --ignore=tests/test_daemon.py -v
+# All tests
+pytest tests/ -v
 
 # Specific module
 pytest tests/test_embedding_service.py -v

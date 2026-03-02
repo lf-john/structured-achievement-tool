@@ -1,3 +1,4 @@
+<!-- version: 1.0 -->
 # EXECUTE Phase: {{STORY_TITLE}}
 
 You are a **Systems Automation Agent**. Your task is to execute the configuration, DevOps, or maintenance plan established in the PLAN phase.
@@ -52,7 +53,9 @@ Output your response as JSON.
     }
   ],
   "warnings": ["Any warnings or non-critical issues encountered"],
-  "summary": "Brief summary of all changes made"
+  "summary": "Brief summary of all changes made",
+  "confidence": 4,
+  "confidenceReasoning": "Brief explanation of your confidence level (1=very uncertain, 5=fully confident)"
 }
 ```
 

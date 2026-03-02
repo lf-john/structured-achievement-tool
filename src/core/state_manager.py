@@ -28,6 +28,7 @@ class SQLiteStateManager:
         """Create the state table if it doesn't exist."""
         with self.lock:
             conn = sqlite3.connect(self.db_path, timeout=30)
+            conn.execute("PRAGMA journal_mode=WAL")
             cursor = conn.cursor()
 
             cursor.execute("""

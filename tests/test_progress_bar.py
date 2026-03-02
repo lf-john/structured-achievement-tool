@@ -10,7 +10,7 @@ class TestProgressBar:
     @patch("src.notifications.notifier.requests.post")
     def test_sends_progress(self, mock_post):
         mock_post.return_value.status_code = 200
-        notifier = Notifier(ntfy_topic="test")
+        notifier = Notifier(ntfy_topic="test", config={})
         result = notifier.send_progress("task-1", 3, 10, "US-003", "CODE")
         assert result is True
         mock_post.assert_called_once()
@@ -18,7 +18,7 @@ class TestProgressBar:
     @patch("src.notifications.notifier.requests.post")
     def test_progress_bar_format(self, mock_post):
         mock_post.return_value.status_code = 200
-        notifier = Notifier(ntfy_topic="test")
+        notifier = Notifier(ntfy_topic="test", config={})
         notifier.send_progress("task-1", 5, 10, "US-005", "VERIFY")
 
         call_data = mock_post.call_args[1].get("data", b"") if mock_post.call_args[1] else mock_post.call_args.kwargs.get("data", b"")
@@ -30,7 +30,7 @@ class TestProgressBar:
     @patch("src.notifications.notifier.requests.post")
     def test_progress_complete(self, mock_post):
         mock_post.return_value.status_code = 200
-        notifier = Notifier(ntfy_topic="test")
+        notifier = Notifier(ntfy_topic="test", config={})
         notifier.send_progress("task-1", 10, 10)
 
         call_headers = mock_post.call_args[1].get("headers", {}) if mock_post.call_args[1] else mock_post.call_args.kwargs.get("headers", {})
@@ -38,7 +38,7 @@ class TestProgressBar:
 
     @patch("src.notifications.notifier.requests.post")
     def test_zero_total_returns_false(self, mock_post):
-        notifier = Notifier(ntfy_topic="test")
+        notifier = Notifier(ntfy_topic="test", config={})
         result = notifier.send_progress("task-1", 0, 0)
         assert result is False
         mock_post.assert_not_called()
@@ -46,7 +46,7 @@ class TestProgressBar:
     @patch("src.notifications.notifier.requests.post")
     def test_includes_current_story(self, mock_post):
         mock_post.return_value.status_code = 200
-        notifier = Notifier(ntfy_topic="test")
+        notifier = Notifier(ntfy_topic="test", config={})
         notifier.send_progress("task-1", 3, 10, "Configure DNS", "EXECUTE")
 
         call_data = mock_post.call_args[1].get("data", b"") if mock_post.call_args[1] else mock_post.call_args.kwargs.get("data", b"")

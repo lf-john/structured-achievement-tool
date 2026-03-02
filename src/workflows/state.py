@@ -3,6 +3,7 @@ Shared Workflow State Models — Pydantic-validated state for all LangGraph work
 
 The StoryState TypedDict is the central state object flowing through all workflow graphs.
 PhaseOutput captures the result of each phase execution.
+Pydantic models enforce typed interfaces at all cross-component boundaries.
 """
 
 from typing import TypedDict, List, Optional, Any
@@ -49,23 +50,109 @@ class MediatorVerdict(BaseModel):
     retry_guidance: Optional[str] = None
 
 
+# --- Cross-component boundary models (Phase 163 Pydantic improvements) ---
+
+class StoryModel(BaseModel):
+    """Typed representation of a story flowing through execution.
+
+    Replaces raw story dicts passed between orchestrator, story_executor,
+    workflows, and agents. Created from StorySchema after decomposition.
+    """
+    id: str
+    title: str
+    description: str = ""
+    type: str = "development"
+    tdd: bool = True
+    status: str = "pending"
+    dependsOn: List[str] = Field(default_factory=list)
+    acceptanceCriteria: List[str] = Field(default_factory=list)
+    complexity: int = Field(default=5, ge=0, le=10)
+    verification_agents: List[str] = Field(default_factory=list)
+    outcome_verification: bool = False
+
+    # Execution-time fields (not from decomposition)
+    working_directory: Optional[str] = None
+    git_branch: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        """Convert to dict for backward compatibility with code expecting raw dicts."""
+        return self.model_dump()
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "StoryModel":
+        """Create from a raw dict, tolerating extra keys."""
+        return cls.model_validate(data)
+
+
+class ValidationResult(BaseModel):
+    """Result from workflow VALIDATE nodes.
+
+    Replaces raw validation_result dicts in StoryState.
+    """
+    passed: bool
+    reason: str = ""
+    checks_run: List[str] = Field(default_factory=list)
+    issues: List[str] = Field(default_factory=list)
+
+
+class QAFeedback(BaseModel):
+    """Parsed QA feedback from human reviewers.
+
+    Replaces raw qa_feedback_parsed dicts in StoryState.
+    """
+    verdict: str = ""  # "approved", "needs_changes", "rejected"
+    bugs: List[str] = Field(default_factory=list)
+    suggestions: List[str] = Field(default_factory=list)
+    comments: str = ""
+
+
+class EscalationPackage(BaseModel):
+    """Diagnostic package for escalation stories.
+
+    Replaces raw escalation_package dicts in StoryState.
+    """
+    reason: str
+    severity: str = "medium"  # low, medium, high, critical
+    context: str = ""
+    failed_phases: List[str] = Field(default_factory=list)
+    error_summary: str = ""
+    recommended_action: str = ""
+
+
+class ExecutionConfig(BaseModel):
+    """Configuration for story execution.
+
+    Replaces raw config dicts passed to story_executor and workflows.
+    """
+    max_attempts: int = 5
+    mediator_enabled: bool = False
+    checkpoint_db: str = ""
+    worktree_enabled: bool = True
+    phase_models: dict = Field(default_factory=dict)  # phase_name -> model override
+    timeout_seconds: int = 600
+
+
 class StoryState(TypedDict):
     """Central state object for LangGraph workflows.
 
     Flows through all nodes. Each node reads what it needs and updates
     relevant fields. LangGraph handles state persistence via checkpointing.
+
+    Note: TypedDict values are dicts at runtime (for LangGraph serialization),
+    but the Pydantic models above define the schema. Use StoryModel.from_dict()
+    and .to_dict() for conversions at component boundaries.
     """
-    # Story identity
-    story: dict  # Full story dict from PRD (id, title, description, type, tdd, acceptanceCriteria, etc.)
+    # Story identity — use StoryModel.from_dict(state["story"]) at boundaries
+    story: dict  # StoryModel.model_dump() — typed via StoryModel
     task_id: str  # Parent task identifier
     task_description: str  # Original user request
 
-    # Phase tracking
+    # Phase tracking — use PhaseOutput.model_validate(d) for each entry
     current_phase: str
     phase_outputs: List[dict]  # List of PhaseOutput.model_dump() dicts
     phase_retry_count: int  # Retries within current phase (resets per phase)
 
-    # Verification state
+    # Verification state — use TestResult.model_validate(state["test_results"])
     verify_passed: Optional[bool]
     test_results: Optional[dict]  # TestResult.model_dump() dict
 
@@ -74,7 +161,7 @@ class StoryState(TypedDict):
     story_attempt: int  # Which attempt of this story (1-5)
     max_attempts: int
 
-    # Mediator
+    # Mediator — use MediatorVerdict.model_validate(state["mediator_verdict"])
     mediator_verdict: Optional[dict]  # MediatorVerdict.model_dump() dict
     mediator_enabled: bool
 
@@ -105,24 +192,36 @@ class StoryState(TypedDict):
     approval_elapsed: Optional[int]  # Total elapsed time in approval
 
     # Human workflow state (Phase 5)
+    # Use ValidationResult.model_validate(), QAFeedback.model_validate(),
+    # EscalationPackage.model_validate() at boundaries
     human_summary: Optional[str]  # Prepared human-readable brief from PREPARE node
     human_deliverables: Optional[str]  # Human's work output from INTEGRATE node
-    qa_feedback_parsed: Optional[dict]  # Parsed QA feedback (verdict, bugs, suggestions)
-    escalation_package: Optional[dict]  # Diagnostic package for escalation stories
-    validation_result: Optional[dict]  # Result from VALIDATE node (passed, reason)
+    qa_feedback_parsed: Optional[dict]  # QAFeedback.model_dump() dict
+    escalation_package: Optional[dict]  # EscalationPackage.model_dump() dict
+    validation_result: Optional[dict]  # ValidationResult.model_dump() dict
 
 
 def create_initial_state(
-    story: dict,
+    story: "dict | StoryModel",
     task_id: str,
     task_description: str,
     working_directory: str,
     max_attempts: int = 5,
     mediator_enabled: bool = False,
 ) -> StoryState:
-    """Create the initial state for a story workflow execution."""
+    """Create the initial state for a story workflow execution.
+
+    Accepts either a StoryModel instance or a raw dict. If a dict is passed,
+    it is validated through StoryModel to catch schema errors early.
+    """
+    if isinstance(story, StoryModel):
+        story_dict = story.to_dict()
+    else:
+        # Validate the raw dict through StoryModel — catches missing/wrong fields
+        story_dict = StoryModel.from_dict(story).to_dict()
+
     return StoryState(
-        story=story,
+        story=story_dict,
         task_id=task_id,
         task_description=task_description,
         current_phase="",

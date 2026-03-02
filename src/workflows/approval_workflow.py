@@ -24,6 +24,9 @@ from langgraph.graph import StateGraph, END
 
 from src.workflows.state import StoryState, PhaseOutput, PhaseStatus
 from src.notifications.notifier import Notifier
+from src.core.checkpoint_manager import (
+    read_checkpoint, write_checkpoint, STATUS_WAITING_FOR_HUMAN, STATUS_IN_PROGRESS,
+)
 from src.workflows.control_nodes import (
     _build_signal_content,
     _read_signal_file,
@@ -87,6 +90,9 @@ def approval_pause_node(
     write_fn(signal_path, signal_content)
     logger.info(f"APPROVAL_PAUSE: Signal file written to {signal_path}")
 
+    # Mark checkpoint as waiting for human response
+    _update_checkpoint_status(state, STATUS_WAITING_FOR_HUMAN)
+
     # Send initial notification
     priority = "urgent" if config.emergency else "high"
     prefix = "EMERGENCY: " if config.emergency else ""
@@ -115,9 +121,10 @@ def approval_pause_node(
             state["approval_status"] = "responded"
             state["approval_elapsed"] = elapsed
             _record_approval_output(state, "APPROVAL_PAUSE", response)
+            _update_checkpoint_status(state, STATUS_IN_PROGRESS)
             return state
 
-    # No response within initial wait
+    # No response within initial wait — still waiting for human
     state["pause_response"] = "no_response"
     state["approval_status"] = "waiting"
     state["approval_elapsed"] = elapsed
@@ -171,8 +178,10 @@ def approval_follow_up_node(
             state["approval_status"] = "responded"
             state["approval_elapsed"] = state.get("approval_elapsed", 0) + elapsed
             _record_approval_output(state, "APPROVAL_FOLLOW_UP", response)
+            _update_checkpoint_status(state, STATUS_IN_PROGRESS)
             return state
 
+    # Still waiting for human
     state["pause_response"] = "no_response"
     state["approval_status"] = "waiting"
     state["approval_elapsed"] = state.get("approval_elapsed", 0) + elapsed
@@ -246,6 +255,7 @@ def approval_escalation_node(
             state["pause_escalated"] = True
             state["approval_elapsed"] = state.get("approval_elapsed", 0) + elapsed
             _record_approval_output(state, "APPROVAL_ESCALATION", response)
+            _update_checkpoint_status(state, STATUS_IN_PROGRESS)
             return state
 
     # Timeout reached
@@ -305,6 +315,31 @@ def response_decision(state: StoryState) -> Literal["approved", "rejected", "tim
 
 
 # --- Helper ---
+
+def _update_checkpoint_status(state: dict, status: str) -> None:
+    """Update the checkpoint status for the current task.
+
+    Sets the checkpoint to 'waiting_for_human' when entering an approval pause,
+    and back to 'in_progress' when a response is received. This lets the monitor
+    and hourly cron distinguish "waiting for human" from "stuck".
+    """
+    try:
+        working_dir = state.get("working_directory", "")
+        task_id = state.get("task_id", "")
+        if not working_dir or not task_id:
+            return
+        import os
+        db_path = os.path.join(working_dir, ".memory", "checkpoints.db")
+        if not os.path.exists(db_path):
+            return
+        cp = read_checkpoint(db_path, task_id)
+        if cp:
+            cp.status = status
+            write_checkpoint(db_path, cp)
+            logger.info(f"Checkpoint status updated: {task_id} → {status}")
+    except Exception as e:
+        logger.debug(f"Could not update checkpoint status: {e}")
+
 
 def _record_approval_output(state: dict, phase: str, response: str) -> None:
     """Record approval phase output in state."""

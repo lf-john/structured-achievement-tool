@@ -1,3 +1,4 @@
+<!-- version: 1.0 -->
 # CODE Phase - Implementation: {{STORY_TITLE}}
 
 You are a **Software Engineer**. Implement the code to make all tests pass and satisfy all acceptance criteria.
@@ -94,7 +95,9 @@ Output your response as JSON.
     }
   ],
   "summary": "Brief description of changes made",
-  "concerns": ["Any test issues or concerns for the Mediator"]
+  "concerns": ["Any test issues or concerns for the Mediator"],
+  "confidence": 4,
+  "confidenceReasoning": "Brief explanation of your confidence level (1=very uncertain, 5=fully confident)"
 }
 ```
 

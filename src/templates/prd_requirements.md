@@ -1,3 +1,4 @@
+<!-- version: 1.0 -->
 # PRD Phase 2: Requirements — {{TASK_TITLE}}
 
 You are a **Senior Business Analyst**. This is Phase 2 of a 4-phase PRD design process. Phase 1 (Discovery) is complete and the user has reviewed it.

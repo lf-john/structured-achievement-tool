@@ -11,7 +11,7 @@ import time
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 
-from src.execution.audit_cronjob import SystemAuditor
+from src.execution.audit_cronjob import SystemAuditor, MaintenanceAuditLog
 
 
 # ---------------------------------------------------------------------------
@@ -19,10 +19,17 @@ from src.execution.audit_cronjob import SystemAuditor
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def auditor(tmp_path):
+def maintenance_log(tmp_path):
+    """Create a MaintenanceAuditLog writing to a temp directory."""
+    log_path = str(tmp_path / "memory" / "maintenance_audit.jsonl")
+    return MaintenanceAuditLog(path=log_path)
+
+
+@pytest.fixture
+def auditor(tmp_path, maintenance_log):
     """Create a SystemAuditor with a temp audit directory."""
     audit_dir = str(tmp_path / "audits")
-    return SystemAuditor(audit_dir=audit_dir)
+    return SystemAuditor(audit_dir=audit_dir, maintenance_log=maintenance_log)
 
 
 @pytest.fixture
@@ -427,3 +434,155 @@ class TestRunAudit:
 
         # Empty response parses as "ok" (default)
         assert result["status"] == "ok"
+
+    def test_run_audit_writes_audit_log_entries(self, auditor, maintenance_log):
+        """run_audit writes audit_started and llm_response_received entries."""
+        llm_response = json.dumps({
+            "status": "ok",
+            "issues": [],
+            "recommendations": [],
+        })
+        with patch.object(auditor, "collect_inputs", return_value={
+            "recent_tasks": [],
+            "system_health": {},
+            "debug_history": [],
+            "service_status": {},
+        }), patch.object(auditor, "_invoke_llm", return_value=llm_response):
+            auditor.run_audit()
+
+        with open(maintenance_log.path) as f:
+            entries = [json.loads(line) for line in f]
+
+        actions = [e["action"] for e in entries]
+        assert "audit_started" in actions
+        assert "llm_response_received" in actions
+        # No issues, so issues_detected should NOT be present
+        assert "issues_detected" not in actions
+
+        # Check the response hash is a valid SHA-256 hex string
+        resp_entry = next(e for e in entries if e["action"] == "llm_response_received")
+        assert len(resp_entry["llm_response_hash"]) == 64
+
+    def test_run_audit_logs_issues_when_present(self, auditor, maintenance_log):
+        """run_audit writes issues_detected entry when LLM reports issues."""
+        llm_response = json.dumps({
+            "status": "warning",
+            "issues": ["Disk at 90%", "Ollama slow"],
+            "recommendations": [],
+        })
+        with patch.object(auditor, "collect_inputs", return_value={
+            "recent_tasks": [],
+            "system_health": {},
+            "debug_history": [],
+            "service_status": {},
+        }), patch.object(auditor, "_invoke_llm", return_value=llm_response):
+            auditor.run_audit()
+
+        with open(maintenance_log.path) as f:
+            entries = [json.loads(line) for line in f]
+
+        issues_entry = next(e for e in entries if e["action"] == "issues_detected")
+        assert "Disk at 90%" in issues_entry["details"]["issues"]
+        assert "Ollama slow" in issues_entry["details"]["issues"]
+
+    def test_send_notification_writes_audit_log(self, auditor, maintenance_log):
+        """send_notification writes notification_sent entry for non-ok status."""
+        with patch("subprocess.run"):
+            auditor.send_notification({
+                "status": "warning",
+                "issues": ["test issue"],
+                "recommendations": [],
+            })
+
+        with open(maintenance_log.path) as f:
+            entries = [json.loads(line) for line in f]
+
+        assert len(entries) == 1
+        assert entries[0]["action"] == "notification_sent"
+        assert entries[0]["details"]["status"] == "warning"
+        assert entries[0]["details"]["issue_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# MaintenanceAuditLog
+# ---------------------------------------------------------------------------
+
+class TestMaintenanceAuditLog:
+    def test_write_creates_jsonl_entry(self, maintenance_log):
+        """write() appends a valid JSONL line."""
+        maintenance_log.write("test_source", "test_action", {"key": "value"})
+
+        with open(maintenance_log.path) as f:
+            lines = f.readlines()
+
+        assert len(lines) == 1
+        entry = json.loads(lines[0])
+        assert entry["source"] == "test_source"
+        assert entry["action"] == "test_action"
+        assert entry["details"]["key"] == "value"
+        assert "timestamp" in entry
+
+    def test_write_multiple_entries(self, maintenance_log):
+        """Multiple writes append separate lines."""
+        maintenance_log.write("s1", "a1")
+        maintenance_log.write("s2", "a2")
+        maintenance_log.write("s3", "a3")
+
+        with open(maintenance_log.path) as f:
+            lines = f.readlines()
+        assert len(lines) == 3
+
+    def test_write_with_response_hash(self, maintenance_log):
+        """write() stores llm_response_hash when provided."""
+        h = MaintenanceAuditLog.hash_response("hello world")
+        maintenance_log.write("src", "act", llm_response_hash=h)
+
+        with open(maintenance_log.path) as f:
+            entry = json.loads(f.readline())
+        assert entry["llm_response_hash"] == h
+        assert len(h) == 64
+
+    def test_hash_response_deterministic(self):
+        """hash_response produces the same hash for the same input."""
+        h1 = MaintenanceAuditLog.hash_response("test input")
+        h2 = MaintenanceAuditLog.hash_response("test input")
+        assert h1 == h2
+
+    def test_hash_response_different_inputs(self):
+        """hash_response produces different hashes for different inputs."""
+        h1 = MaintenanceAuditLog.hash_response("input a")
+        h2 = MaintenanceAuditLog.hash_response("input b")
+        assert h1 != h2
+
+    def test_rotation_when_exceeding_max_bytes(self, tmp_path):
+        """Log file is rotated when it exceeds max_bytes."""
+        log_path = str(tmp_path / "mem" / "audit.jsonl")
+        log = MaintenanceAuditLog(path=log_path, max_bytes=100)
+
+        # Write enough data to exceed 100 bytes
+        for i in range(10):
+            log.write("src", f"action_{i}", {"data": "x" * 20})
+
+        # After rotation, the backup file should exist
+        backup_path = log_path + ".1"
+        assert os.path.exists(backup_path)
+        # The backup should contain data (it was the old log before rotation)
+        assert os.path.getsize(backup_path) > 0
+        # Both files should exist and contain valid JSONL
+        with open(backup_path) as f:
+            for line in f:
+                json.loads(line)  # should not raise
+
+    def test_rotation_keeps_one_backup(self, tmp_path):
+        """Rotation overwrites older backup, keeping only 1."""
+        log_path = str(tmp_path / "mem" / "audit.jsonl")
+        log = MaintenanceAuditLog(path=log_path, max_bytes=50)
+
+        # Trigger multiple rotations
+        for i in range(30):
+            log.write("src", f"action_{i}", {"d": "x" * 20})
+
+        backup = log_path + ".1"
+        assert os.path.exists(backup)
+        # No .2 backup
+        assert not os.path.exists(log_path + ".2")

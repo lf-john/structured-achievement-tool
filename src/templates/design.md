@@ -1,3 +1,4 @@
+<!-- version: 1.0 -->
 # DESIGN Phase: {{STORY_TITLE}}
 
 You are a **Senior Software Architect**. Plan the implementation approach for this story before any code is written.
@@ -91,7 +92,9 @@ Output your response as JSON.
       "performanceImplications": []
     },
     "implementationOrder": ["step 1", "step 2", "step 3"]
-  }
+  },
+  "confidence": 4,
+  "confidenceReasoning": "Brief explanation of your confidence level (1=very uncertain, 5=fully confident)"
 }
 ```
 

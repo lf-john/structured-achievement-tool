@@ -43,9 +43,15 @@ class TestShouldTrigger:
         result = should_trigger("CODE", [])
         assert not result["should_trigger"]
 
-    def test_tdd_red_not_trigger_phase(self):
-        # TDD_RED is not in TRIGGER_PHASES — mediator doesn't fire for it
+    def test_tdd_red_code_files_trigger(self):
+        # TDD_RED is in TRIGGER_PHASES — code files modified triggers mediator
         result = should_trigger("TDD_RED", ["src/main.py"])
+        assert result["should_trigger"]
+        assert result["violation"] == "code_in_test_phase"
+
+    def test_tdd_red_test_files_only_no_trigger(self):
+        # TDD_RED with only test files is expected behavior — no trigger
+        result = should_trigger("TDD_RED", ["tests/test_main.py"])
         assert not result["should_trigger"]
 
     def test_code_test_file_triggers(self):

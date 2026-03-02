@@ -71,13 +71,14 @@ WORKFLOW_MAP = {
     "research": ResearchWorkflow,
     "review": ReviewWorkflow,
     "assignment": AssignmentWorkflow,
+    # human_task: lazy-imported in get_workflow_for_story (DelayedChecker dependency)
     "qa_feedback": QAFeedbackWorkflow,
     "escalation": EscalationWorkflow,
 }
 
 
 # Human story types that require a notifier
-HUMAN_STORY_TYPES = {"assignment", "qa_feedback", "escalation"}
+HUMAN_STORY_TYPES = {"assignment", "human_task", "qa_feedback", "escalation"}
 
 
 def get_workflow_for_story(
@@ -96,6 +97,9 @@ def get_workflow_for_story(
         workflow_cls = ConfigTDDWorkflow
     elif story.get("tdd", False) and story_type == "maintenance":
         workflow_cls = MaintenanceWorkflow
+    elif story_type == "human_task":
+        from src.workflows.human_task_workflow import HumanTaskWorkflow
+        workflow_cls = HumanTaskWorkflow
     else:
         workflow_cls = WORKFLOW_MAP.get(story_type, DevTDDWorkflow)
 
@@ -167,6 +171,13 @@ async def execute_story(
     re = routing_engine or RoutingEngine()
     story_id = story.get("id", "unknown")
     story_title = story.get("title", "Untitled")
+
+    # Set hierarchical correlation context for this story
+    try:
+        from src.logging_config import set_story_context
+        set_story_context(story_id)
+    except Exception:
+        pass
 
     # --- Worktree isolation ---
     exec_config = _load_execution_config()
@@ -319,7 +330,22 @@ async def _execute_story_inner(
                     mediator_enabled=mediator_enabled,
                 )
                 state_to_invoke["story_attempt"] = attempt
-                state_to_invoke["failure_context"] = last_failure_reason if attempt > 1 else ""
+                # Feed failure context from prior attempt, including any partial output
+                if attempt > 1 and last_failure_reason:
+                    # If the previous failure was a timeout with partial output,
+                    # include it with a caveat about quality
+                    if "WATCHDOG" in last_failure_reason and "Partial output recovered" in last_failure_reason:
+                        state_to_invoke["failure_context"] = (
+                            f"PRIOR ATTEMPT FAILED (timeout). The previous agent was killed "
+                            f"because it exceeded the time limit. Partial output was recovered "
+                            f"but may be incomplete or low quality — use it as a hint, not as "
+                            f"a reliable starting point.\n\n"
+                            f"Previous failure details:\n{last_failure_reason}"
+                        )
+                    else:
+                        state_to_invoke["failure_context"] = last_failure_reason
+                else:
+                    state_to_invoke["failure_context"] = ""
 
             try:
                 final_state = graph.invoke(state_to_invoke, config=config)
@@ -372,31 +398,36 @@ async def _execute_story_inner(
                     phase=last_phase.get("phase", ""),
                 )
 
-                # Identical-failure detection (Failure State 6):
+                # Identical-failure detection (Failure State 6 + Enhancement #7):
                 # Compute a short signature from phase + first 200 chars of error.
-                # If the last 2 signatures are identical, stop retrying.
+                # If the same signature appears twice, allow ONE more attempt with
+                # escalated provider. If it appears three times, stop.
                 _sig = f"{last_phase.get('phase', '')}:{failure_output[:200]}"
                 _failure_signatures.append(_sig)
-                if (
-                    len(_failure_signatures) >= 2
-                    and _failure_signatures[-1] == _failure_signatures[-2]
-                ):
+                identical_count = sum(1 for s in _failure_signatures if s == _sig)
+                if identical_count >= 3:
                     logger.warning(
-                        "Identical failure signature detected twice for %s — "
-                        "skipping remaining retries",
+                        "Identical failure signature detected 3 times for %s — "
+                        "story is stuck, skipping remaining retries",
                         story_id,
                     )
                     if notifier:
                         notifier.notify_story_failed(
                             story_id, story_title,
-                            f"Identical failure x2: {classification.message}",
+                            f"Stuck: identical failure x3: {classification.message}",
                         )
                     return StoryResult(
                         story_id=story_id,
                         success=False,
                         attempts=attempt,
-                        reason=f"Identical failure x2. Last: {classification.message}",
+                        reason=f"Stuck: identical failure x3. Last: {classification.message}",
                         phase_outputs=phase_outputs,
+                    )
+                elif identical_count == 2:
+                    logger.warning(
+                        "Identical failure x2 for %s — one more attempt allowed "
+                        "with potential escalation",
+                        story_id,
                     )
 
                 if classification.severity == FailureSeverity.TRANSIENT:

@@ -25,6 +25,7 @@ class FailureType(str, Enum):
     DISK_FULL = "disk_full"
     LOCK_CONTENTION = "lock_contention"
     API_ERROR = "api_error"
+    MERGE_CONFLICT = "merge_conflict"
 
     # Persistent — needs intervention or Debug story
     CODE_BUG = "code_bug"
@@ -64,6 +65,7 @@ TRANSIENT_PATTERNS: list[tuple[re.Pattern, FailureType, int]] = [
     (re.compile(r'No space left|ENOSPC|disk full', re.I), FailureType.DISK_FULL, 60),
     (re.compile(r'\block\b|EBUSY|resource busy|already locked', re.I), FailureType.LOCK_CONTENTION, 10),
     (re.compile(r'API Error:\s*5\d{2}|500 Internal|502 Bad Gateway|503 Service', re.I), FailureType.API_ERROR, 30),
+    (re.compile(r'CONFLICT.*Merge conflict|merge conflict|Automatic merge failed', re.I), FailureType.MERGE_CONFLICT, 10),
 ]
 
 # Pattern matchers for persistent failures

@@ -58,6 +58,19 @@ def _get_default_branch(project_path: str) -> str:
     return "main"
 
 
+def _prune_worktrees(project_path: str) -> None:
+    """Prune stale worktree references before creating new ones.
+
+    Removes worktree entries whose directories no longer exist on disk,
+    preventing 'already checked out' errors from leftover metadata.
+    """
+    result = _run_git(["worktree", "prune"], project_path)
+    if result.returncode != 0:
+        logger.warning(f"git worktree prune failed: {result.stderr.strip()}")
+    else:
+        logger.debug("Pruned stale worktree references")
+
+
 def create_worktree(project_path: str, task_id: str) -> WorktreeInfo:
     """Create a git worktree for isolated task execution.
 
@@ -74,6 +87,9 @@ def create_worktree(project_path: str, task_id: str) -> WorktreeInfo:
             branch_name=branch_name,
             existed=True,
         )
+
+    # Prune stale worktree references before creating new ones
+    _prune_worktrees(project_path)
 
     os.makedirs(os.path.dirname(worktree_path), exist_ok=True)
 
@@ -147,15 +163,18 @@ def merge_worktree(
 # <base_dir>/.worktrees/<story-id> on branch story/<story-id>.
 
 
-def create_story_worktree(story_id: str, base_dir: str) -> str:
+def create_story_worktree(story_id: str, base_dir: str, worktree_base: Optional[str] = None) -> str:
     """Create a git worktree for isolated story execution.
 
-    Creates a worktree at ``<base_dir>/.worktrees/<story_id>`` with a new
-    branch ``story/<story_id>`` based on the current HEAD.
+    Creates a worktree at ``<worktree_base>/<story_id>`` (or
+    ``<base_dir>/.worktrees/<story_id>`` if no worktree_base is provided)
+    with a new branch ``story/<story_id>`` based on the current HEAD.
 
     Args:
         story_id: Unique story identifier (used in path and branch name).
         base_dir: The root of the main git repository.
+        worktree_base: Optional custom base directory for worktrees.
+            Useful for per-project worktree locations.
 
     Returns:
         Absolute path to the new worktree directory.
@@ -166,13 +185,17 @@ def create_story_worktree(story_id: str, base_dir: str) -> str:
     """
     # Sanitize story_id for filesystem and branch safety
     safe_id = story_id.replace("/", "_").replace(" ", "_").replace("..", "_")
-    worktree_path = os.path.join(base_dir, ".worktrees", safe_id)
+    wt_base = worktree_base or os.path.join(base_dir, ".worktrees")
+    worktree_path = os.path.join(wt_base, safe_id)
     branch_name = f"story/{safe_id}"
 
     # If the worktree already exists on disk, reuse it
     if os.path.isdir(worktree_path):
         logger.info(f"Worktree already exists at {worktree_path}, reusing")
         return worktree_path
+
+    # Prune stale worktree references before creating new ones
+    _prune_worktrees(base_dir)
 
     os.makedirs(os.path.dirname(worktree_path), exist_ok=True)
 
@@ -199,18 +222,28 @@ def create_story_worktree(story_id: str, base_dir: str) -> str:
     return worktree_path
 
 
-def merge_story_worktree(worktree_path: str, base_dir: str) -> bool:
+def merge_story_worktree(
+    worktree_path: str,
+    base_dir: str,
+    verify_after_merge: bool = True,
+) -> bool:
     """Merge changes from a story worktree branch back into the current branch.
 
     Performs a fast-forward merge if possible, otherwise a normal merge commit.
     On merge conflict the merge is aborted and ``False`` is returned.
 
+    After a successful merge the commit is tagged with ``story/<story_id>``
+    for easy rollback.  If *verify_after_merge* is True (the default), a
+    post-merge test suite is executed and the merge is reverted automatically
+    when tests fail.
+
     Args:
         worktree_path: Path to the worktree (used to derive the branch name).
         base_dir: Root of the main git repository.
+        verify_after_merge: Run ``pytest`` after merge and revert on failure.
 
     Returns:
-        True if the merge succeeded, False otherwise.
+        True if the merge (and optional verification) succeeded, False otherwise.
     """
     safe_id = os.path.basename(worktree_path)
     branch_name = f"story/{safe_id}"
@@ -228,26 +261,27 @@ def merge_story_worktree(worktree_path: str, base_dir: str) -> bool:
     head_result = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], base_dir)
     original_branch = head_result.stdout.strip() if head_result.returncode == 0 else "main"
 
+    merge_ok = False
     try:
         # Try fast-forward first
         result = _run_git(["merge", "--ff-only", branch_name], base_dir)
         if result.returncode == 0:
             logger.info(f"Fast-forward merged {branch_name} into {original_branch}")
-            return True
-
-        # Fall back to merge commit
-        result = _run_git(
-            ["merge", branch_name, "-m", f"Merge story {safe_id} into {original_branch}"],
-            base_dir,
-        )
-        if result.returncode == 0:
-            logger.info(f"Merge-committed {branch_name} into {original_branch}")
-            return True
-
-        # Merge conflict — abort
-        logger.error(f"Merge conflict merging {branch_name}: {result.stderr.strip()}")
-        _run_git(["merge", "--abort"], base_dir)
-        return False
+            merge_ok = True
+        else:
+            # Fall back to merge commit
+            result = _run_git(
+                ["merge", branch_name, "-m", f"Merge story {safe_id} into {original_branch}"],
+                base_dir,
+            )
+            if result.returncode == 0:
+                logger.info(f"Merge-committed {branch_name} into {original_branch}")
+                merge_ok = True
+            else:
+                # Merge conflict — abort
+                logger.error(f"Merge conflict merging {branch_name}: {result.stderr.strip()}")
+                _run_git(["merge", "--abort"], base_dir)
+                return False
 
     except Exception as e:
         logger.error(f"Merge failed for {branch_name}: {e}")
@@ -256,6 +290,24 @@ def merge_story_worktree(worktree_path: str, base_dir: str) -> bool:
         except Exception:
             pass
         return False
+
+    if not merge_ok:
+        return False
+
+    # Tag the merge commit for rollback support
+    commit_hash = _run_git(["rev-parse", "HEAD"], base_dir)
+    if commit_hash.returncode == 0:
+        tag_story_commit(base_dir, safe_id, commit_hash.stdout.strip())
+
+    # Post-merge verification
+    if verify_after_merge:
+        if not verify_merge(base_dir, safe_id):
+            logger.warning(
+                f"Post-merge verification failed for story {safe_id}; merge has been reverted"
+            )
+            return False
+
+    return True
 
 
 def remove_story_worktree(worktree_path: str, base_dir: str) -> None:
@@ -412,3 +464,127 @@ def get_modified_files(working_directory: str, against: Optional[str] = None) ->
     if result.returncode == 0:
         return [f for f in result.stdout.strip().split("\n") if f]
     return []
+
+
+# --- Rollback helpers ---
+
+
+PYTEST_TIMEOUT = 120  # seconds for the test suite
+
+
+def tag_story_commit(
+    working_directory: str, story_id: str, commit_hash: str
+) -> bool:
+    """Create a git tag ``story/<story_id>`` at *commit_hash*.
+
+    If the tag already exists it is replaced (force-created) so the tag
+    always points to the latest merge for that story.
+
+    Args:
+        working_directory: Root of the git repository.
+        story_id: Story identifier (used in the tag name).
+        commit_hash: The commit to tag.
+
+    Returns:
+        True if the tag was created successfully.
+    """
+    tag_name = f"story/{story_id}"
+    result = _run_git(["tag", "-f", tag_name, commit_hash], working_directory)
+    if result.returncode == 0:
+        logger.info(f"Tagged commit {commit_hash[:8]} as {tag_name}")
+        return True
+    logger.warning(f"Failed to create tag {tag_name}: {result.stderr.strip()}")
+    return False
+
+
+def verify_merge(working_directory: str, story_id: str) -> bool:
+    """Run the test suite after a merge and revert if tests fail.
+
+    Executes ``pytest tests/ -x -q --timeout=120`` in *working_directory*.
+    If the tests pass the function returns True.  On failure the merge
+    commit is reverted with ``git revert HEAD --no-edit`` (preserving
+    history rather than using a hard reset) and False is returned.
+
+    Args:
+        working_directory: Root of the git repository where tests should run.
+        story_id: Story identifier (used only for logging).
+
+    Returns:
+        True if tests pass, False if they fail (merge is reverted).
+    """
+    logger.info(f"Running post-merge verification for story {story_id}")
+
+    try:
+        result = subprocess.run(
+            ["pytest", "tests/", "-x", "-q", f"--timeout={PYTEST_TIMEOUT}"],
+            cwd=working_directory,
+            capture_output=True,
+            text=True,
+            timeout=PYTEST_TIMEOUT + 30,  # allow a little headroom
+        )
+    except subprocess.TimeoutExpired:
+        logger.error(f"Post-merge tests timed out for story {story_id}")
+        result = None  # treat timeout as failure
+    except FileNotFoundError:
+        logger.warning("pytest not found; skipping post-merge verification")
+        return True  # degrade gracefully — don't block merge if pytest missing
+
+    if result is not None and result.returncode == 0:
+        logger.info(f"Post-merge tests passed for story {story_id}")
+        return True
+
+    # Tests failed — revert the merge commit to preserve history
+    test_output = result.stdout if result else "(timed out)"
+    logger.error(
+        f"Post-merge tests FAILED for story {story_id}. "
+        f"Output:\n{test_output}\nReverting merge commit."
+    )
+
+    revert = _run_git(["revert", "HEAD", "--no-edit"], working_directory)
+    if revert.returncode == 0:
+        logger.info(f"Successfully reverted merge commit for story {story_id}")
+    else:
+        logger.error(
+            f"Failed to revert merge commit for story {story_id}: "
+            f"{revert.stderr.strip()}"
+        )
+
+    return False
+
+
+def rollback_story(working_directory: str, story_id: str) -> bool:
+    """Revert the commit associated with a story tag.
+
+    Looks up the tag ``story/<story_id>`` and creates a revert commit that
+    undoes the tagged commit.  This preserves full history (no hard reset).
+
+    Args:
+        working_directory: Root of the git repository.
+        story_id: Story identifier whose merge should be rolled back.
+
+    Returns:
+        True if the revert succeeded, False otherwise.
+    """
+    tag_name = f"story/{story_id}"
+
+    # Resolve the tag to a commit hash
+    result = _run_git(["rev-list", "-n", "1", tag_name], working_directory)
+    if result.returncode != 0:
+        logger.error(f"Tag {tag_name} not found — cannot rollback story {story_id}")
+        return False
+
+    commit_hash = result.stdout.strip()
+    logger.info(f"Rolling back story {story_id} (commit {commit_hash[:8]})")
+
+    revert = _run_git(["revert", commit_hash, "--no-edit"], working_directory)
+    if revert.returncode == 0:
+        logger.info(f"Successfully rolled back story {story_id}")
+        return True
+
+    logger.error(
+        f"Revert failed for story {story_id}: {revert.stderr.strip()}. "
+        "Manual intervention may be required."
+    )
+    # Abort the revert if it left us in a conflicted state
+    _run_git(["revert", "--abort"], working_directory)
+    return False

@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 STORY_TYPES = {
     "development", "config", "maintenance", "debug", "research", "review",
     "conversation",
-    # Human story types (Phase 5 — not yet implemented)
-    "assignment", "approval", "qa_feedback", "escalation",
+    # Human story types
+    "assignment", "human_task", "approval", "qa_feedback", "escalation",
 }
 
 # Map common aliases/variants to canonical names
@@ -40,6 +40,10 @@ _TYPE_MAP.update({
     "Review": "review",
     "Conversation": "conversation",
     "Assignment": "assignment",
+    "human_task": "human_task",
+    "Human_Task": "human_task",
+    "HumanTask": "human_task",
+    "human task": "human_task",
     "Approval": "approval",
     "QA_Feedback": "qa_feedback",
     "qa feedback": "qa_feedback",

@@ -14,8 +14,8 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-NTFY_TOPIC = "johnlane-claude-tasks"
-NTFY_SERVER = "https://ntfy.sh"
+NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
+NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
 
 # Set D-Bus env for systemctl --user from cron context
 UID = os.getuid()

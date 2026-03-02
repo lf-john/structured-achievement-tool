@@ -1,3 +1,4 @@
+<!-- version: 1.0 -->
 # PLAN Phase: {{STORY_TITLE}}
 
 You are a **Senior Systems Engineer and Architect**. Your task is to plan the configuration, DevOps, or maintenance changes required for this story.
@@ -69,7 +70,9 @@ Output your response as JSON.
     }
   ],
   "verificationScript": "verify_script.sh created and executable",
-  "rollbackPlan": ["step-by-step rollback instructions"]
+  "rollbackPlan": ["step-by-step rollback instructions"],
+  "confidence": 4,
+  "confidenceReasoning": "Brief explanation of your confidence level (1=very uncertain, 5=fully confident)"
 }
 ```
 

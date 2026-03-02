@@ -31,10 +31,40 @@ from src.llm.response_parser import extract_json, AgentResponse, MediatorRespons
 from src.llm.providers import get_env_for_provider
 from src.execution.git_manager import auto_commit, get_diff, get_diff_stat, get_modified_files
 from src.execution.test_runner import run_tests, get_test_command, TestResult as TRTestResult
-from src.agents.mediator_agent import should_trigger, MediatorAgent, save_intervention
+from src.agents.mediator_agent import should_trigger, categorize_files, MediatorAgent, save_intervention
 from src.execution.verification_sdk import ConfigValidator, VerifyResult
 
 logger = logging.getLogger(__name__)
+
+# Enhancement collection file — agents log non-critical improvements here
+ENHANCEMENTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".memory")
+
+
+def _collect_enhancements(story_id: str, phase: str, enhancements, working_dir: str):
+    """Collect enhancements_noted from agent output to .memory/enhancements.jsonl.
+
+    These are non-critical improvement ideas logged by agents following the
+    TACHES deviation rules (rule 4/5). Viewable via monitoring tool.
+    """
+    import json as _json
+    from datetime import datetime as _dt
+    target = os.path.join(ENHANCEMENTS_DIR, "enhancements.jsonl")
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    items = enhancements if isinstance(enhancements, list) else [str(enhancements)]
+    try:
+        with open(target, "a", encoding="utf-8") as f:
+            for item in items:
+                entry = {
+                    "ts": _dt.now().isoformat(),
+                    "story_id": story_id,
+                    "phase": phase,
+                    "enhancement": str(item)[:500],
+                }
+                f.write(_json.dumps(entry, separators=(",", ":")) + "\n")
+        logger.info(f"Collected {len(items)} enhancement(s) from {phase}/{story_id}")
+    except Exception as e:
+        logger.debug(f"Failed to collect enhancements: {e}")
+
 
 # Directory for streaming LLM output to disk (enables partial recovery on timeout)
 STREAM_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".memory", "streams")
@@ -116,6 +146,32 @@ def _stream_file_path(story_id: str, phase: str) -> str:
     return os.path.join(STREAM_DIR, f"sat-stream-{safe_id}-{phase}.txt")
 
 
+def _revert_files(working_directory: str, files: list[str]) -> list[str]:
+    """Revert specific files using git checkout HEAD -- <file>.
+
+    Returns list of successfully reverted files.
+    """
+    import subprocess
+    reverted = []
+    for filepath in files:
+        try:
+            result = subprocess.run(
+                ["git", "checkout", "HEAD", "--", filepath],
+                cwd=working_directory,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                reverted.append(filepath)
+                logger.info(f"Reverted file: {filepath}")
+            else:
+                logger.warning(f"Failed to revert {filepath}: {result.stderr}")
+        except Exception as e:
+            logger.warning(f"Error reverting {filepath}: {e}")
+    return reverted
+
+
 # --- Node Factories ---
 
 def phase_node(
@@ -127,6 +183,13 @@ def phase_node(
     """Generic LLM phase node. Builds prompt, invokes LLM, updates state."""
     state = dict(state)  # Copy for mutation
     state["current_phase"] = phase_name
+
+    # Set hierarchical correlation context for this phase
+    try:
+        from src.logging_config import set_phase_context
+        set_phase_context(phase_name)
+    except Exception:
+        pass
 
     story = state["story"]
     working_dir = state["working_directory"]
@@ -184,6 +247,28 @@ def phase_node(
                 if parsed.get("status") == "blocked":
                     status = PhaseStatus.FAILED
                     state["failure_context"] = parsed.get("output", "Blocked")
+
+                # Collect enhancements_noted from agent output
+                enhancements = parsed.get("enhancements_noted")
+                if enhancements:
+                    _collect_enhancements(
+                        story.get("id", "unknown"), phase_name,
+                        enhancements, working_dir,
+                    )
+
+                # Collect architecture_change_proposed from debug agents
+                arch_change = parsed.get("architecture_change_proposed")
+                if arch_change:
+                    _collect_enhancements(
+                        story.get("id", "unknown"), phase_name,
+                        [f"ARCHITECTURE CHANGE PROPOSED: {arch_change}"],
+                        working_dir,
+                    )
+
+                # Collect agent self-assessment confidence
+                confidence = parsed.get("confidence")
+                if confidence is not None:
+                    state["agent_self_confidence"] = confidence
             except (ValueError, Exception):
                 pass  # Not all phases return JSON
 
@@ -219,6 +304,24 @@ def phase_node(
         status = PhaseStatus.FAILED
         state["failure_context"] = str(e)
         logger.error(f"Phase {phase_name} failed: {e}")
+
+    # Log structured event for G-Eval scoring (Enhancement #11)
+    try:
+        from src.logging_config import log_event
+        from src.llm.prompt_builder import get_template_version
+        log_event("llm_invocation", "base_workflow", {
+            "provider": provider.name,
+            "agent_type": agent_name,
+            "phase": phase_name,
+            "story_id": story.get("id", "unknown"),
+            "duration": round(duration, 1),
+            "status": status.value,
+            "output_preview": output_text[:2000] if output_text else "",
+            "template_version": get_template_version(phase_name),
+            "agent_confidence": state.get("agent_self_confidence"),
+        })
+    except Exception:
+        pass  # Best-effort
 
     # Record phase output
     exit_code = result.exit_code if result is not None else -1
@@ -257,6 +360,16 @@ def phase_node(
         commit_hash = auto_commit(working_dir, story.get("id", "unknown"), phase_name)
         if commit_hash:
             logger.debug(f"Auto-committed after {phase_name}: {commit_hash}")
+
+    # Route LEARN phase output to core memory files (Levels 1-3)
+    if phase_name == "LEARN" and status == PhaseStatus.COMPLETE and output_text:
+        try:
+            from src.core.memory_writer import process_learn_output
+            parsed_learn = extract_json(output_text)
+            if isinstance(parsed_learn, dict):
+                process_learn_output(parsed_learn, working_dir)
+        except Exception as e:
+            logger.debug(f"Could not route LEARN output to core memory: {e}")
 
     return state
 
@@ -330,11 +443,55 @@ def test_check_node(
     return state
 
 
+def _invoke_mediator_review(
+    mediator: MediatorAgent,
+    story: dict,
+    phase: str,
+    working_dir: str,
+    test_results: Optional[dict],
+) -> MediatorResponse:
+    """Call the Mediator Agent LLM to review changes. Returns MediatorResponse."""
+    diff_stat = get_diff_stat(working_dir)
+    diff = get_diff(working_dir)
+    mediator_timeout = get_phase_timeout("MEDIATOR")
+    return _run_async(
+        mediator.review(
+            story=story,
+            phase=phase,
+            working_directory=working_dir,
+            changes_summary=diff_stat,
+            changes_diff=diff,
+            test_results_before=None,
+            test_results_after=test_results,
+        ),
+        timeout=mediator_timeout,
+    )
+
+
 def mediator_gate_node(
     state: StoryState,
     routing_engine: RoutingEngine,
 ) -> StoryState:
-    """Optional mediator review after code-producing phases."""
+    """Optional mediator review after code-producing phases.
+
+    The smart trigger (should_trigger) is a DIFF SCRIPT — pure Python file
+    categorization using git diff. It is NOT an LLM call. 90%+ of the time,
+    no relevant file changes are detected and the mediator agent is never called.
+
+    Phase-specific behavior when the trigger fires:
+
+    TDD_RED violation (code files modified during test phase):
+        Auto-revert the code files. No LLM call needed — this is an obvious
+        violation. The mediator agent is never invoked.
+
+    CODE/FIX violation (test files modified during code phase):
+        Call the Mediator Agent LLM to review the test file changes and decide
+        what to do.
+
+    VERIFY violation (test OR code files modified):
+        Categorize files and review each category separately via the Mediator
+        Agent. If either category gets a REVERT verdict, those files are reverted.
+    """
     state = dict(state)
 
     if not state.get("mediator_enabled", False):
@@ -345,7 +502,7 @@ def mediator_gate_node(
     story = state["story"]
     current_phase = state["current_phase"]
 
-    # Check if mediator should trigger
+    # Smart trigger: pure Python file categorization (no LLM call)
     modified = get_modified_files(working_dir)
     trigger = should_trigger(current_phase, modified)
 
@@ -353,49 +510,154 @@ def mediator_gate_node(
         state["mediator_verdict"] = MediatorVerdict(decision="ACCEPT", reasoning=trigger["reason"]).model_dump()
         return state
 
-    # Get diffs for review
-    diff_stat = get_diff_stat(working_dir)
-    diff = get_diff(working_dir)
+    task_path = os.path.dirname(working_dir) if working_dir else "."
+    story_id = story.get("id", "unknown")
+    test_files, code_files = categorize_files(modified)
 
-    # Invoke mediator via thread-safe async bridge
-    mediator = MediatorAgent(routing_engine=routing_engine)
-    mediator_timeout = get_phase_timeout("MEDIATOR")  # defaults to DEFAULT_PHASE_TIMEOUT (600s)
-    try:
-        result = _run_async(
-            mediator.review(
-                story=story,
-                phase=current_phase,
-                working_directory=working_dir,
-                changes_summary=diff_stat,
-                changes_diff=diff,
-                test_results_before=None,
-                test_results_after=state.get("test_results"),
-            ),
-            timeout=mediator_timeout,
-        )
+    # ---------------------------------------------------------------
+    # Case 1: TDD_RED — code files modified during test-writing phase
+    # Auto-revert. No LLM call needed — this is an obvious violation.
+    # ---------------------------------------------------------------
+    if current_phase == "TDD_RED":
+        reverted = _revert_files(working_dir, code_files)
+        reason = f"Auto-reverted code files modified during TDD_RED phase: {reverted}"
+        logger.warning(reason)
 
         state["mediator_verdict"] = MediatorVerdict(
-            decision=result.decision.value,
-            confidence=result.confidence,
-            reasoning=result.reasoning,
-            retry_guidance=result.retryGuidance,
+            decision="REVERT",
+            reasoning=reason,
         ).model_dump()
 
-        # Track intervention
-        task_path = os.path.dirname(working_dir) if working_dir else "."
         save_intervention(
             task_path=task_path,
-            story_id=story.get("id", "unknown"),
+            story_id=story_id,
             phase=current_phase,
-            violation=trigger.get("violation", "unknown"),
-            decision=result.decision.value,
-            files_involved=modified,
+            violation="code_in_test_phase",
+            decision="REVERT",
+            files_involved=code_files,
         )
+        return state
 
-    except Exception as e:
-        logger.warning(f"Mediator failed: {e} — auto-accepting")
-        state["mediator_verdict"] = MediatorVerdict(decision="ACCEPT", reasoning=f"Error: {e}").model_dump()
+    # ---------------------------------------------------------------
+    # Case 2: CODE/FIX — test files modified during code phase
+    # Call Mediator Agent to review the test changes.
+    # ---------------------------------------------------------------
+    if current_phase in ("CODE", "FIX"):
+        mediator = MediatorAgent(routing_engine=routing_engine)
+        try:
+            result = _invoke_mediator_review(
+                mediator, story, current_phase, working_dir, state.get("test_results"),
+            )
 
+            state["mediator_verdict"] = MediatorVerdict(
+                decision=result.decision.value,
+                confidence=result.confidence,
+                reasoning=result.reasoning,
+                retry_guidance=result.retryGuidance,
+            ).model_dump()
+
+            # If verdict is REVERT, revert the offending test files
+            if result.decision.value == "REVERT":
+                reverted = _revert_files(working_dir, test_files)
+                logger.info(f"Mediator REVERT: reverted test files {reverted}")
+
+            save_intervention(
+                task_path=task_path,
+                story_id=story_id,
+                phase=current_phase,
+                violation="test_in_code_phase",
+                decision=result.decision.value,
+                files_involved=test_files,
+            )
+
+        except Exception as e:
+            logger.warning(f"Mediator failed: {e} — auto-accepting")
+            state["mediator_verdict"] = MediatorVerdict(decision="ACCEPT", reasoning=f"Error: {e}").model_dump()
+
+        return state
+
+    # ---------------------------------------------------------------
+    # Case 3: VERIFY — any files modified. Review each category
+    # separately (test files vs code files). If either gets REVERT,
+    # revert those specific files.
+    # ---------------------------------------------------------------
+    if current_phase == "VERIFY":
+        mediator = MediatorAgent(routing_engine=routing_engine)
+        combined_decision = "ACCEPT"
+        combined_reasoning_parts = []
+        combined_confidence = 1.0
+        combined_retry_guidance = None
+
+        # Review test files if any were modified
+        if test_files:
+            try:
+                result = _invoke_mediator_review(
+                    mediator, story, "VERIFY", working_dir, state.get("test_results"),
+                )
+                combined_reasoning_parts.append(f"Test files ({test_files}): {result.decision.value} — {result.reasoning}")
+                combined_confidence = min(combined_confidence, result.confidence or 1.0)
+
+                if result.decision.value == "REVERT":
+                    combined_decision = "REVERT"
+                    reverted = _revert_files(working_dir, test_files)
+                    logger.info(f"Mediator REVERT (VERIFY/tests): reverted {reverted}")
+                elif result.decision.value == "RETRY" and combined_decision != "REVERT":
+                    combined_decision = "RETRY"
+                    combined_retry_guidance = result.retryGuidance
+
+                save_intervention(
+                    task_path=task_path,
+                    story_id=story_id,
+                    phase="VERIFY",
+                    violation="verify_test_changes",
+                    decision=result.decision.value,
+                    files_involved=test_files,
+                )
+            except Exception as e:
+                logger.warning(f"Mediator failed reviewing test files: {e} — auto-accepting test changes")
+                combined_reasoning_parts.append(f"Test files: auto-accepted (error: {e})")
+
+        # Review code files if any were modified
+        if code_files:
+            try:
+                result = _invoke_mediator_review(
+                    mediator, story, "VERIFY", working_dir, state.get("test_results"),
+                )
+                combined_reasoning_parts.append(f"Code files ({code_files}): {result.decision.value} — {result.reasoning}")
+                combined_confidence = min(combined_confidence, result.confidence or 1.0)
+
+                if result.decision.value == "REVERT":
+                    combined_decision = "REVERT"
+                    reverted = _revert_files(working_dir, code_files)
+                    logger.info(f"Mediator REVERT (VERIFY/code): reverted {reverted}")
+                elif result.decision.value == "RETRY" and combined_decision != "REVERT":
+                    combined_decision = "RETRY"
+                    combined_retry_guidance = result.retryGuidance
+
+                save_intervention(
+                    task_path=task_path,
+                    story_id=story_id,
+                    phase="VERIFY",
+                    violation="verify_code_changes",
+                    decision=result.decision.value,
+                    files_involved=code_files,
+                )
+            except Exception as e:
+                logger.warning(f"Mediator failed reviewing code files: {e} — auto-accepting code changes")
+                combined_reasoning_parts.append(f"Code files: auto-accepted (error: {e})")
+
+        state["mediator_verdict"] = MediatorVerdict(
+            decision=combined_decision,
+            confidence=combined_confidence,
+            reasoning="; ".join(combined_reasoning_parts) if combined_reasoning_parts else "No files to review",
+            retry_guidance=combined_retry_guidance,
+        ).model_dump()
+
+        return state
+
+    # Fallback: unknown phase that somehow triggered — auto-accept
+    logger.warning(f"Mediator gate: unexpected phase {current_phase} triggered, auto-accepting")
+    state["mediator_verdict"] = MediatorVerdict(decision="ACCEPT", reasoning=f"Unexpected phase: {current_phase}").model_dump()
     return state
 
 

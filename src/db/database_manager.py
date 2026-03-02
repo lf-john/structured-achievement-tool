@@ -112,6 +112,39 @@ CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_error_signatures_hash ON error_signatures(error_hash);
 CREATE INDEX IF NOT EXISTS idx_notifications_task_id ON notifications(task_id);
 CREATE INDEX IF NOT EXISTS idx_prd_sessions_project ON prd_sessions(project);
+
+CREATE TABLE IF NOT EXISTS task_states (
+    task_path TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'pending',
+    signal TEXT DEFAULT 'pending',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','utc')),
+    retry_count INTEGER DEFAULT 0,
+    error_summary TEXT,
+    last_worker TEXT,
+    priority TEXT DEFAULT 'normal',
+    project TEXT DEFAULT 'structured-achievement-tool',
+    test_command TEXT,
+    depends_on TEXT DEFAULT '[]'
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_states_status ON task_states(status);
+
+CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    project_dir TEXT NOT NULL,
+    test_dir TEXT,
+    source_dir TEXT,
+    config_file TEXT,
+    git_repo TEXT,
+    default_branch TEXT DEFAULT 'main',
+    test_command TEXT DEFAULT 'pytest tests/ -v',
+    worktree_base TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','utc')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','utc'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name);
 """
 
 TASK_TRANSITIONS = {
@@ -505,6 +538,287 @@ class DatabaseManager:
             "pending": sum(1 for s in stories if s["status"] == "pending"),
             "stories": stories,
         }
+
+    # --- Task State Hub (Option D) ---
+    # Moves state coordination off FUSE mount to SQLite for reliability.
+
+    TASK_STATE_TRANSITIONS = {
+        "pending": ("working", "cancelled"),
+        "working": ("finished", "failed", "cancelled", "pending"),
+        "failed": ("pending", "cancelled"),
+        "finished": ("pending",),
+        "cancelled": ("pending",),
+    }
+
+    def upsert_task_state(
+        self, task_path: str, status: str, signal: str = "pending",
+        error_summary: str = None, last_worker: str = None,
+        priority: str = "normal", project: str = None,
+        test_command: str = None, depends_on: list = None,
+    ):
+        """Insert or update a task's state in the hub.
+
+        Called by daemon when it detects a new task file on FUSE, and on
+        every state transition thereafter. The FUSE file tags are still
+        written for Obsidian display, but the hub is the source of truth
+        for coordination between daemon and monitor.
+        """
+        now = self._now()
+        depends_on_json = json.dumps(depends_on) if depends_on else None
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO task_states (task_path, status, signal, updated_at, error_summary, last_worker, priority, project, test_command, depends_on) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(task_path) DO UPDATE SET "
+                "status=excluded.status, signal=excluded.signal, updated_at=excluded.updated_at, "
+                "error_summary=COALESCE(excluded.error_summary, task_states.error_summary), "
+                "last_worker=COALESCE(excluded.last_worker, task_states.last_worker), "
+                "priority=excluded.priority, "
+                "project=COALESCE(excluded.project, task_states.project), "
+                "test_command=COALESCE(excluded.test_command, task_states.test_command), "
+                "depends_on=COALESCE(excluded.depends_on, task_states.depends_on)",
+                (task_path, status, signal, now, error_summary, last_worker, priority, project, test_command, depends_on_json),
+            )
+
+    def transition_task_state(self, task_path: str, new_status: str, **kwargs) -> bool:
+        """Atomically transition a task's state with validation.
+
+        Returns True if transition succeeded, False if invalid.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT status FROM task_states WHERE task_path=?", (task_path,)
+            ).fetchone()
+            if not row:
+                logger.warning(f"Task state not found for {task_path}, creating")
+                self.upsert_task_state(task_path, new_status, **kwargs)
+                return True
+            old_status = row["status"]
+            allowed = self.TASK_STATE_TRANSITIONS.get(old_status, ())
+            if new_status not in allowed:
+                logger.error(f"Invalid task state transition {old_status} -> {new_status} for {task_path}")
+                return False
+            now = self._now()
+            updates = ["status=?", "updated_at=?"]
+            params = [new_status, now]
+            if kwargs.get("error_summary"):
+                updates.append("error_summary=?")
+                params.append(kwargs["error_summary"])
+            if kwargs.get("signal"):
+                updates.append("signal=?")
+                params.append(kwargs["signal"])
+            if kwargs.get("last_worker"):
+                updates.append("last_worker=?")
+                params.append(kwargs["last_worker"])
+            params.append(task_path)
+            conn.execute(
+                f"UPDATE task_states SET {', '.join(updates)} WHERE task_path=?",
+                params,
+            )
+            self._log_event(conn, "task_state_transition", detail=f"{old_status}->{new_status}: {task_path}")
+        return True
+
+    def increment_task_retry(self, task_path: str) -> int:
+        """Increment retry count and return new value."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE task_states SET retry_count = retry_count + 1, updated_at=? WHERE task_path=?",
+                (self._now(), task_path),
+            )
+            row = conn.execute(
+                "SELECT retry_count FROM task_states WHERE task_path=?", (task_path,)
+            ).fetchone()
+            return row["retry_count"] if row else 0
+
+    def get_task_state(self, task_path: str) -> Optional[Dict]:
+        """Get the current state of a task from the hub."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM task_states WHERE task_path=?", (task_path,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_tasks_by_state(self, status: str) -> List[Dict]:
+        """Get all tasks with a given status."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM task_states WHERE status=? "
+                "ORDER BY CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 WHEN 'low' THEN 2 END, updated_at",
+                (status,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_stuck_task_states(self, timeout_minutes: int = 30) -> List[Dict]:
+        """Get tasks stuck in 'working' state beyond the timeout."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM task_states WHERE status='working' "
+                "AND updated_at < datetime('now', '-' || ? || ' minutes')",
+                (timeout_minutes,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_failed_task_states(self, max_retries: int = 10) -> List[Dict]:
+        """Get failed tasks that haven't exceeded max retries."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM task_states WHERE status='failed' AND retry_count < ?",
+                (max_retries,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_project_stories_by_state(self, project: str, statuses: list[str]) -> list[dict]:
+        """Get all task_states for a project matching the given statuses."""
+        with self._connect() as conn:
+            placeholders = ",".join("?" for _ in statuses)
+            rows = conn.execute(
+                f"SELECT * FROM task_states WHERE project=? AND status IN ({placeholders}) "
+                "ORDER BY updated_at",
+                [project] + statuses,
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def has_active_debug_story(self, project: str) -> bool:
+        """Check if there's a pending or working debug/high-priority story for a project."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) as c FROM task_states "
+                "WHERE project=? AND priority='high' AND status IN ('pending', 'working')",
+                (project,),
+            ).fetchone()
+            return row["c"] > 0
+
+    def find_task_state_by_name(self, name: str) -> Optional[Dict]:
+        """Find a task_state by basename match.
+
+        Searches for task_paths whose basename matches the given name.
+        Used for prerequisite resolution (depends_on stores basenames).
+        """
+        with self._connect() as conn:
+            # Try exact path match first
+            row = conn.execute(
+                "SELECT * FROM task_states WHERE task_path=?", (name,)
+            ).fetchone()
+            if row:
+                return dict(row)
+            # Fall back to basename match (LIKE %/name)
+            row = conn.execute(
+                "SELECT * FROM task_states WHERE task_path LIKE ? ORDER BY updated_at DESC LIMIT 1",
+                (f"%/{name}",),
+            ).fetchone()
+            if row:
+                return dict(row)
+            # Try partial match (name might be without extension)
+            row = conn.execute(
+                "SELECT * FROM task_states WHERE task_path LIKE ? ORDER BY updated_at DESC LIMIT 1",
+                (f"%{name}%",),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def add_dependency_to_task(self, task_path: str, dependency: str) -> bool:
+        """Add a dependency to a task's depends_on list.
+
+        Used to dynamically add prerequisites (e.g., when a Debug story
+        is created and queued project stories should wait for it).
+
+        Args:
+            task_path: The task to add the dependency to.
+            dependency: The dependency identifier to add.
+
+        Returns:
+            True if the dependency was added.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT depends_on FROM task_states WHERE task_path=?", (task_path,)
+            ).fetchone()
+            if not row:
+                return False
+            try:
+                current = json.loads(row["depends_on"] or "[]")
+            except (json.JSONDecodeError, TypeError):
+                current = []
+            if dependency not in current:
+                current.append(dependency)
+                conn.execute(
+                    "UPDATE task_states SET depends_on=?, updated_at=? WHERE task_path=?",
+                    (json.dumps(current), self._now(), task_path),
+                )
+            return True
+
+    def clear_task_state(self, task_path: str):
+        """Remove a task from the state hub (e.g., when finished and acknowledged)."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM task_states WHERE task_path=?", (task_path,))
+
+    # --- Projects ---
+
+    def create_project(
+        self, name: str, project_dir: str, test_dir: str = None,
+        source_dir: str = None, config_file: str = None,
+        git_repo: str = None, default_branch: str = "main",
+        test_command: str = "pytest tests/ -v",
+        worktree_base: str = None,
+    ) -> str:
+        project_id = self._gen_id()
+        now = self._now()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO projects (id, name, project_dir, test_dir, source_dir, "
+                "config_file, git_repo, default_branch, test_command, worktree_base, "
+                "created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (project_id, name, project_dir, test_dir, source_dir,
+                 config_file, git_repo, default_branch, test_command,
+                 worktree_base, now, now),
+            )
+            self._log_event(conn, "project_created", detail=f"project={name}")
+        return project_id
+
+    def get_project(self, project_id_or_name: str) -> Optional[Dict]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM projects WHERE id=? OR name=?",
+                (project_id_or_name, project_id_or_name),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_all_projects(self) -> List[Dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM projects ORDER BY name"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def update_project(self, project_id: str, **kwargs):
+        allowed = {"name", "project_dir", "test_dir", "source_dir",
+                    "config_file", "git_repo", "default_branch",
+                    "test_command", "worktree_base"}
+        updates = ["updated_at=?"]
+        params = [self._now()]
+        for key, value in kwargs.items():
+            if key not in allowed:
+                raise ValueError(f"Invalid project field: {key}")
+            updates.append(f"{key}=?")
+            params.append(value)
+        if len(updates) == 1:
+            return  # nothing to update
+        params.append(project_id)
+        with self._connect() as conn:
+            conn.execute(
+                f"UPDATE projects SET {', '.join(updates)} WHERE id=?",
+                params,
+            )
+
+    def get_project_for_task(self, task_id: str) -> Optional[Dict]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT p.* FROM projects p "
+                "JOIN tasks t ON t.project = p.name "
+                "WHERE t.id=?",
+                (task_id,),
+            ).fetchone()
+            return dict(row) if row else None
 
     def get_system_status(self) -> Dict:
         """Overall system status for monitoring."""

@@ -7,8 +7,8 @@
   "execution": {
     "max_retries_per_story": 5,
     "max_phase_retries": 10,
-    "use_worktree": true,
-    "enable_mediator": false,
+    "use_worktree": false,
+    "enable_mediator": true,
     "checkpoint_db": ".memory/checkpoints.db"
   },
   "routing_preferences": {
@@ -20,7 +20,7 @@
     "classification_backup": "nemotron"
   },
   "proactive_agency": {
-    "enabled": false,
+    "enabled": true,
     "maintenance_interval_hours": 168,
     "dependency_check_interval_hours": 336,
     "config_validation_interval_hours": 24,
@@ -30,6 +30,16 @@
     "enabled": true,
     "update_on_story_complete": true,
     "update_on_phase_transition": false
+  },
+  "notifications": {
+    "ntfy_enabled": true,
+    "ntfy_min_priority": "high",
+    "email_enabled": false,
+    "notify_on_task_complete": true,
+    "notify_on_story_complete": false,
+    "notify_on_failure": true,
+    "notify_on_escalation": true,
+    "notify_on_human_action": true
   },
   "metrics": {
     "enabled": true,

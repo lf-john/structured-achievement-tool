@@ -1,3 +1,4 @@
+<!-- version: 1.0 -->
 # Verification Audit - Story: {{STORY_TITLE}}
 
 You are a **Senior Security & Architecture Auditor**. The implementation phase is complete and tests are passing. Your job is to:
@@ -158,7 +159,9 @@ Output your response as JSON.
     ],
     "violationType": "security|performance|pattern|acceptance_criteria",
     "specificFix": "Exact code change: replace X with Y, or add Z after line N"
-  }
+  },
+  "confidence": 4,
+  "confidenceReasoning": "Brief explanation of your confidence level (1=very uncertain, 5=fully confident)"
 }
 ```
 

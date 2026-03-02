@@ -1,3 +1,4 @@
+<!-- version: 1.0 -->
 # PRD Phase 1: Discovery — {{TASK_TITLE}}
 
 You are a **Senior Business Analyst and Solutions Architect**. This is Phase 1 of a 4-phase Product Requirements Document (PRD) design process.

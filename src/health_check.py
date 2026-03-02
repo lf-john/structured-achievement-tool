@@ -15,19 +15,43 @@ Sends ntfy notification on failures.
 
 import os, subprocess, sys, time, json, requests
 
+# Ensure the project root is in sys.path so 'from src.*' imports work when
+# invoked from cron (which does not set PYTHONPATH).
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
 # Cron doesn't have the user D-Bus session. Set the env vars so systemctl --user works.
 UID = os.getuid()
 os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{UID}")
 os.environ.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{UID}/bus")
 
-WATCH_DIRS = [
-    "/home/johnlane/GoogleDrive/DriveSyncFiles/sat-tasks",
-]
-NTFY_TOPIC = "johnlane-claude-tasks"
-NTFY_SERVER = "https://ntfy.sh"
-PROJECT_PATH = "/home/johnlane/projects/structured-achievement-tool"
+try:
+    from src.core.paths import SAT_PROJECT_DIR, SAT_TASKS_DIR, FUSE_SENTINEL, PROACTIVE_STATE, SAT_DB
+except ImportError:
+    from pathlib import Path
+    SAT_PROJECT_DIR = Path(_PROJECT_ROOT)
+    SAT_TASKS_DIR = Path(os.path.expanduser("~/GoogleDrive/DriveSyncFiles/sat-tasks"))
+    FUSE_SENTINEL = SAT_TASKS_DIR / "CLAUDE.md"
+    PROACTIVE_STATE = SAT_PROJECT_DIR / ".memory" / "proactive_state.json"
+    SAT_DB = SAT_PROJECT_DIR / ".memory" / "sat.db"
+
+WATCH_DIRS = [str(SAT_TASKS_DIR)]
+# Read from env (set in ~/.config/sat/env, loaded by systemd)
+NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
+NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
+NTFY_MIN_PRIORITY = os.environ.get("SAT_NTFY_MIN_PRIORITY", "default")
+PRIORITY_LEVELS = {"min": 0, "low": 1, "default": 2, "high": 3, "urgent": 4}
+PROJECT_PATH = str(SAT_PROJECT_DIR)
 
 def notify(title, message, priority="default", tags=""):
+    if not NTFY_TOPIC:
+        return
+    # Respect minimum priority filter
+    msg_level = PRIORITY_LEVELS.get(priority, 2)
+    min_level = PRIORITY_LEVELS.get(NTFY_MIN_PRIORITY, 2)
+    if msg_level < min_level:
+        return
     try:
         headers = {"Title": title}
         if priority != "default":
@@ -81,7 +105,7 @@ def check_gdrive():
     FUSE mounts where the mountpoint directory exists but reads hang or
     return empty results.
     """
-    sentinel = "/home/johnlane/GoogleDrive/DriveSyncFiles/sat-tasks/CLAUDE.md"
+    sentinel = str(FUSE_SENTINEL)
     try:
         return os.path.isfile(sentinel) and os.path.getsize(sentinel) > 0
     except OSError:
@@ -110,22 +134,31 @@ def maintain_checkpoint_db():
 
     try:
         conn = sqlite3.connect(db_path, timeout=5)
+        conn.execute("PRAGMA journal_mode=WAL")
         cursor = conn.cursor()
 
         # List tables so we can handle any schema
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = [row[0] for row in cursor.fetchall()]
 
-        # Delete rows older than 24 hours from any table with a timestamp column
+        # Delete rows older than 24 hours from any table with a timestamp column.
+        # Only prune completed/failed entries — preserve in_progress and waiting_for_human.
         for table in tables:
             cursor.execute(f"PRAGMA table_info({table})")
             columns = [col[1] for col in cursor.fetchall()]
+            has_status = "status" in columns
             for ts_col in ("created_at", "timestamp", "updated_at"):
                 if ts_col in columns:
                     try:
-                        cursor.execute(
-                            f"DELETE FROM {table} WHERE {ts_col} < datetime('now', '-24 hours')"
-                        )
+                        if has_status:
+                            cursor.execute(
+                                f"DELETE FROM {table} WHERE {ts_col} < datetime('now', '-24 hours') "
+                                f"AND status IN ('completed', 'failed')"
+                            )
+                        else:
+                            cursor.execute(
+                                f"DELETE FROM {table} WHERE {ts_col} < datetime('now', '-24 hours')"
+                            )
                         deleted = cursor.rowcount
                         if deleted:
                             print(f"  Checkpoint DB: pruned {deleted} rows from {table}")
@@ -338,11 +371,32 @@ def main():
                 tags="white_check_mark"
             )
 
+    # Create debug stories for persistent problems that couldn't be auto-fixed
+    unfixed = [a for a in actions if "FAILED" in a]
+    if unfixed:
+        for action in unfixed:
+            _create_debug_story_with_deps(
+                f"Debug: {action}",
+                (
+                    f"The health check detected a problem and attempted auto-recovery "
+                    f"but **failed**.\n\n"
+                    f"**Problem:** {action}\n\n"
+                    f"**Full report:**\n```\n{report}\n```\n\n"
+                    f"Investigate the root cause and implement a permanent fix."
+                ),
+            )
+        notify(
+            "SAT: Debug Task Created",
+            f"Created {len(unfixed)} debug tasks for unresolvable issues.",
+            priority="high",
+            tags="warning,wrench",
+        )
+
     return 0 if not problems else 1
 
 ## --- Proactive Agency ---
 
-PROACTIVE_STATE_FILE = os.path.join(PROJECT_PATH, ".memory", "proactive_state.json")
+PROACTIVE_STATE_FILE = str(PROACTIVE_STATE)
 
 def _load_proactive_state():
     """Load last-run timestamps for proactive checks."""
@@ -371,8 +425,71 @@ def _hours_since(timestamp_str):
     except (ValueError, TypeError):
         return float("inf")
 
-def _create_maintenance_story(title, description, story_type="maintenance", output_dir=None):
-    """Create a story file for proactive maintenance."""
+def _get_project_stories(project=None, db_path=None):
+    """Query task_states for stories belonging to a specific project.
+
+    Args:
+        project: Project name to filter by. If None, uses 'structured-achievement-tool'.
+        db_path: Path to sat.db.
+
+    Returns:
+        (in_progress_ids, queued_ids) — lists of task_path strings.
+        in_progress_ids: tasks currently in 'working' state.
+        queued_ids: tasks in 'pending' state (waiting to run).
+    """
+    import sqlite3
+
+    if project is None:
+        project = "structured-achievement-tool"
+    if db_path is None:
+        db_path = str(SAT_DB)
+    if not os.path.isfile(db_path):
+        return [], []
+
+    in_progress = []
+    queued = []
+    try:
+        conn = sqlite3.connect(db_path, timeout=5)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        rows = conn.execute(
+            "SELECT task_path, status FROM task_states "
+            "WHERE project=? AND status IN ('working', 'pending')",
+            (project,),
+        ).fetchall()
+        for row in rows:
+            if row["status"] == "working":
+                in_progress.append(row["task_path"])
+            else:
+                queued.append(row["task_path"])
+        conn.close()
+    except Exception as e:
+        print(f"  Could not query project stories for {project}: {e}")
+    return in_progress, queued
+
+
+def _get_sat_editing_stories(db_path=None):
+    """Query task_states for SAT-editing stories.
+
+    Backwards-compatible wrapper around _get_project_stories.
+    """
+    return _get_project_stories(project="structured-achievement-tool", db_path=db_path)
+
+
+def _create_maintenance_story(title, description, story_type="maintenance",
+                              output_dir=None, priority="normal", depends_on=None):
+    """Create a story file for proactive maintenance.
+
+    Args:
+        title: Story title.
+        description: Story body (markdown).
+        story_type: Type tag (maintenance, debug, etc.).
+        output_dir: Directory to write the story file.
+        priority: Task priority (high, normal, low). Written as metadata comment.
+        depends_on: Optional list of task_path strings this story depends on.
+            Written as a metadata comment for logging/traceability. The daemon
+            does not enforce this; priority ordering is used instead.
+    """
     import datetime
     if output_dir is None:
         output_dir = os.path.expanduser("~/GoogleDrive/DriveSyncFiles/sat-tasks/maintenance")
@@ -384,7 +501,17 @@ def _create_maintenance_story(title, description, story_type="maintenance", outp
     filename = f"proactive_{safe_title}_{timestamp}.md"
     filepath = os.path.join(output_dir, filename)
 
+    # Build metadata comments
+    metadata_lines = []
+    if priority != "normal":
+        metadata_lines.append(f"<!-- priority: {priority} -->")
+    if depends_on:
+        dep_str = ", ".join(os.path.basename(d) for d in depends_on)
+        metadata_lines.append(f"<!-- depends_on: {dep_str} -->")
+    metadata_block = "\n".join(metadata_lines) + "\n" if metadata_lines else ""
+
     content = (
+        f"{metadata_block}"
         f"# {title}\n\n"
         f"{description}\n\n"
         f"**Type:** {story_type}\n"
@@ -395,6 +522,134 @@ def _create_maintenance_story(title, description, story_type="maintenance", outp
 
     with open(filepath, "w") as f:
         f.write(content)
+    return filepath
+
+
+def _create_debug_story_with_deps(title, description, db_path=None, output_dir=None,
+                                   project=None):
+    """Create a Debug story with project-scoped prerequisite chains.
+
+    Queries the task_states DB for in-progress and queued stories for the
+    specified project. Sets up prerequisite chains:
+    - Debug story depends on in-progress project stories (waits for them)
+    - Queued project stories depend on the Debug story (wait for it)
+    - If other Debug stories exist for this project, this one depends on them
+
+    The daemon enforces these via the depends_on mechanism in task_states.
+
+    Args:
+        title: Debug story title.
+        description: Debug story body (markdown).
+        db_path: Path to sat.db (defaults to SAT_DB).
+        output_dir: Directory to write the story file.
+        project: Project name to scope dependencies. Defaults to SAT.
+
+    Returns:
+        filepath of the created debug story, or None if creation was skipped.
+    """
+    import sqlite3
+
+    if db_path is None:
+        db_path = str(SAT_DB)
+
+    in_progress, queued = _get_project_stories(project=project, db_path=db_path)
+
+    project_label = project or "structured-achievement-tool"
+
+    # Check for existing debug stories for this project (chain them)
+    existing_debug = []
+    try:
+        if os.path.isfile(db_path):
+            conn = sqlite3.connect(db_path, timeout=5)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            rows = conn.execute(
+                "SELECT task_path FROM task_states "
+                "WHERE project=? AND priority='high' AND status IN ('pending', 'working')",
+                (project_label,),
+            ).fetchall()
+            existing_debug = [row["task_path"] for row in rows]
+            conn.close()
+    except Exception as e:
+        print(f"  Could not query existing debug stories: {e}")
+
+    # Build prerequisite list for the Debug story:
+    # - In-progress project stories (wait for them to finish)
+    # - Existing debug stories (chain sequentially)
+    debug_depends_on = []
+    if in_progress:
+        debug_depends_on.extend(os.path.basename(tp) for tp in in_progress)
+    if existing_debug:
+        debug_depends_on.extend(os.path.basename(tp) for tp in existing_debug)
+
+    # Log the dependency context
+    if debug_depends_on:
+        print(f"  Debug story for {project_label}: prerequisites = {debug_depends_on}")
+    if queued:
+        print(f"  Debug story for {project_label}: will set as prerequisite for {len(queued)} queued stories")
+        for tp in queued:
+            print(f"    - {os.path.basename(tp)}")
+
+    # Add dependency context to the description
+    dep_context = ""
+    if in_progress or queued or existing_debug:
+        dep_context = f"\n\n---\n**Dependency context (project: {project_label}):**\n"
+        if in_progress:
+            dep_context += "- Prerequisites (in-progress stories this debug story waits for):\n"
+            for tp in in_progress:
+                dep_context += f"  - `{os.path.basename(tp)}`\n"
+        if existing_debug:
+            dep_context += "- Prerequisites (existing debug stories to run before this one):\n"
+            for tp in existing_debug:
+                dep_context += f"  - `{os.path.basename(tp)}`\n"
+        if queued:
+            dep_context += "- Dependents (queued stories that will wait for this debug story):\n"
+            for tp in queued:
+                dep_context += f"  - `{os.path.basename(tp)}`\n"
+
+    # Include project metadata in the story file
+    project_metadata = f"<!-- project: {project_label} -->\n" if project_label else ""
+
+    filepath = _create_maintenance_story(
+        title,
+        project_metadata + description + dep_context,
+        story_type="debug",
+        output_dir=output_dir,
+        priority="high",
+        depends_on=debug_depends_on if debug_depends_on else None,
+    )
+
+    # Update queued project stories to depend on this debug story
+    if filepath and queued:
+        debug_basename = os.path.basename(filepath)
+        try:
+            if os.path.isfile(db_path):
+                conn = sqlite3.connect(db_path, timeout=5)
+                conn.execute("PRAGMA journal_mode=WAL")
+                for task_path in queued:
+                    # Read existing depends_on, add this debug story
+                    row = conn.execute(
+                        "SELECT depends_on FROM task_states WHERE task_path=?",
+                        (task_path,),
+                    ).fetchone()
+                    if row:
+                        import json as _json
+                        try:
+                            current = _json.loads(row[0] or "[]")
+                        except (_json.JSONDecodeError, TypeError):
+                            current = []
+                        if debug_basename not in current:
+                            current.append(debug_basename)
+                            conn.execute(
+                                "UPDATE task_states SET depends_on=? WHERE task_path=?",
+                                (_json.dumps(current), task_path),
+                            )
+                            print(f"    Added prerequisite '{debug_basename}' to {os.path.basename(task_path)}")
+                conn.commit()
+                conn.close()
+        except Exception as e:
+            print(f"  Could not update queued story prerequisites: {e}")
+
     return filepath
 
 def run_proactive_checks():
@@ -447,7 +702,7 @@ def run_proactive_checks():
                 issues.append("config.json has invalid JSON")
 
         if issues:
-            filepath = _create_maintenance_story(
+            filepath = _create_debug_story_with_deps(
                 "Config Validation Issues",
                 "Proactive check found configuration issues:\n\n" +
                 "\n".join(f"- {i}" for i in issues),
@@ -463,7 +718,7 @@ def run_proactive_checks():
         # Check if requirements.txt exists and has content
         req_path = os.path.join(PROJECT_PATH, "requirements.txt")
         if os.path.exists(req_path):
-            filepath = _create_maintenance_story(
+            filepath = _create_debug_story_with_deps(
                 "Dependency Update Review",
                 "Scheduled dependency review.\n\n"
                 "Check for outdated packages, security vulnerabilities, "
@@ -494,7 +749,7 @@ def run_proactive_checks():
                     cleanup_items.append(f"Audit journal is {size_mb:.1f}MB — consider archiving")
 
         if cleanup_items:
-            filepath = _create_maintenance_story(
+            filepath = _create_debug_story_with_deps(
                 "Scheduled Maintenance",
                 "Scheduled maintenance review:\n\n" +
                 "\n".join(f"- {i}" for i in cleanup_items),

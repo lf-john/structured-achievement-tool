@@ -1,3 +1,4 @@
+<!-- version: 1.0 -->
 # VERIFY-SCRIPT Phase: {{STORY_TITLE}}
 
 You are verifying the execution of a configuration or devops task.

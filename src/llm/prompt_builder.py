@@ -79,6 +79,163 @@ PHASE_CONTEXT: dict[str, list[str]] = {
 }
 
 
+# TACHES-adapted deviation rules (Enhancement #6)
+# Non-debug workflows: auto-fix (rules 1-3), log enhancements (rule 5), never stop.
+# Debug workflow: includes rule 4 (ask before architectural changes).
+DEVIATION_RULES = """## Scope & Deviation Rules
+You MUST follow these deviation rules exactly:
+
+1. **Auto-fix bugs** — If code doesn't work as intended, fix it immediately. Run tests after. Track what you changed.
+2. **Auto-add critical** — If something essential for correctness or security is missing, add it immediately. Run tests after. Track what you added.
+3. **Auto-fix blockers** — If something prevents completing the current task, fix it immediately. Track what you changed.
+4. **Log enhancements** — If you notice a non-critical improvement opportunity, do NOT implement it. Instead, note it in your output under an "enhancements_noted" field and continue with the current task.
+5. **Stay in scope** — Do not add features, refactor unrelated code, change file structure, or install packages beyond what the acceptance criteria require. If blocked, report the blocker.
+"""
+
+DEVIATION_RULES_DEBUG = """## Scope & Deviation Rules (Debug)
+You MUST follow these deviation rules exactly:
+
+1. **Auto-fix bugs** — If code doesn't work as intended, fix it immediately. Run tests after. Track what you changed.
+2. **Auto-add critical** — If something essential for correctness or security is missing, add it immediately. Run tests after. Track what you added.
+3. **Auto-fix blockers** — If something prevents completing the current task, fix it immediately. Track what you changed.
+4. **ASK before architecture changes** — If a fix requires significant structural modification (new files, changed interfaces, moved responsibilities), STOP. Report the proposed change in your output under a "architecture_change_proposed" field with your reasoning. Do NOT implement it without approval.
+5. **Log enhancements** — If you notice a non-critical improvement, note it in "enhancements_noted" and continue.
+6. **Stay in scope** — Do not add features, refactor unrelated code, change file structure, or install packages beyond what the acceptance criteria require.
+"""
+
+# Phases that receive deviation rules (agentic, code-producing)
+_AGENTIC_PHASES = {"CODE", "EXECUTE", "FIX", "PLAN", "PLAN_CODE"}
+# Debug workflow phases get the debug variant (includes architecture-ask rule)
+_DEBUG_PHASES = {"DIAGNOSE", "REPRODUCE", "FIX"}
+
+
+def _estimate_tokens(text: str) -> int:
+    """Approximate token count (chars / 3.5 for English text)."""
+    return int(len(text) / 3.5)
+
+
+# Model-specific context budget ratios based on research:
+# - Claude: strong on long context, tolerates higher fill (0.60)
+# - Gemini: begins confusing past/current info at ~20% — use conservative budget (0.40)
+# - Local/Ollama: 50% is the empirical sweet spot for smaller models
+PROVIDER_BUDGET_RATIOS = {
+    "claude": 0.60,
+    "gemini": 0.40,
+    "ollama": 0.50,
+}
+DEFAULT_BUDGET_RATIO = 0.50
+
+
+def get_budget_ratio(provider_name: str = "") -> float:
+    """Get the context budget ratio for a provider.
+
+    Args:
+        provider_name: Provider name from routing engine (e.g., "sonnet", "gemini_flash")
+    """
+    name_lower = provider_name.lower()
+    if any(c in name_lower for c in ("opus", "sonnet", "haiku", "claude")):
+        return PROVIDER_BUDGET_RATIOS["claude"]
+    elif any(g in name_lower for g in ("gemini", "glm")):
+        return PROVIDER_BUDGET_RATIOS["gemini"]
+    elif any(o in name_lower for o in ("qwen", "deepseek", "nemotron", "ollama")):
+        return PROVIDER_BUDGET_RATIOS["ollama"]
+    return DEFAULT_BUDGET_RATIO
+
+
+def trim_to_budget(
+    prompt: str,
+    max_tokens: int,
+    budget_ratio: float = 0.50,
+    provider_name: str = "",
+) -> str:
+    """Trim prompt to stay within context budget.
+
+    Removes lowest-priority sections first:
+    1. RAG context ({{RAG_CONTEXT}} blocks)
+    2. Prior phase outputs ({{DESIGN_OUTPUT}}, etc.)
+    3. Failure context
+
+    System instructions and task description are never trimmed.
+
+    Args:
+        prompt: Full assembled prompt
+        max_tokens: Target model's context window in tokens
+        budget_ratio: Maximum fraction of context window to use (default 0.50).
+                      Overridden by provider_name if provided.
+        provider_name: If provided, uses model-specific budget ratio instead.
+    """
+    if provider_name:
+        budget_ratio = get_budget_ratio(provider_name)
+    budget = int(max_tokens * budget_ratio)
+    current_tokens = _estimate_tokens(prompt)
+
+    if current_tokens <= budget:
+        return prompt
+
+    logger.info(
+        f"Prompt exceeds context budget: ~{current_tokens} tokens vs {budget} budget "
+        f"({max_tokens} window * {budget_ratio}). Trimming."
+    )
+
+    # Trim in priority order (lowest priority first)
+    # Section markers to look for in the assembled prompt
+    trim_sections = [
+        ("RAG context", "## Retrieved Context", "---"),
+        ("Prior phase output", "## Architecture", "---"),
+        ("Prior phase output", "## Previous Output", "---"),
+        ("Failure context", "<prior-failure>", "</prior-failure>"),
+    ]
+
+    result = prompt
+    for label, start_marker, end_marker in trim_sections:
+        if _estimate_tokens(result) <= budget:
+            break
+        start_idx = result.find(start_marker)
+        if start_idx == -1:
+            continue
+        end_idx = result.find(end_marker, start_idx + len(start_marker))
+        if end_idx == -1:
+            # Remove from marker to end
+            result = result[:start_idx] + f"\n[{label} trimmed for context budget]\n"
+        else:
+            result = (
+                result[:start_idx]
+                + f"\n[{label} trimmed for context budget]\n"
+                + result[end_idx + len(end_marker):]
+            )
+        logger.info(f"Trimmed {label} from prompt")
+
+    final_tokens = _estimate_tokens(result)
+    if final_tokens > budget:
+        logger.warning(
+            f"Prompt still exceeds budget after trimming: ~{final_tokens} vs {budget}"
+        )
+
+    return result
+
+
+def _extract_template_version(content: str) -> str:
+    """Extract version from template header comment.
+
+    Templates may start with a version comment: <!-- version: 1.0 -->
+    Returns the version string or "1.0" if no version comment found.
+    """
+    match = re.match(r'^\s*<!--\s*version:\s*(\S+)\s*-->', content)
+    return match.group(1) if match else "1.0"
+
+
+# Cache of template versions for event logging
+_template_versions: dict[str, str] = {}
+
+
+def get_template_version(phase: str) -> str:
+    """Get the current version of a template for a given phase.
+
+    Used by the event logger to correlate template versions with G-Eval scores.
+    """
+    return _template_versions.get(phase, "1.0")
+
+
 def load_template(phase: str, template_dir: Optional[str] = None) -> Optional[str]:
     """Load a prompt template for a phase.
 
@@ -102,7 +259,13 @@ def load_template(phase: str, template_dir: Optional[str] = None) -> Optional[st
         return None
 
     with open(path, "r") as f:
-        return f.read()
+        content = f.read()
+
+    # Extract and cache version
+    version = _extract_template_version(content)
+    _template_versions[phase] = version
+
+    return content
 
 
 def substitute_placeholders(template: str, context: dict) -> str:
@@ -132,6 +295,53 @@ def _load_project_rules(working_directory: str) -> str:
         except Exception as e:
             logger.warning(f"Failed to read CLAUDE.md: {e}")
     return ""
+
+
+# Core Memory token budgets per level
+_CORE_MEMORY_LIMITS = {
+    "global": 2000,      # ~/.config/sat/global.md
+    "tech_stack": 1000,  # {project}/.memory/tech_stack.md
+    "project": 2000,     # {project}/.memory/project.md
+}
+
+
+def _load_core_memory(working_directory: str) -> str:
+    """Load multi-level core memory (Levels 1-3) for prompt injection.
+
+    Level 1: Global   — ~/.config/sat/global.md (all projects)
+    Level 2: Tech Stack — {project}/.memory/tech_stack.md (language/framework)
+    Level 3: Project  — {project}/.memory/project.md (architecture, patterns)
+
+    Levels 4-5 (Task, Story) are retrieved via RAG, not injected here.
+    Each level is trimmed to its token budget to keep prompts concise.
+    """
+    parts = []
+    memory_files = [
+        ("global", os.path.expanduser("~/.config/sat/global.md")),
+        ("tech_stack", os.path.join(working_directory, ".memory", "tech_stack.md")),
+        ("project", os.path.join(working_directory, ".memory", "project.md")),
+    ]
+
+    for level, path in memory_files:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r") as f:
+                content = f.read().strip()
+            if not content:
+                continue
+            # Trim to budget
+            budget = _CORE_MEMORY_LIMITS.get(level, 1000)
+            max_chars = int(budget * 3.5)  # Inverse of _estimate_tokens
+            if len(content) > max_chars:
+                content = content[:max_chars] + "\n[...truncated to token budget]"
+            parts.append(f"### Core Memory: {level.replace('_', ' ').title()}\n{content}")
+        except Exception as e:
+            logger.debug(f"Failed to load core memory {level}: {e}")
+
+    if not parts:
+        return ""
+    return "## Core Memory\n\n" + "\n\n".join(parts)
 
 
 def _format_acceptance_criteria(criteria: list) -> str:
@@ -168,11 +378,14 @@ def build_prompt(
     template = load_template(phase, template_dir)
 
     if template:
-        # Build substitution context
+        # Build substitution context — wrap untrusted user content in delimiters
+        # to defend against prompt injection from task file content.
+        raw_description = story.get("description", "")
+        raw_title = story.get("title", "")
         subs = {
             "STORY_ID": story.get("id", ""),
-            "STORY_TITLE": story.get("title", ""),
-            "STORY_DESCRIPTION": story.get("description", ""),
+            "STORY_TITLE": raw_title,
+            "STORY_DESCRIPTION": f"<user-task>\n{raw_description}\n</user-task>" if raw_description else "",
             "ACCEPTANCE_CRITERIA": _format_acceptance_criteria(story.get("acceptanceCriteria", [])),
             "PHASE_NAME": phase,
             "AGENT_NAME": f"{phase} Agent",
@@ -184,9 +397,14 @@ def build_prompt(
             if key in ctx and ctx[key]:
                 subs[key.upper()] = str(ctx[key])
 
-        # Add failure context if retrying
+        # Add failure context if retrying — wrap in delimiters since it may
+        # contain prior LLM output or error messages from external processes
         if "failure_context" in ctx and ctx["failure_context"]:
-            subs["FAILED_CONTEXT"] = ctx["failure_context"]
+            subs["FAILED_CONTEXT"] = f"<prior-failure>\n{ctx['failure_context']}\n</prior-failure>"
+
+        # Wrap human response content if present
+        if "human_response" in ctx and ctx["human_response"]:
+            subs["HUMAN_RESPONSE"] = f"<human-response>\n{ctx['human_response']}\n</human-response>"
 
         # Substitute placeholders
         prompt = substitute_placeholders(template, subs)
@@ -194,12 +412,25 @@ def build_prompt(
         # Inline fallback prompt
         prompt = _build_inline_prompt(story, phase, ctx)
 
+    # Inject deviation rules for agentic phases (Enhancement #6, TACHES-adapted)
+    if phase in _DEBUG_PHASES:
+        prompt = f"{DEVIATION_RULES_DEBUG}\n{prompt}"
+    elif phase in _AGENTIC_PHASES:
+        prompt = f"{DEVIATION_RULES}\n{prompt}"
+
     # Inject project rules (CLAUDE.md) — skip for classification/decomposition phases
     # (they operate on task metadata, not project code)
     if phase not in ("CLASSIFY", "DECOMPOSE", "LEARN"):
         project_rules = _load_project_rules(working_directory)
         if project_rules:
             prompt = f"## Project Rules\n\n{project_rules}\n\n---\n\n{prompt}"
+
+    # Inject core memory (Levels 1-3) after project rules, before the main prompt.
+    # Skip for CLASSIFY/DECOMPOSE (metadata phases) and LEARN (extracting, not consuming).
+    if phase not in ("CLASSIFY", "DECOMPOSE", "LEARN"):
+        core_memory = _load_core_memory(working_directory)
+        if core_memory:
+            prompt = f"{core_memory}\n\n---\n\n{prompt}"
 
     return prompt
 
