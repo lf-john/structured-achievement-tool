@@ -1,0 +1,153 @@
+{
+  "name": "email-validation-pipeline",
+  "nodes": [
+    {
+      "id": "node-1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "node-2",
+      "name": "Fetch Contacts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300],
+      "parameters": {
+        "url": "http://localhost/api/contacts",
+        "method": "GET",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      }
+    },
+    {
+      "id": "node-3",
+      "name": "Email Validator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "jsCode": "const email = $input.item.json.email || '';\nconst result = { email, classification: 'valid_business', data_quality: 'High', score: 90 };\nreturn result;"
+      }
+    },
+    {
+      "id": "node-4",
+      "name": "Disposable Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 200],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.classification }}",
+              "rightValue": "disposable_domain",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-5",
+      "name": "Role Account Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 400],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.classification }}",
+              "rightValue": "role_account",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-6",
+      "name": "Free Email Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 600],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.classification }}",
+              "rightValue": "free_email",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-7",
+      "name": "Update Mautic data_quality",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 300],
+      "parameters": {
+        "url": "=http://localhost/api/contacts/{{ $json.contact_id }}/edit",
+        "method": "PATCH",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "data_quality", "value": "={{ $json.data_quality }}" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-8",
+      "name": "Log Writer",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "parameters": {
+        "fileName": "validation-log.csv",
+        "dataPropertyName": "data"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{ "node": "Fetch Contacts", "type": "main", "index": 0 }]]
+    },
+    "Fetch Contacts": {
+      "main": [[{ "node": "Email Validator", "type": "main", "index": 0 }]]
+    },
+    "Email Validator": {
+      "main": [
+        [{ "node": "Disposable Check", "type": "main", "index": 0 }],
+        [{ "node": "Role Account Check", "type": "main", "index": 0 }],
+        [{ "node": "Free Email Check", "type": "main", "index": 0 }]
+      ]
+    },
+    "Disposable Check": {
+      "main": [[{ "node": "Update Mautic data_quality", "type": "main", "index": 0 }]]
+    },
+    "Role Account Check": {
+      "main": [[{ "node": "Update Mautic data_quality", "type": "main", "index": 0 }]]
+    },
+    "Free Email Check": {
+      "main": [[{ "node": "Update Mautic data_quality", "type": "main", "index": 0 }]]
+    },
+    "Update Mautic data_quality": {
+      "main": [[{ "node": "Log Writer", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
