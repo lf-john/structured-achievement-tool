@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# US-012 Verification Script: n8n-enrichment-pipeline.md documentation
+# US-013 Verification Script: Email Warmup Plan document for logicalfront.net
 
 set -euo pipefail
 
-DOC_PATH="$HOME/projects/marketing-automation/docs/n8n-enrichment-pipeline.md"
+DOC_PATH="$HOME/projects/marketing-automation/docs/email-warmup-plan.md"
+SCRIPT_PATH="$HOME/projects/marketing-automation/scripts/warmup_daily_check.sh"
 FAIL=0
 
 check() {
@@ -17,7 +18,7 @@ check() {
     fi
 }
 
-# AC-9: File exists at correct path
+# Document exists
 check "Documentation file created at correct path" "[ -f '$DOC_PATH' ]"
 
 if [ ! -f "$DOC_PATH" ]; then
@@ -25,51 +26,69 @@ if [ ! -f "$DOC_PATH" ]; then
     exit 1
 fi
 
-# AC-1: Workflow overview section mentions Lead Coordinator integration
-check "Workflow overview section present" "grep -qi 'overview' '$DOC_PATH'"
-check "Lead Coordinator integration mentioned" "grep -qi 'lead coordinator' '$DOC_PATH'"
+# Week-by-Week Schedule: all 28 days present
+ALL_DAYS=1
+for day in $(seq 1 28); do
+    if ! grep -q "Day $day" "$DOC_PATH"; then
+        echo "FAIL: Missing Day $day in schedule"
+        ALL_DAYS=0
+        FAIL=1
+    fi
+done
+[ "$ALL_DAYS" -eq 1 ] && echo "PASS: All 28 days present in Week-by-Week Schedule"
 
-# AC-2: Architecture diagram or data flow diagram
-check "Architecture or data flow diagram section present" "grep -qi 'architecture\|diagram\|data flow' '$DOC_PATH'"
+# Volume targets
+check "Volume target 50/day present" "grep -q '50' '$DOC_PATH'"
+check "Volume target 2500/day present" "grep -qE '2,500|2500' '$DOC_PATH'"
 
-# AC-3: API credential sections for all four services
-check "Apollo.io credentials section present" "grep -qi 'apollo' '$DOC_PATH'"
-check "IPinfo credentials section present" "grep -qi 'ipinfo' '$DOC_PATH'"
-check "Apify credentials section present" "grep -qi 'apify' '$DOC_PATH'"
-check "Mautic credentials section present" "grep -qi 'mautic' '$DOC_PATH'"
+# Mautic cron --limit values
+check "Mautic cron --limit values present" "grep -q '\-\-limit' '$DOC_PATH'"
 
-# AC-4: N8N credential configuration step-by-step instructions
-check "N8N credential configuration instructions present" "grep -qi 'n8n' '$DOC_PATH'"
-check "Step-by-step configuration instructions present" "grep -qi 'step\|configure\|setup' '$DOC_PATH'"
+# AWS SES CLI commands
+check "get-send-statistics CLI command present" "grep -q 'get-send-statistics' '$DOC_PATH'"
+check "get-account CLI command present" "grep -q 'get-account' '$DOC_PATH'"
+check "Mautic queue check in monitoring checklist" "grep -qi 'mautic.*queue\|queue.*mautic' '$DOC_PATH'"
 
-# AC-5: Import and testing procedures with example test contact data
-check "Import procedure documented" "grep -qi 'import' '$DOC_PATH'"
-check "Testing procedure documented" "grep -qi 'test' '$DOC_PATH'"
-check "Example test contact data present" "grep -qi 'example\|sample\|test contact\|test data' '$DOC_PATH'"
+# Abort criteria thresholds
+check "Bounce rate threshold 5% in abort criteria" "grep -q '5%' '$DOC_PATH'"
+check "Complaint rate threshold 0.1% in abort criteria" "grep -q '0.1%' '$DOC_PATH'"
+check "SES suspension abort trigger present" "grep -qi 'suspension\|suspend' '$DOC_PATH'"
+check "Spam folder delivery abort criterion present" "grep -qi 'spam folder' '$DOC_PATH'"
 
-# AC-6: Rate limits documented
-check "Apollo rate limit (100 req/min) documented" "grep -qi '100.*req\|100.*min\|req.*min.*100\|apollo.*rate\|rate.*apollo' '$DOC_PATH'"
-check "IPinfo free tier (50K/month) documented" "grep -qi '50,000\|50000\|50k\|50 k' '$DOC_PATH'"
-check "Apify async limits documented" "grep -qi 'async\|apify.*limit\|limit.*apify' '$DOC_PATH'"
+# Recovery Steps section
+check "Recovery Steps section present" "grep -qi 'recovery\|recover' '$DOC_PATH'"
+check "Pause procedure in recovery steps" "grep -qi 'pause' '$DOC_PATH'"
+check "Contact remediation in recovery steps" "grep -qi 'remediat' '$DOC_PATH'"
+check "Resume at 50% volume in recovery steps" "grep -q '50%' '$DOC_PATH'"
 
-# AC-7: Enrichment field mapping table
-check "Field mapping table present" "grep -qi 'field mapping\|input.*output\|mapping table' '$DOC_PATH'"
+# Campaign Activation Schedule
+check "Campaign Activation Schedule section present" "grep -qi 'campaign activation\|activation schedule' '$DOC_PATH'"
+check "Week 1 welcome campaign mentioned" "grep -qi 'week 1.*welcome\|welcome.*week 1' '$DOC_PATH'"
+check "Week 2 healthcare nurture mentioned" "grep -qi 'healthcare\|nurture' '$DOC_PATH'"
+check "Cold outreach mentioned" "grep -qi 'cold outreach\|cold' '$DOC_PATH'"
 
-# AC-8: Cost estimation
-check "Cost estimation section present" "grep -qi 'cost\|pricing' '$DOC_PATH'"
-check "Per-contact cost mentioned" "grep -qi 'per.contact\|per contact\|contact cost' '$DOC_PATH'"
-check "Monthly volume calculations present" "grep -qi 'monthly\|per month\|month' '$DOC_PATH'"
+# Monitoring script content in document
+check "warmup_daily_check.sh referenced in document" "grep -q 'warmup_daily_check.sh' '$DOC_PATH'"
+check "ntfy.sh notifications in monitoring script" "grep -q 'ntfy' '$DOC_PATH'"
+check "Test email sat.system23@gmail.com present" "grep -q 'sat.system23@gmail.com' '$DOC_PATH'"
 
-# AC-10: Troubleshooting section
-check "Troubleshooting section present" "grep -qi 'troubleshoot\|trouble' '$DOC_PATH'"
-check "Common issues/errors documented" "grep -qi 'common issue\|error scenario\|error.*scenario\|401\|403\|timeout\|rate limit error' '$DOC_PATH'"
+# Markdown table formatting
+check "Markdown pipe-delimited tables present" "grep -q '^|' '$DOC_PATH'"
 
-# Document must be substantial (at least 150 lines)
+# Section hierarchy (H1/H2/H3)
+check "H2 sections present" "grep -q '^## ' '$DOC_PATH'"
+check "H3 sections present" "grep -q '^### ' '$DOC_PATH'"
+
+# Standalone warmup_daily_check.sh script file
+check "warmup_daily_check.sh exists as standalone file" "[ -f '$SCRIPT_PATH' ]"
+check "warmup_daily_check.sh is executable" "[ -x '$SCRIPT_PATH' ]"
+
+# Document must be substantial (at least 200 lines)
 LINE_COUNT=$(wc -l < "$DOC_PATH")
-if [ "$LINE_COUNT" -ge 150 ]; then
+if [ "$LINE_COUNT" -ge 200 ]; then
     echo "PASS: Documentation is substantial ($LINE_COUNT lines)"
 else
-    echo "FAIL: Documentation too short ($LINE_COUNT lines, expected >= 150)"
+    echo "FAIL: Documentation too short ($LINE_COUNT lines, expected >= 200)"
     FAIL=1
 fi
 
