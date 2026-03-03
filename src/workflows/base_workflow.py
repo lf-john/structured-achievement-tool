@@ -97,6 +97,8 @@ PHASE_WALL_CLOCK_TIMEOUTS = {
     "FIX": 900,
     "EXECUTE": 900,
     "PLAN_CODE": 900,
+    # Content-producing phases — 15 minutes max (long documents)
+    "CONTENT_WRITE": 900,
 }
 # Default for phases not listed above: 10 minutes
 DEFAULT_PHASE_TIMEOUT = 600
@@ -336,11 +338,11 @@ def phase_node(
     state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
 
     # Update progressive disclosure context
-    if phase_name in ("DESIGN", "ARCHITECT_CODE"):
+    if phase_name in ("DESIGN", "ARCHITECT_CODE", "ANALYZE", "SYNTHESIZE"):
         state["design_output"] = output_text
     elif phase_name in ("TDD_RED", "TEST_WRITER"):
         state["test_files"] = output_text
-    elif phase_name in ("PLAN", "PLAN_CODE"):
+    elif phase_name in ("PLAN", "PLAN_CODE", "CONTENT_PLAN"):
         state["plan_output"] = output_text
 
     # Update verify_passed for VERIFY phases to feed verify_decision
@@ -355,8 +357,8 @@ def phase_node(
 
     logger.info(f"Phase {phase_name} completed: status={status.value}, duration={duration:.1f}s, provider={provider.name}")
 
-    # Auto-commit after code-producing phases
-    if status == PhaseStatus.COMPLETE and phase_name in ("TDD_RED", "CODE", "FIX", "VERIFY", "EXECUTE"):
+    # Auto-commit after phases that produce files
+    if status == PhaseStatus.COMPLETE and phase_name in ("TDD_RED", "CODE", "FIX", "VERIFY", "EXECUTE", "CONTENT_WRITE"):
         commit_hash = auto_commit(working_dir, story.get("id", "unknown"), phase_name)
         if commit_hash:
             logger.debug(f"Auto-committed after {phase_name}: {commit_hash}")
@@ -1054,6 +1056,157 @@ def parallel_gather_node(
 
     logger.info(f"PARALLEL_GATHER: {len(results)} channels completed")
     return state
+
+
+def parallel_analyze_node(
+    state: StoryState,
+    routing_engine: RoutingEngine,
+) -> StoryState:
+    """Run parallel ANALYZE channels — one per topic extracted from gather output.
+
+    Splits the gathered information into topics, runs concurrent analysis on each,
+    then merges all analysis results into design_output for SYNTHESIZE.
+
+    Topic extraction is lightweight (string splitting on gather channel headers).
+    Each topic gets its own ANALYZE invocation with a focused subset of the data.
+    """
+    state = dict(state)
+    state["current_phase"] = "PARALLEL_ANALYZE"
+
+    story = state["story"]
+    working_dir = state["working_directory"]
+    story_complexity = story.get("complexity", 5)
+    story_id = story.get("id", "unknown")
+
+    # Get gathered information from prior phase
+    gather_output = state.get("design_output", "")
+    if not gather_output:
+        logger.warning(f"Story {story_id}: No gather output for parallel analyze")
+        phase_output = PhaseOutput(
+            phase="PARALLEL_ANALYZE",
+            status=PhaseStatus.FAILED,
+            output="No gather output available",
+            exit_code=-1,
+        )
+        state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
+        return state
+
+    # Split gather output into topic chunks by channel headers (=== gatherer_xxx ===)
+    # or by section headers (# / ## / ### headings)
+    topics = _split_into_topics(gather_output)
+    if len(topics) <= 1:
+        # Not enough to parallelize — fall through to single ANALYZE
+        logger.info(f"Story {story_id}: Only {len(topics)} topic(s), using single ANALYZE")
+        topics = [("full_analysis", gather_output)]
+
+    logger.info(f"PARALLEL_ANALYZE: Splitting into {len(topics)} topic channels for story {story_id}")
+
+    analyze_timeout = get_phase_timeout("ANALYZE")
+    futures = {}
+
+    for topic_name, topic_content in topics:
+        provider = routing_engine.select("analyzer", story_complexity=story_complexity, is_code_task=False)
+
+        # Build a focused prompt with just this topic's content
+        topic_story = dict(story)
+        topic_story["_analyze_topic"] = topic_name
+
+        context = _build_phase_context(state, "ANALYZE")
+        # Override design_output with just this topic's content
+        context["design_output"] = topic_content
+
+        prompt = build_prompt(
+            story=topic_story,
+            phase="ANALYZE",
+            working_directory=working_dir,
+            context=context,
+        )
+        stream_file = _stream_file_path(story_id, f"ANALYZE_{topic_name}")
+
+        def _make_analyze(p, pr, wd, t, sf):
+            return _run_async(cli_invoke(provider=p, prompt=pr, working_directory=wd, stream_output_file=sf), timeout=t)
+
+        future = _thread_pool.submit(_make_analyze, provider, prompt, working_dir, analyze_timeout, stream_file)
+        futures[topic_name] = (future, provider.name)
+
+    # Collect results
+    all_outputs = []
+    for topic_name, (future, provider_name) in futures.items():
+        try:
+            result = future.result(timeout=analyze_timeout + 30)
+            output_text = result.stdout if result else ""
+            all_outputs.append(f"=== Analysis: {topic_name} ===\n{output_text}")
+            logger.info(f"PARALLEL_ANALYZE: Topic '{topic_name}' completed via {provider_name} ({len(output_text)} chars)")
+        except (concurrent.futures.TimeoutError, TimeoutError):
+            logger.error(f"WATCHDOG TIMEOUT: Analyze topic '{topic_name}' exceeded {analyze_timeout}s")
+            future.cancel()
+            all_outputs.append(f"=== Analysis: {topic_name} ===\nWATCHDOG: killed after {analyze_timeout}s")
+        except Exception as e:
+            logger.error(f"PARALLEL_ANALYZE: Topic '{topic_name}' failed: {e}")
+            all_outputs.append(f"=== Analysis: {topic_name} ===\nError: {e}")
+
+    # Merge all analysis results into design_output for SYNTHESIZE
+    merged_analysis = "\n\n".join(all_outputs)
+    state["design_output"] = merged_analysis
+
+    phase_output = PhaseOutput(
+        phase="PARALLEL_ANALYZE",
+        status=PhaseStatus.COMPLETE,
+        output=f"Analyzed {len(topics)} topics in parallel",
+        exit_code=0,
+    )
+    state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
+
+    logger.info(f"PARALLEL_ANALYZE: {len(topics)} topic channels completed")
+    return state
+
+
+def _split_into_topics(gather_output: str) -> list[tuple[str, str]]:
+    """Split gathered output into topic chunks for parallel analysis.
+
+    Looks for:
+    1. Channel headers: === gatherer_xxx === or === gather_xxx ===
+    2. Major section headers: # Heading or ## Heading
+
+    Returns list of (topic_name, content) tuples.
+    Each chunk gets at least 200 chars to be worth analyzing separately.
+    """
+    import re
+
+    # Try splitting by gather channel headers first
+    channel_pattern = re.compile(r'^=== (\w+) ===\s*$', re.MULTILINE)
+    channel_matches = list(channel_pattern.finditer(gather_output))
+
+    if len(channel_matches) >= 2:
+        topics = []
+        for i, match in enumerate(channel_matches):
+            name = match.group(1)
+            start = match.end()
+            end = channel_matches[i + 1].start() if i + 1 < len(channel_matches) else len(gather_output)
+            content = gather_output[start:end].strip()
+            if len(content) >= 200:
+                topics.append((name, content))
+        if len(topics) >= 2:
+            return topics
+
+    # Fall back to major heading splits (# or ##)
+    heading_pattern = re.compile(r'^(#{1,2})\s+(.+)$', re.MULTILINE)
+    heading_matches = list(heading_pattern.finditer(gather_output))
+
+    if len(heading_matches) >= 2:
+        topics = []
+        for i, match in enumerate(heading_matches):
+            name = re.sub(r'[^a-zA-Z0-9_]', '_', match.group(2).strip())[:40]
+            start = match.start()
+            end = heading_matches[i + 1].start() if i + 1 < len(heading_matches) else len(gather_output)
+            content = gather_output[start:end].strip()
+            if len(content) >= 200:
+                topics.append((name, content))
+        if len(topics) >= 2:
+            return topics
+
+    # Not splittable — return as single topic
+    return [("full_analysis", gather_output)]
 
 
 def config_validate_decision(state: StoryState) -> Literal["pass", "fail"]:

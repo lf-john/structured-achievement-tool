@@ -48,6 +48,9 @@ PHASE_TEMPLATES: dict[str, str] = {
     "VERIFY_TEST": "verify.md",
     "VERIFY_SECURITY": "verify.md",
     "VERIFY_ARCH": "verify.md",
+    "CONTENT_PLAN": "content_plan.md",
+    "CONTENT_WRITE": "content_write.md",
+    "AGENTIC_VERIFY": "agentic_verify.md",
 }
 
 # Progressive disclosure: what context each phase receives
@@ -76,6 +79,9 @@ PHASE_CONTEXT: dict[str, list[str]] = {
     "VERIFY_TEST": ["diff", "test_results", "acceptance_criteria"],
     "VERIFY_SECURITY": ["diff", "test_results", "acceptance_criteria"],
     "VERIFY_ARCH": ["diff", "test_results", "acceptance_criteria"],
+    "CONTENT_PLAN": ["task_description", "acceptance_criteria", "rag_context"],
+    "CONTENT_WRITE": ["plan_output", "acceptance_criteria", "failure_context"],
+    "AGENTIC_VERIFY": ["plan_output", "acceptance_criteria"],
 }
 
 
@@ -391,11 +397,61 @@ def build_prompt(
             "AGENT_NAME": f"{phase} Agent",
         }
 
+        # Inject project rules for CLASSIFY so it can respect project-level
+        # type hints (e.g., "all tasks are content" in a non-code project).
+        if phase == "CLASSIFY":
+            project_rules = _load_project_rules(working_directory)
+            subs["PROJECT_RULES"] = project_rules or "(none)"
+
         # Add progressive disclosure context
         allowed_context = PHASE_CONTEXT.get(phase, [])
         for key in allowed_context:
             if key in ctx and ctx[key]:
                 subs[key.upper()] = str(ctx[key])
+
+        # Inject doc-type-specific verification criteria for content phases
+        if phase in ("AGENTIC_VERIFY", "CONTENT_WRITE"):
+            try:
+                from src.workflows.content_models import (
+                    get_rules_for_doc_type, get_qualities_for_doc_type,
+                    format_group1_for_prompt, format_group2_for_prompt,
+                )
+                # Extract doc_type from plan output or story
+                doc_type = story.get("doc_type", "technical")
+                plan_output = ctx.get("plan_output", "")
+                if plan_output:
+                    try:
+                        from src.llm.response_parser import extract_json
+                        parsed = extract_json(plan_output)
+                        if isinstance(parsed, dict) and parsed.get("doc_type"):
+                            doc_type = parsed["doc_type"]
+                    except Exception:
+                        pass
+                if phase == "AGENTIC_VERIFY":
+                    qualities = get_qualities_for_doc_type(doc_type)
+                    subs["GROUP2_QUALITIES"] = format_group2_for_prompt(qualities)
+                elif phase == "CONTENT_WRITE":
+                    rules = get_rules_for_doc_type(doc_type)
+                    subs.setdefault("GROUP1_RULES", format_group1_for_prompt(rules))
+                    qualities = get_qualities_for_doc_type(doc_type)
+                    subs.setdefault("GROUP2_QUALITIES", format_group2_for_prompt(qualities))
+            except Exception as e:
+                logger.warning(f"Failed to inject content criteria for {phase}: {e}")
+
+        # Inject tech stack detection for phases that need it
+        if phase in ("TDD_RED", "TEST_WRITER", "CODE", "FIX"):
+            from src.execution.tech_stack import detect_tech_stack, get_existing_test_files
+            stack = detect_tech_stack(working_directory)
+            subs.setdefault("LANGUAGE", stack.language)
+            subs.setdefault("TEST_FRAMEWORK", stack.test_framework)
+            subs.setdefault("TEST_DIRECTORY", stack.test_directory)
+            # List existing test files for TDD_RED/TEST_WRITER
+            if phase in ("TDD_RED", "TEST_WRITER"):
+                existing = get_existing_test_files(working_directory, stack.test_directory)
+                if existing:
+                    subs["EXISTING_TEST_FILES"] = "\n".join(f"- `{f}`" for f in existing)
+                else:
+                    subs["EXISTING_TEST_FILES"] = "No existing test files found."
 
         # Add failure context if retrying — wrap in delimiters since it may
         # contain prior LLM output or error messages from external processes

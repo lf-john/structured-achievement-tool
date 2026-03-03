@@ -29,9 +29,12 @@ from src.workflows.review_workflow import ReviewWorkflow
 from src.workflows.assignment_workflow import AssignmentWorkflow
 from src.workflows.qa_feedback_workflow import QAFeedbackWorkflow
 from src.workflows.escalation_workflow import EscalationWorkflow
+from src.workflows.content_workflow import ContentWorkflow
+from src.workflows.conversation_workflow import ConversationWorkflow
 from src.llm.routing_engine import RoutingEngine
 from src.agents.failure_classifier import classify_failure, FailureSeverity
 from src.execution.git_manager import (
+    _run_git,
     get_current_commit,
     reset_to_commit,
     create_story_worktree,
@@ -40,7 +43,7 @@ from src.execution.git_manager import (
     get_worktree_diff,
 )
 from src.notifications.notifier import Notifier
-from src.core.checkpoint_manager import write_checkpoint, read_checkpoint, Checkpoint
+from src.core.checkpoint_manager import write_checkpoint, read_checkpoint, Checkpoint, init_db as init_checkpoint_db
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +73,8 @@ WORKFLOW_MAP = {
     "debug": DebugWorkflow,
     "research": ResearchWorkflow,
     "review": ReviewWorkflow,
+    "conversation": ConversationWorkflow,  # Single execute + optional persist (store flag)
+    "content": ContentWorkflow,
     "assignment": AssignmentWorkflow,
     # human_task: lazy-imported in get_workflow_for_story (DelayedChecker dependency)
     "qa_feedback": QAFeedbackWorkflow,
@@ -87,21 +92,23 @@ def get_workflow_for_story(
     notifier: Optional[Notifier] = None,
     checkpointer=None,
 ):
-    """Select and compile the appropriate workflow for a story type."""
+    """Select and compile the appropriate workflow for a story type.
+
+    Workflow is determined by story type alone (no tdd field).
+    Raises ValueError if the story type has no matching workflow.
+    """
     story_type = story.get("type", "development")
 
-    # TDD stories always use TDD workflows
-    if story.get("tdd", False) and story_type == "development":
-        workflow_cls = DevTDDWorkflow
-    elif story.get("tdd", False) and story_type == "config":
-        workflow_cls = ConfigTDDWorkflow
-    elif story.get("tdd", False) and story_type == "maintenance":
-        workflow_cls = MaintenanceWorkflow
-    elif story_type == "human_task":
+    if story_type == "human_task":
         from src.workflows.human_task_workflow import HumanTaskWorkflow
         workflow_cls = HumanTaskWorkflow
     else:
-        workflow_cls = WORKFLOW_MAP.get(story_type, DevTDDWorkflow)
+        workflow_cls = WORKFLOW_MAP.get(story_type)
+        if workflow_cls is None:
+            raise ValueError(
+                f"No workflow for story type '{story_type}'. "
+                f"Valid types: {sorted(WORKFLOW_MAP.keys())}"
+            )
 
     # Human workflows need notifier in addition to routing_engine
     if story_type in HUMAN_STORY_TYPES:
@@ -180,8 +187,17 @@ async def execute_story(
         pass
 
     # --- Worktree isolation ---
+    # Only development/config/debug story types benefit from worktree isolation.
+    # Content/research/review workflows write files to absolute paths specified
+    # in the task description, which would miss the worktree and end up in the
+    # base repo.  Skip worktree for these types to avoid silent no-op merges.
+    WORKTREE_TYPES = {"development", "config", "debug", "maintenance"}
     exec_config = _load_execution_config()
-    use_worktree = exec_config.get("use_worktree", False)
+    story_type = story.get("type", "development")
+    use_worktree = (
+        exec_config.get("use_worktree", False)
+        and story_type in WORKTREE_TYPES
+    )
     worktree_path: Optional[str] = None
     effective_working_dir = working_directory
 
@@ -199,6 +215,9 @@ async def execute_story(
             )
             worktree_path = None
             effective_working_dir = working_directory
+
+    result = None
+    merge_failed = False
 
     try:
         result = await _execute_story_inner(
@@ -225,6 +244,7 @@ async def execute_story(
             if merged:
                 logger.info(f"Story {story_id}: merged worktree changes into main repo")
             else:
+                merge_failed = True
                 logger.error(
                     f"Story {story_id}: worktree merge FAILED — changes remain "
                     f"on branch story/{story_id} for manual review"
@@ -236,16 +256,38 @@ async def execute_story(
 
         return result
 
+    except Exception as e:
+        # If _execute_story_inner raised, return a failure result
+        logger.error(f"Story {story_id}: execution crashed: {e}")
+        if result is None:
+            result = StoryResult(
+                story_id=story_id,
+                success=False,
+                reason=f"Execution crashed: {e}",
+            )
+        return result
+
     finally:
-        # Always clean up the worktree
+        # Clean up worktree only if merge succeeded or story failed.
+        # On merge failure, preserve the branch for manual recovery.
         if worktree_path:
-            try:
-                remove_story_worktree(worktree_path, working_directory)
-                logger.info(f"Story {story_id}: cleaned up worktree at {worktree_path}")
-            except Exception as e:
-                logger.warning(
-                    f"Story {story_id}: worktree cleanup failed: {e}"
-                )
+            if merge_failed:
+                # Remove the worktree directory but keep the branch
+                try:
+                    if os.path.isdir(worktree_path):
+                        _run_git(["worktree", "remove", worktree_path, "--force"], working_directory)
+                    logger.warning(
+                        f"Story {story_id}: worktree directory removed but branch "
+                        f"story/{story_id} preserved for manual review"
+                    )
+                except Exception as e:
+                    logger.warning(f"Story {story_id}: worktree directory cleanup failed: {e}")
+            else:
+                try:
+                    remove_story_worktree(worktree_path, working_directory)
+                    logger.info(f"Story {story_id}: cleaned up worktree at {worktree_path}")
+                except Exception as e:
+                    logger.warning(f"Story {story_id}: worktree cleanup failed: {e}")
 
 
 async def _execute_story_inner(
@@ -307,7 +349,7 @@ async def _execute_story_inner(
 
             config = {
                 "configurable": {
-                    "thread_id": f"{story_id}_attempt_{attempt}",
+                    "thread_id": f"{task_id}_{story_id}_attempt_{attempt}",
                     "task_id": task_id,
                 },
                 "metadata": {
@@ -355,16 +397,29 @@ async def _execute_story_inner(
                 last_phase = phase_outputs[-1] if phase_outputs else {}
                 last_status = last_phase.get("status", "failed")
 
-                # verify_passed is None when workflow has no verification phase (e.g., research).
-                # Treat None as "no verification needed" (success), only False means failure.
+                # Verification requirements depend on story type:
+                # - dev/config/maintenance: verify_passed MUST be True (verification mandatory)
+                # - other types: verify_passed=None is acceptable (no verification needed)
                 verify_passed = final_state.get("verify_passed")
-                if last_status == "complete" and verify_passed is not False:
+                story_type = story.get("type", "development")
+                VERIFIED_TYPES = {"development", "config", "maintenance"}
+                if story_type in VERIFIED_TYPES:
+                    verification_ok = verify_passed is True
+                else:
+                    # Content/research/conversation workflows manage their own
+                    # quality gates via retry limits.  If the workflow reached
+                    # LEARN and completed, the story succeeded regardless of
+                    # the final verify_passed flag (which stays False when
+                    # retry limits are hit and the workflow skips ahead).
+                    verification_ok = True
+                if last_status == "complete" and verification_ok:
                     # Success
                     if notifier:
                         notifier.notify_story_complete(story_id, story_title)
 
                     # Update story-level checkpoint
                     try:
+                        init_checkpoint_db(sat_db_path)
                         checkpoint = read_checkpoint(sat_db_path, task_id)
                         if checkpoint:
                             if story_id not in checkpoint.completed_stories:
