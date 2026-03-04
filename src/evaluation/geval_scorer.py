@@ -139,7 +139,10 @@ def _get_pending_invocations(
     try:
         with open(events_file, "r") as f:
             f.seek(offset)
-            for line in f:
+            while True:
+                line = f.readline()
+                if not line:
+                    break
                 try:
                     event = json.loads(line.strip())
                     if event.get("event_type") == "llm_invocation":
