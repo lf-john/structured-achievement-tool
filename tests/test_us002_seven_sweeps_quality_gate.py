@@ -124,6 +124,7 @@ _FAILING_RESULT = {
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _load_template() -> str:
     return TEMPLATE_PATH.read_text(encoding="utf-8")
 
@@ -137,13 +138,11 @@ def _extract_json_blocks(text: str) -> list:
 # Template File Structure Tests
 # ===========================================================================
 
-class TestTemplateFileStructure:
 
+class TestTemplateFileStructure:
     def test_template_file_exists(self):
         """AC: File exists at the correct path."""
-        assert TEMPLATE_PATH.exists(), (
-            f"Template file not found at {TEMPLATE_PATH}"
-        )
+        assert TEMPLATE_PATH.exists(), f"Template file not found at {TEMPLATE_PATH}"
 
     def test_all_seven_sweeps_present(self):
         """AC: All 7 sweeps described with numeric scoring (1-5 scale)."""
@@ -193,9 +192,7 @@ class TestTemplateFileStructure:
         assert "overall_pass" in content, "'overall_pass' logic not present"
         assert "overall_score" in content, "'overall_score' logic not present"
         # Logic must mention both conditions together
-        assert "AND" in content or "and" in content, (
-            "Combined pass condition (AND) not documented"
-        )
+        assert "AND" in content or "and" in content, "Combined pass condition (AND) not documented"
 
     def test_passing_example_present(self):
         """AC: Example JSON output demonstrates passing case (overall_pass: true)."""
@@ -217,9 +214,7 @@ class TestTemplateFileStructure:
         blocks = _extract_json_blocks(content)
         # Filter to blocks that look like quality gate output (have overall_pass)
         gate_blocks = [b for b in blocks if "overall_pass" in b]
-        assert len(gate_blocks) >= 2, (
-            f"Expected at least 2 JSON example blocks, found {len(gate_blocks)}"
-        )
+        assert len(gate_blocks) >= 2, f"Expected at least 2 JSON example blocks, found {len(gate_blocks)}"
         for block in gate_blocks:
             try:
                 parsed = json.loads(block)
@@ -234,9 +229,7 @@ class TestTemplateFileStructure:
         """AC: Template is complete and immediately usable for SAT integration."""
         content = _load_template()
         assert "SAT" in content, "No SAT integration section found"
-        assert "check_quality_gate" in content, (
-            "Gate verification function not documented in template"
-        )
+        assert "check_quality_gate" in content, "Gate verification function not documented in template"
         assert "{{COPY_TO_REVIEW}}" in content, (
             "Template placeholder {{COPY_TO_REVIEW}} not found — SAT cannot inject copy"
         )
@@ -254,8 +247,8 @@ class TestTemplateFileStructure:
 # check_quality_gate Function Tests
 # ===========================================================================
 
-class TestCheckQualityGate:
 
+class TestCheckQualityGate:
     def test_gate_accepts_passing_json(self):
         """AC: check_quality_gate returns (True, dict) for valid passing JSON."""
         payload = json.dumps(_PASSING_RESULT)
@@ -305,9 +298,7 @@ class TestCheckQualityGate:
         payload = json.dumps(_PASSING_RESULT)
         _, result = check_quality_gate(payload)
         for sweep in EXPECTED_SWEEPS:
-            assert isinstance(result["sweeps"][sweep]["issues"], list), (
-                f"issues for {sweep} is not a list"
-            )
+            assert isinstance(result["sweeps"][sweep]["issues"], list), f"issues for {sweep} is not a list"
 
     def test_gate_rejects_invalid_json(self):
         """AC: check_quality_gate raises ValueError on unparseable input."""
@@ -317,8 +308,7 @@ class TestCheckQualityGate:
     def test_gate_rejects_missing_sweep(self):
         """AC: check_quality_gate raises on missing required sweep."""
         bad = dict(_PASSING_RESULT)
-        bad["sweeps"] = {k: v for k, v in _PASSING_RESULT["sweeps"].items()
-                         if k != "clarity"}
+        bad["sweeps"] = {k: v for k, v in _PASSING_RESULT["sweeps"].items() if k != "clarity"}
         with pytest.raises((AssertionError, KeyError, ValueError)):
             check_quality_gate(json.dumps(bad))
 
@@ -335,12 +325,10 @@ class TestCheckQualityGate:
         tricky["sweeps"]["clarity"]["score"] = 2
         tricky["sweeps"]["clarity"]["pass"] = False
         tricky["overall_pass"] = True  # Lie about overall_pass
-        tricky["overall_score"] = 97   # High score, but one sweep fails
+        tricky["overall_score"] = 97  # High score, but one sweep fails
         # Gate should detect the inconsistency and return passed=False
         passed, _ = check_quality_gate(json.dumps(tricky))
-        assert passed is False, (
-            "overall_pass should be False when any sweep score < 3"
-        )
+        assert passed is False, "overall_pass should be False when any sweep score < 3"
 
     def test_overall_pass_false_when_score_below_70(self):
         """Edge: overall_pass must be False when overall_score < 70."""
@@ -348,9 +336,7 @@ class TestCheckQualityGate:
         low_score["overall_score"] = 60
         low_score["overall_pass"] = True  # Lie about it
         passed, _ = check_quality_gate(json.dumps(low_score))
-        assert passed is False, (
-            "overall_pass should be False when overall_score < 70"
-        )
+        assert passed is False, "overall_pass should be False when overall_score < 70"
 
     def test_gate_derives_correct_overall_score(self):
         """AC: overall_score is round(sum_of_scores / 35 * 100)."""
@@ -373,9 +359,7 @@ class TestCheckQualityGate:
             "revised_copy": "Boundary test copy.",
         }
         passed, _result = check_quality_gate(json.dumps(boundary))
-        assert passed is False, (
-            "All sweeps at 3 gives overall_score=60 which is < 70, so overall_pass must be False"
-        )
+        assert passed is False, "All sweeps at 3 gives overall_score=60 which is < 70, so overall_pass must be False"
 
     def test_gate_boundary_sweep_score_exactly_3(self):
         """Edge: A sweep with score exactly 3 should have pass=True."""
@@ -383,9 +367,7 @@ class TestCheckQualityGate:
         result_3["sweeps"]["clarity"]["score"] = 3
         result_3["sweeps"]["clarity"]["pass"] = True
         _, result = check_quality_gate(json.dumps(result_3))
-        assert result["sweeps"]["clarity"]["pass"] is True, (
-            "Score 3 should be a passing score (threshold is >= 3)"
-        )
+        assert result["sweeps"]["clarity"]["pass"] is True, "Score 3 should be a passing score (threshold is >= 3)"
 
 
 # ===========================================================================
@@ -394,16 +376,9 @@ class TestCheckQualityGate:
 
 if __name__ == "__main__":
     import subprocess
+
     result = subprocess.run(
         [sys.executable, "-m", "pytest", __file__, "-v"],
         capture_output=False,
     )
     sys.exit(result.returncode)
-
-fail_count = 0
-try:
-    from src.evaluation.seven_sweeps_gate import check_quality_gate as _cqg_check  # noqa
-except ImportError:
-    fail_count += 1
-
-sys.exit(1 if fail_count > 0 else 0)
