@@ -1,9 +1,0 @@
-{
-  "mautic_field_to_suitecrm_field": {
-    "email": "email1",
-    "firstname": "first_name",
-    "lastname": "last_name",
-    "company": "account_name",
-    "score": "lead_score_c"
-  }
-}

@@ -71,6 +71,13 @@ Thumbs.db
 # Archive (historical artifacts, not part of active codebase)
 _archive/
 
+# Temporary/generated directories
+.tmp_sdt/
+.gemini/
+marketing_automation/
+mautic/
+output/
+
 # Runtime data files
 learnings.json
 plan.json
