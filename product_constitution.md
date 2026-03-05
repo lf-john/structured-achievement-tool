@@ -56,4 +56,4 @@ SAT produces consistent, reliable results with minimal human input. It should:
 2. **Rollback on repeated failure.** If an auto-repair fails twice, revert and notify.
 3. **Self-maintenance limits.** Maximum 3 auto-repair tasks per day. All repairs on branches.
 4. **No credential exposure.** Never log, embed, or transmit credentials, API keys, or passwords.
-5. **Monthly calibration is advisory.** Calibration produces recommendations. The user decides what to implement.
+5. **Weekly calibration is advisory.** Calibration produces recommendations. The user decides what to implement.
