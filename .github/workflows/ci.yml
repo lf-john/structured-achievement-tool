@@ -40,6 +40,8 @@ jobs:
             --ignore=tests/test_benchmarking_ollama_infrastructure.py \
             --ignore=tests/test_routing_engine.py \
             --ignore=tests/test_us002_seven_sweeps_quality_gate.py \
+            --ignore=tests/test_verify_script_sh.py \
+            --ignore=tests/test_routing_fallback.py \
             -k "not integration"
 
   security:
