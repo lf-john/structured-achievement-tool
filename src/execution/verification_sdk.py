@@ -14,6 +14,7 @@ import re
 import socket
 import stat
 import subprocess
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, List, Tuple
 from urllib.request import urlopen, Request
@@ -498,6 +499,27 @@ class ConfigValidator:
                 message=f"error reading file: {e}",
                 details={"error": str(e)},
             )
+
+
+class DelayedChecker:
+    """Retry/wait loop for delayed verification checks."""
+
+    def check_with_retry(
+        self,
+        check_fn: Callable,
+        wait_seconds: float,
+        max_attempts: int,
+        description: str,
+    ) -> VerifyResult:
+        """Run check_fn up to max_attempts times, sleeping wait_seconds between failures."""
+        result = None
+        for attempt in range(max_attempts):
+            result = check_fn()
+            if result.passed:
+                return result
+            if attempt < max_attempts - 1:
+                time.sleep(wait_seconds)
+        return result
 
 
 def run_checks(checks: List[Tuple]) -> List[VerifyResult]:

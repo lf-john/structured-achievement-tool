@@ -5,6 +5,7 @@ Ported from Ralph Pro GitManager (lines 1130-1288).
 """
 
 import os
+import sys
 import subprocess
 import logging
 from dataclasses import dataclass
@@ -257,6 +258,18 @@ def merge_story_worktree(
             worktree_path,
         )
 
+    # Stash any dirty state in the base repo before merging
+    base_status = _run_git(["status", "--porcelain"], base_dir)
+    base_dirty = base_status.returncode == 0 and base_status.stdout.strip()
+    if base_dirty:
+        # Include untracked files in stash so they don't block the merge
+        stash_result = _run_git(["stash", "push", "--include-untracked", "-m", f"pre-merge-{safe_id}"], base_dir)
+        if stash_result.returncode == 0:
+            logger.info(f"Stashed dirty base repo state before merging {branch_name}")
+        else:
+            logger.warning(f"Failed to stash base repo: {stash_result.stderr.strip()}")
+            base_dirty = False  # Don't try to pop later
+
     # Record the current branch in the main repo so we can return to it
     head_result = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], base_dir)
     original_branch = head_result.stdout.strip() if head_result.returncode == 0 else "main"
@@ -290,6 +303,15 @@ def merge_story_worktree(
         except Exception:
             pass
         return False
+
+    finally:
+        # Restore stashed state regardless of merge outcome
+        if base_dirty:
+            pop_result = _run_git(["stash", "pop"], base_dir)
+            if pop_result.returncode == 0:
+                logger.info(f"Restored stashed base repo state after merge of {branch_name}")
+            else:
+                logger.warning(f"Failed to pop stash after merge: {pop_result.stderr.strip()}")
 
     if not merge_ok:
         return False

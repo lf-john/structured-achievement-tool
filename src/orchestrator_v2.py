@@ -30,7 +30,7 @@ from src.llm.prompt_builder import load_template, substitute_placeholders, TEMPL
 from src.llm.response_parser import extract_json
 from src.llm.cli_runner import invoke as cli_invoke
 from src.db.database_manager import DatabaseManager
-from src.core.checkpoint_manager import read_checkpoint
+from src.core.checkpoint_manager import read_checkpoint, init_db as init_checkpoint_db
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +126,33 @@ class OrchestratorV2:
                 return
             i += 1
 
+    def _resolve_project_working_directory(self, file_path: str) -> str:
+        """Resolve the working directory for a task based on its project.
+
+        If the task belongs to a project other than SAT itself, use
+        ~/projects/{project_name}/ as the working directory. This ensures
+        LLM subprocesses write files to the correct project, not to SAT.
+        """
+        from src.daemon import parse_task_project
+        project_name = parse_task_project(file_path)
+
+        # SAT's own tasks use SAT's project directory
+        if project_name == "structured-achievement-tool":
+            return self.project_path
+
+        # Other projects: resolve to ~/projects/{project_name}/
+        projects_root = os.path.dirname(self.project_path)
+        target_dir = os.path.join(projects_root, project_name)
+
+        if os.path.isdir(target_dir):
+            logger.info(f"Using project working directory: {target_dir}")
+            return target_dir
+
+        # If directory doesn't exist, create it
+        os.makedirs(target_dir, exist_ok=True)
+        logger.info(f"Created project working directory: {target_dir}")
+        return target_dir
+
     async def process_task_file(self, file_path: str, mark_status_callback=None):
         """Process a task file: classify, decompose, execute stories.
 
@@ -140,6 +167,9 @@ class OrchestratorV2:
         logger.info(f"Orchestrator processing: {file_path}")
         task_dir = os.path.dirname(file_path)
         task_id = os.path.basename(task_dir)
+
+        # Resolve the working directory for this task's project
+        task_working_directory = self._resolve_project_working_directory(file_path)
 
         # Set task-level correlation ID for hierarchical logging
         try:
@@ -179,7 +209,7 @@ class OrchestratorV2:
         decompose_result = await self.story_agent.decompose(
             user_request=user_request,
             task_type=task_type,
-            working_directory=self.project_path,
+            working_directory=task_working_directory,
             rag_context=rag_context,
         )
 
@@ -203,6 +233,8 @@ class OrchestratorV2:
         completed_stories: set[str] = set()
         try:
             checkpoint_db = os.path.join(self.project_path, ".memory", "checkpoints.db")
+            os.makedirs(os.path.dirname(checkpoint_db), exist_ok=True)
+            init_checkpoint_db(checkpoint_db)
             if os.path.exists(checkpoint_db):
                 checkpoint = read_checkpoint(checkpoint_db, task_id)
                 if checkpoint and checkpoint.completed_stories:
@@ -240,7 +272,7 @@ class OrchestratorV2:
                         story=story,
                         task_id=task_id,
                         task_description=user_request,
-                        working_directory=self.project_path,
+                        working_directory=task_working_directory,
                         routing_engine=self.routing_engine,
                         notifier=self.notifier,
                         max_attempts=self.max_retries,

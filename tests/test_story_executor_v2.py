@@ -24,7 +24,7 @@ class TestWorkflowSelection:
         assert graph is not None
 
     def test_config_story(self):
-        story = {"type": "config", "tdd": True}
+        story = {"type": "config"}
         graph = get_workflow_for_story(story, MagicMock())
         assert graph is not None
 
@@ -38,13 +38,14 @@ class TestWorkflowSelection:
         graph = get_workflow_for_story(story, MagicMock())
         assert graph is not None
 
-    def test_unknown_type_defaults_to_dev(self):
+    def test_unknown_type_raises_error(self):
         story = {"type": "unknown_type"}
-        graph = get_workflow_for_story(story, MagicMock())
-        assert graph is not None
+        with pytest.raises(ValueError, match="No workflow for story type"):
+            get_workflow_for_story(story, MagicMock())
 
     def test_all_workflow_types_in_map(self):
         expected = {"development", "config", "maintenance", "debug", "research", "review",
+                    "conversation", "content",
                     "assignment", "qa_feedback", "escalation"}
         assert set(WORKFLOW_MAP.keys()) == expected
 

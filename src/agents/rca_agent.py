@@ -260,5 +260,4 @@ def generate_escalation_story(report: RCAReport, task_name: str) -> dict:
             "Fix applied or workaround documented",
             f"{report.story_id} passes on retry after fix",
         ],
-        "tdd": False,
     }

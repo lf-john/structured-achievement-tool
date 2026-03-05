@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Valid story types — canonical lowercase names matching classify.md and WORKFLOW_MAP
 STORY_TYPES = {
     "development", "config", "maintenance", "debug", "research", "review",
-    "conversation",
+    "conversation", "content",
     # Human story types
     "assignment", "human_task", "approval", "qa_feedback", "escalation",
 }
@@ -39,6 +39,12 @@ _TYPE_MAP.update({
     "Research": "research",
     "Review": "review",
     "Conversation": "conversation",
+    "Content": "content",
+    "document": "content",
+    "Document": "content",
+    "documentation": "content",
+    "writing": "content",
+    "template": "content",
     "Assignment": "assignment",
     "human_task": "human_task",
     "Human_Task": "human_task",
@@ -112,15 +118,93 @@ class StoryAgent(BaseAgent):
         return result
 
     def _normalize_stories(self, response: DecomposeResponse):
-        """Normalize story fields: map type aliases to canonical lowercase names."""
+        """Normalize story fields: map type aliases to canonical lowercase names.
+
+        If a story type is unknown, re-classify by finding the closest match
+        from valid types and send an ntfy notification so the user can intervene.
+        """
         for story in response.stories:
             # Try exact match first, then case-insensitive
             matched = _TYPE_MAP.get(story.type) or _TYPE_MAP.get(story.type.lower())
             if matched:
                 story.type = matched
             else:
-                logger.warning(f"Unknown story type '{story.type}' for {story.id}, defaulting to development")
-                story.type = "development"
+                original_type = story.type
+                # Re-classify: find closest match from valid types based on description
+                reclassified = self._reclassify_story_type(story)
+                story.type = reclassified
+                logger.warning(
+                    f"Unknown story type '{original_type}' for {story.id}, "
+                    f"re-classified as '{reclassified}'"
+                )
+                # Notify user via ntfy so they can intervene if needed
+                self._notify_reclassification(story, original_type, reclassified)
+
+    def _reclassify_story_type(self, story) -> str:
+        """Find the closest valid type for a story based on its description.
+
+        Uses keyword matching against known type descriptions.
+        """
+        desc = (story.description + " " + story.title).lower()
+
+        # Keyword-based matching ordered by specificity
+        type_keywords = {
+            "content": ["document", "template", "write", "create file", "guide",
+                        "email", "reference", "readme", "markdown", "html template"],
+            "research": ["research", "gather", "analyze", "compare", "summarize",
+                         "investigate", "survey", "benchmark"],
+            "config": ["config", "configure", "setup", "install", "deploy",
+                        "docker", "nginx", "systemd", "environment"],
+            "maintenance": ["update", "upgrade", "cleanup", "rotate", "migrate",
+                            "backup", "archive", "prune"],
+            "debug": ["fix", "bug", "error", "broken", "failing", "crash",
+                       "debug", "diagnose", "troubleshoot"],
+            "review": ["review", "audit", "assess", "evaluate", "inspect"],
+            "development": ["implement", "build", "code", "feature", "function",
+                            "class", "module", "api", "endpoint"],
+        }
+
+        best_type = "development"
+        best_score = 0
+        for story_type, keywords in type_keywords.items():
+            score = sum(1 for kw in keywords if kw in desc)
+            if score > best_score:
+                best_score = score
+                best_type = story_type
+
+        return best_type
+
+    def _notify_reclassification(self, story, original_type: str, new_type: str):
+        """Send ntfy notification about a story type reclassification."""
+        try:
+            import urllib.request
+            import urllib.error
+            import os
+
+            topic = os.environ.get("NTFY_TOPIC", "johnlane-claude-tasks")
+            server = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
+            url = f"{server}/{topic}"
+
+            message = (
+                f"Story type re-classified\n"
+                f"Story: {story.id} — {story.title}\n"
+                f"Original type: {original_type}\n"
+                f"Re-classified as: {new_type}\n"
+                f"Description: {story.description[:200]}"
+            )
+
+            req = urllib.request.Request(
+                url,
+                data=message.encode("utf-8"),
+                headers={
+                    "Title": f"SAT: Story type re-classified ({original_type} → {new_type})",
+                    "Priority": "high",
+                    "Tags": "warning",
+                },
+            )
+            urllib.request.urlopen(req, timeout=5)
+        except Exception as e:
+            logger.warning(f"Failed to send reclassification ntfy: {e}")
 
     def _validate_dependencies(self, response: DecomposeResponse):
         """Validate the dependency graph: no cycles, all refs valid."""

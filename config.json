@@ -7,7 +7,7 @@
   "execution": {
     "max_retries_per_story": 5,
     "max_phase_retries": 10,
-    "use_worktree": false,
+    "use_worktree": true,
     "enable_mediator": true,
     "checkpoint_db": ".memory/checkpoints.db"
   },

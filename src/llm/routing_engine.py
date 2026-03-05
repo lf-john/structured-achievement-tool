@@ -55,6 +55,9 @@ AGENT_COMPLEXITY: dict[str, int] = {
     "executor": 4,
     "router": 4,
     "gatherer": 4,
+    "content_planner": 7,
+    "content_writer": 6,
+    "content_reviewer": 6,
     "verifier_lint": 3,
     "classifier": 3,
     "basic_info": 2,      # 1-3, Decompose decides

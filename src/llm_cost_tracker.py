@@ -1,7 +1,11 @@
 """
 LLM Cost Tracker — Records and queries LLM invocation costs.
 
-Wraps LLMCostDB with token estimation and cost-per-model rates.
+Wraps LLMCostDB with:
+- Token estimation (chars/4) when actual counts unavailable
+- Split per-input and per-output pricing
+- Actual token count recording when available from API responses
+- Cached token estimation via actual vs estimated comparison
 """
 
 import logging
@@ -13,26 +17,33 @@ from src.db.llm_cost_db import LLMCostDB
 
 logger = logging.getLogger(__name__)
 
-# Approximate cost per 1K tokens (input/output averaged) by model.
-# Local models are free. Cloud models use published pricing.
-COST_PER_1K_TOKENS = {
-    # Claude (Anthropic) — blended input/output estimate
-    "claude-opus-4-6": 0.045,
-    "claude-sonnet-4-6": 0.012,
-    "claude-haiku-4-5-20251001": 0.003,
+
+# Per-million-token pricing (input/output split)
+# Source: published API pricing as of 2026-03
+COST_PER_MTOK: dict[str, dict[str, float]] = {
+    # Claude (Anthropic)
+    "claude-opus-4-6":           {"input": 15.00, "output": 75.00},
+    "claude-sonnet-4-6":         {"input":  3.00, "output": 15.00},
+    "claude-haiku-4-5-20251001": {"input":  0.80, "output":  4.00},
     # Gemini (Google)
-    "gemini-2.5-pro": 0.005,
-    "gemini-3.1-pro-preview": 0.005,
-    "gemini-3-flash-preview": 0.001,
-    "gemini-2.5-flash": 0.001,
+    "gemini-2.5-pro":            {"input":  1.25, "output":  5.00},
+    "gemini-3.1-pro-preview":    {"input":  1.25, "output":  5.00},
+    "gemini-3-flash-preview":    {"input":  0.15, "output":  0.60},
+    "gemini-2.5-flash":          {"input":  0.15, "output":  0.60},
     # GLM (z.ai proxy)
-    "glm-4.7": 0.002,
-    "glm-4.7-flash": 0.0005,
+    "glm-4.7":                   {"input":  0.50, "output":  2.00},
+    "glm-4.7-flash":             {"input":  0.10, "output":  0.40},
     # Local (Ollama) — free
-    "qwen3:8b": 0.0,
-    "deepseek-r1:8b": 0.0,
-    "qwen2.5-coder:7b": 0.0,
-    "nemotron-mini": 0.0,
+    "qwen3:8b":                  {"input":  0.00, "output":  0.00},
+    "deepseek-r1:8b":            {"input":  0.00, "output":  0.00},
+    "qwen2.5-coder:7b":          {"input":  0.00, "output":  0.00},
+    "nemotron-mini":             {"input":  0.00, "output":  0.00},
+}
+
+# Legacy blended rates for backward compatibility
+COST_PER_1K_TOKENS = {
+    model_id: (rates["input"] + rates["output"]) / 2000.0
+    for model_id, rates in COST_PER_MTOK.items()
 }
 
 # Rough chars-per-token ratio for estimation
@@ -57,8 +68,10 @@ class LLMCostTracker:
         prompt_chars: int,
         output_chars: int,
         duration_seconds: float = 0.0,
+        actual_input_tokens: int = None,
+        actual_output_tokens: int = None,
     ):
-        """Record a single LLM invocation with estimated cost.
+        """Record a single LLM invocation with estimated and actual cost.
 
         Args:
             model_id: The model identifier (e.g. 'claude-sonnet-4-6')
@@ -66,22 +79,47 @@ class LLMCostTracker:
             prompt_chars: Approximate input character count
             output_chars: Output character count
             duration_seconds: Wall-clock time for the invocation
+            actual_input_tokens: Actual input tokens from API response (if available)
+            actual_output_tokens: Actual output tokens from API response (if available)
         """
-        prompt_tokens = int(prompt_chars / CHARS_PER_TOKEN)
-        completion_tokens = int(output_chars / CHARS_PER_TOKEN)
-        rate = COST_PER_1K_TOKENS.get(model_id, 0.01)  # default to $0.01/1K if unknown
-        estimated_cost = (prompt_tokens + completion_tokens) / 1000.0 * rate
+        # Estimated tokens
+        est_input = int(prompt_chars / CHARS_PER_TOKEN)
+        est_output = int(output_chars / CHARS_PER_TOKEN)
+
+        # Use actual if available, otherwise estimated
+        input_tokens = actual_input_tokens if actual_input_tokens is not None else est_input
+        output_tokens = actual_output_tokens if actual_output_tokens is not None else est_output
+
+        # Calculate cost with split rates
+        rates = COST_PER_MTOK.get(model_id, {"input": 5.0, "output": 15.0})
+        input_cost = input_tokens / 1_000_000.0 * rates["input"]
+        output_cost = output_tokens / 1_000_000.0 * rates["output"]
+        estimated_cost = input_cost + output_cost
+
+        # Estimate cached tokens by comparing actual vs estimated
+        # If actual input is significantly less than estimated, the difference is likely cached
+        cached_tokens = None
+        if actual_input_tokens is not None and est_input > 0:
+            diff = est_input - actual_input_tokens
+            if diff > 100:  # Only count if meaningful difference
+                cached_tokens = diff
 
         self.db.add_log_entry(
             model_name=f"{provider_name}/{model_id}",
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
+            prompt_tokens=est_input,
+            completion_tokens=est_output,
             estimated_cost=estimated_cost,
+            actual_input_tokens=actual_input_tokens,
+            actual_output_tokens=actual_output_tokens,
+            cached_tokens=cached_tokens,
+            input_cost=input_cost,
+            output_cost=output_cost,
         )
         logger.debug(
             f"Cost logged: {provider_name}/{model_id} "
-            f"~{prompt_tokens}+{completion_tokens} tokens "
-            f"= ${estimated_cost:.4f} ({duration_seconds:.1f}s)"
+            f"est={est_input}+{est_output} "
+            f"{'actual=' + str(actual_input_tokens) + '+' + str(actual_output_tokens) + ' ' if actual_input_tokens else ''}"
+            f"${estimated_cost:.4f} ({duration_seconds:.1f}s)"
         )
 
     def get_total_api_calls_for_day(self, date: Optional[datetime] = None) -> Dict[str, int]:
@@ -155,6 +193,10 @@ class LLMCostTracker:
         except Exception as e:
             logger.warning(f"Error getting cost range: {e}")
         return costs
+
+    def get_token_accuracy_report(self) -> dict:
+        """Get comparison of estimated vs actual token counts."""
+        return self.db.get_token_accuracy_report()
 
     def get_cost_per_lead(self) -> Dict[str, float]:
         return {"scored": 0.0, "emailed": 0.0}

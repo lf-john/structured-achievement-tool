@@ -107,6 +107,47 @@ def _detect_api_error(stdout: str, stderr: str) -> tuple[bool, Optional[int]]:
     return False, None
 
 
+# Patterns for extracting token usage from API responses
+# Claude: "input_tokens": 1234, "output_tokens": 5678
+_USAGE_INPUT_PATTERN = re.compile(r'"input_tokens"\s*:\s*(\d+)')
+_USAGE_OUTPUT_PATTERN = re.compile(r'"output_tokens"\s*:\s*(\d+)')
+# Ollama: "prompt_eval_count": 1234, "eval_count": 5678
+_OLLAMA_INPUT_PATTERN = re.compile(r'"prompt_eval_count"\s*:\s*(\d+)')
+_OLLAMA_OUTPUT_PATTERN = re.compile(r'"eval_count"\s*:\s*(\d+)')
+# Generic: "usage": {"prompt_tokens": N, "completion_tokens": N}
+_GENERIC_INPUT_PATTERN = re.compile(r'"prompt_tokens"\s*:\s*(\d+)')
+_GENERIC_OUTPUT_PATTERN = re.compile(r'"completion_tokens"\s*:\s*(\d+)')
+
+
+def _parse_token_usage(stdout: str, stderr: str) -> tuple[Optional[int], Optional[int]]:
+    """Extract actual token counts from LLM API response output.
+
+    Checks both stdout and stderr for token usage patterns from various providers.
+    Returns (input_tokens, output_tokens) or (None, None) if not found.
+    """
+    combined = stderr + "\n" + stdout
+
+    # Try Claude API format first (most common)
+    input_match = _USAGE_INPUT_PATTERN.search(combined)
+    output_match = _USAGE_OUTPUT_PATTERN.search(combined)
+    if input_match and output_match:
+        return int(input_match.group(1)), int(output_match.group(1))
+
+    # Try Ollama format
+    input_match = _OLLAMA_INPUT_PATTERN.search(combined)
+    output_match = _OLLAMA_OUTPUT_PATTERN.search(combined)
+    if input_match and output_match:
+        return int(input_match.group(1)), int(output_match.group(1))
+
+    # Try generic OpenAI-compatible format
+    input_match = _GENERIC_INPUT_PATTERN.search(combined)
+    output_match = _GENERIC_OUTPUT_PATTERN.search(combined)
+    if input_match and output_match:
+        return int(input_match.group(1)), int(output_match.group(1))
+
+    return None, None
+
+
 def _build_command(provider: ProviderConfig, prompt_file: Optional[str] = None, prompt: Optional[str] = None, agentic: bool = True) -> list[str]:
     """Build the CLI command for a provider.
 
@@ -273,12 +314,18 @@ async def invoke(
                         prompt_chars = os.path.getsize(prompt_file)
                     except OSError:
                         pass
+
+                # Try to extract actual token counts from API response
+                actual_input, actual_output = _parse_token_usage(stdout, stderr)
+
                 tracker.record_invocation(
                     model_id=provider.model_id,
                     provider_name=provider.name,
                     prompt_chars=prompt_chars,
                     output_chars=len(stdout),
                     duration_seconds=duration,
+                    actual_input_tokens=actual_input,
+                    actual_output_tokens=actual_output,
                 )
             except Exception as e:
                 logger.debug(f"Cost tracking failed: {e}")

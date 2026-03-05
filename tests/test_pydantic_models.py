@@ -24,7 +24,6 @@ class TestStoryModel:
         story = StoryModel(id="s1", title="Test", description="A test story")
         assert story.id == "s1"
         assert story.type == "development"
-        assert story.tdd is True
         assert story.complexity == 5
 
     def test_full_story(self):
@@ -33,7 +32,6 @@ class TestStoryModel:
             title="Add auth",
             description="Implement JWT authentication",
             type="development",
-            tdd=True,
             dependsOn=["s1"],
             acceptanceCriteria=["JWT tokens issued", "Tokens verified"],
             complexity=7,
@@ -132,7 +130,7 @@ class TestExecutionConfig:
         config = ExecutionConfig()
         assert config.max_attempts == 5
         assert config.mediator_enabled is False
-        assert config.worktree_enabled is True
+        assert config.worktree_enabled is False
 
     def test_custom(self):
         config = ExecutionConfig(

@@ -157,6 +157,18 @@ def init_db(db_path: str):
 
         cursor = conn.cursor()
 
+        # Check if existing checkpoints table has wrong schema (LangGraph's thread_id schema)
+        try:
+            cursor.execute("SELECT task_id FROM checkpoints LIMIT 0")
+        except sqlite3.OperationalError:
+            # Table exists but has wrong schema — drop and recreate
+            try:
+                cursor.execute("SELECT thread_id FROM checkpoints LIMIT 0")
+                logger.warning(f"Dropping checkpoints table with wrong schema (LangGraph) at {db_path}")
+                cursor.execute("DROP TABLE checkpoints")
+            except sqlite3.OperationalError:
+                pass  # Table doesn't exist at all, which is fine
+
         # Create checkpoints table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS checkpoints (

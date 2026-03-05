@@ -48,13 +48,16 @@ class StorySchema(BaseModel):
     title: str
     description: str
     type: str = "development"
-    tdd: bool = True
     status: str = "pending"
     dependsOn: List[str] = Field(default_factory=list)
     acceptanceCriteria: List[str] = Field(default_factory=list)
     complexity: int = Field(default=5, ge=0, le=10)
     verification_agents: List[str] = Field(default_factory=list)
     outcome_verification: bool = False
+    output_path: Optional[str] = None
+    output_format: Optional[str] = None
+    doc_type: Optional[str] = None
+    store: bool = False  # If True, persist output to file + vector memory
 
 
 class DecomposeResponse(BaseModel):

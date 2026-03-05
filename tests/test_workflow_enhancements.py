@@ -379,7 +379,7 @@ class TestResearchWorkflowStructure:
 
     def test_has_all_nodes(self):
         nodes = set(self.graph.nodes)
-        expected = {"parallel_gather", "analyze", "synthesize"}
+        expected = {"parallel_gather", "parallel_analyze", "synthesize"}
         assert expected.issubset(nodes)
 
     def test_compiles_without_error(self):
