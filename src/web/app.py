@@ -2,27 +2,27 @@
 """SAT Web Dashboard — FastAPI app served behind Cloudflare Tunnel + Access."""
 
 import json
-import os
-import time
 import re
 import subprocess
-from datetime import datetime, timezone
+import time
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
-from html import escape as html_escape
 
 import httpx
 import markdown
-
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from jinja2 import Environment, BaseLoader
+from jinja2 import BaseLoader, Environment
 from markupsafe import Markup
+
+from src.core.paths import AUDIT_JOURNAL as _AUDIT_JOURNAL
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-from src.core.paths import SAT_PROJECT_DIR, SAT_TASKS_DIR as _SAT_TASKS_DIR, AUDIT_JOURNAL as _AUDIT_JOURNAL
+from src.core.paths import SAT_PROJECT_DIR
+from src.core.paths import SAT_TASKS_DIR as _SAT_TASKS_DIR
+
 PROJECT_DIR = SAT_PROJECT_DIR
 AUDIT_JOURNAL = _AUDIT_JOURNAL
 SAT_TASKS_DIR = _SAT_TASKS_DIR
@@ -32,7 +32,8 @@ PROMETHEUS_URL = "http://localhost:9101/metrics"
 
 # JWT validation imports (optional — degrade gracefully if keys unavailable)
 try:
-    from jose import jwt as jose_jwt, JWTError
+    from jose import JWTError as JWTError
+    from jose import jwt as jose_jwt
     JOSE_AVAILABLE = True
 except ImportError:
     JOSE_AVAILABLE = False
@@ -45,7 +46,7 @@ app = FastAPI(title="SAT Dashboard", docs_url=None, redoc_url=None)
 # Cloudflare Access JWT middleware
 # ---------------------------------------------------------------------------
 CF_CERTS_URL = f"https://{CF_ACCESS_TEAM}.cloudflareaccess.com/cdn-cgi/access/certs"
-_cf_public_keys: Optional[dict] = None
+_cf_public_keys: dict | None = None
 
 
 def _get_cf_public_keys():
@@ -101,7 +102,7 @@ def read_audit_journal(limit: int = 100) -> list[dict]:
     if not AUDIT_JOURNAL.exists():
         return entries
     try:
-        with open(AUDIT_JOURNAL, "r") as f:
+        with open(AUDIT_JOURNAL) as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -798,7 +799,7 @@ async def dashboard():
 
 @app.get("/status")
 async def status():
-    journal = read_audit_journal()
+    read_audit_journal()
     tasks = get_task_files()
     prom = await fetch_prometheus_metrics()
     approvals = get_pending_approvals()

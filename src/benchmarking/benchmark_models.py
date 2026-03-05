@@ -1,8 +1,9 @@
 import asyncio
-import httpx
 import json
-import time
 import os
+import time
+
+import httpx
 
 MODELS = ["qwen3:8b", "qwen2.5-coder:7b", "deepseek-r1:8b", "nemotron-mini"]
 PROMPTS = [
@@ -27,7 +28,7 @@ async def run_benchmark_for_model_prompt(client, model, prompt):
         "avg_total_response_time": None,
         "status": "pending"
     }
-    
+
     request_data = {"model": model, "prompt": prompt, "stream": False}
 
     try:
@@ -48,14 +49,14 @@ async def run_benchmark_for_model_prompt(client, model, prompt):
             try:
                 response = await client.post(OLLAMA_API_URL, json=request_data, timeout=TIMEOUT_SECONDS)
                 end_time = time.time()
-                
+
                 response.raise_for_status()
                 data = response.json()
 
                 eval_count = data.get("eval_count", 0)
                 eval_duration = data.get("eval_duration", 1) # Avoid division by zero
                 prompt_eval_duration = data.get("prompt_eval_duration", 0)
-                
+
                 run_total_time = end_time - start_time
                 tokens_per_sec = eval_count / (eval_duration / 1e9) if eval_duration > 0 else 0
                 time_to_first = prompt_eval_duration / 1e9
@@ -68,7 +69,7 @@ async def run_benchmark_for_model_prompt(client, model, prompt):
                     "status": "success"
                 }
                 results["runs"].append(run_result)
-                
+
                 total_tokens_per_second += tokens_per_sec
                 total_time_to_first_token += time_to_first
                 total_response_time += run_total_time
@@ -99,7 +100,7 @@ async def run_benchmark_for_model_prompt(client, model, prompt):
         print(f"An unexpected error occurred for {model}: {e}")
         results["status"] = "error"
         results["error_message"] = str(e)
-        
+
     return results
 
 async def main():
@@ -107,7 +108,7 @@ async def main():
     all_results = []
     # Create necessary directories
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    
+
     async with httpx.AsyncClient() as client:
         for model in MODELS:
             for prompt in PROMPTS:
@@ -118,7 +119,7 @@ async def main():
     # Persist results
     with open(OUTPUT_FILE, "w") as f:
         json.dump(all_results, f, indent=2)
-    
+
     print(f"Benchmarking complete. Results saved to {OUTPUT_FILE}")
 
 if __name__ == "__main__":

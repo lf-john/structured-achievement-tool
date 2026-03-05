@@ -13,7 +13,13 @@ Outputs a status report and takes corrective action where possible.
 Sends ntfy notification on failures.
 """
 
-import os, subprocess, sys, time, json, requests
+import json
+import os
+import subprocess
+import sys
+import time
+
+import requests
 
 # Ensure the project root is in sys.path so 'from src.*' imports work when
 # invoked from cron (which does not set PYTHONPATH).
@@ -27,7 +33,7 @@ os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{UID}")
 os.environ.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{UID}/bus")
 
 try:
-    from src.core.paths import SAT_PROJECT_DIR, SAT_TASKS_DIR, FUSE_SENTINEL, PROACTIVE_STATE, SAT_DB
+    from src.core.paths import FUSE_SENTINEL, PROACTIVE_STATE, SAT_DB, SAT_PROJECT_DIR, SAT_TASKS_DIR
 except ImportError:
     from pathlib import Path
     SAT_PROJECT_DIR = Path(_PROJECT_ROOT)
@@ -243,7 +249,7 @@ def scan_tasks():
                     continue
                 path = os.path.join(task_dir, f)
                 try:
-                    with open(path, 'r') as file:
+                    with open(path) as file:
                         content = file.read()
                     if '<!-- CLAUDE-RESPONSE -->' in content[:200]:
                         continue
@@ -328,7 +334,7 @@ def main():
     task_status, task_issues = scan_tasks()
 
     # Build report
-    report = f"SAT Health Check Report\n"
+    report = "SAT Health Check Report\n"
     report += f"{'='*40}\n"
     report += f"Services: sat={'OK' if check_service('sat.service') else 'DOWN'}, "
     report += f"monitor={'OK' if check_service('sat-monitor.service') else 'DOWN'}, "
@@ -338,17 +344,17 @@ def main():
     report += f"{task_status['failed']} failed, {task_status['queued']} queued, {task_status['waiting']} waiting\n"
 
     if problems:
-        report += f"\nProblems:\n"
+        report += "\nProblems:\n"
         for p in problems:
             report += f"  - {p}\n"
 
     if actions:
-        report += f"\nActions taken:\n"
+        report += "\nActions taken:\n"
         for a in actions:
             report += f"  - {a}\n"
 
     if task_issues:
-        report += f"\nTask issues:\n"
+        report += "\nTask issues:\n"
         for i in task_issues:
             report += f"  - {i}\n"
 
@@ -402,7 +408,7 @@ def _load_proactive_state():
     """Load last-run timestamps for proactive checks."""
     if os.path.exists(PROACTIVE_STATE_FILE):
         try:
-            with open(PROACTIVE_STATE_FILE, "r") as f:
+            with open(PROACTIVE_STATE_FILE) as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError):
             pass
@@ -665,7 +671,7 @@ def run_proactive_checks():
     config_path = os.path.join(PROJECT_PATH, "config.json")
     if os.path.exists(config_path):
         try:
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 config = json.load(f)
         except (json.JSONDecodeError, OSError):
             pass

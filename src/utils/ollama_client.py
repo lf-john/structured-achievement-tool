@@ -1,14 +1,16 @@
 # src/utils/ollama_client.py
 import json
+from typing import Any
+
 import requests
-from typing import Dict, Any
+
 
 class OllamaClient:
     def __init__(self, api_url: str, model: str):
         self.api_url = api_url
         self.model = model
 
-    def score_lead(self, contact: Dict[str, Any]) -> Dict[str, Any]:
+    def score_lead(self, contact: dict[str, Any]) -> dict[str, Any]:
         prompt = self._build_prompt(contact)
         try:
             response = requests.post(
@@ -24,7 +26,7 @@ class OllamaClient:
             print(f"Error calling Ollama API: {e}")
             return {"score": 0, "confidence": "low", "error": str(e)}
 
-    def _build_prompt(self, contact: Dict[str, Any]) -> str:
+    def _build_prompt(self, contact: dict[str, Any]) -> str:
         # This prompt engineering is crucial for getting good results.
         # It needs to clearly define the output format.
         return f"""
@@ -53,17 +55,17 @@ class OllamaClient:
         JSON Response:
         """
 
-    def _parse_response(self, response_text: str) -> Dict[str, Any]:
+    def _parse_response(self, response_text: str) -> dict[str, Any]:
         try:
             # Find the JSON part of the response
             json_start = response_text.find('{')
             json_end = response_text.rfind('}') + 1
             if json_start == -1 or json_end == 0:
                 raise ValueError("No JSON object found in response")
-            
+
             json_str = response_text[json_start:json_end]
             parsed = json.loads(json_str)
-            
+
             # Basic validation
             if isinstance(parsed.get("score"), int) and parsed.get("confidence") in ["high", "medium", "low"]:
                 return parsed

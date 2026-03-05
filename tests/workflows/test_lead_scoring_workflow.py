@@ -1,8 +1,10 @@
 # tests/workflows/test_lead_scoring_workflow.py
-import unittest
 import json
-from unittest.mock import patch, MagicMock
+import unittest
+from unittest.mock import patch
+
 from src.workflows.lead_scoring_workflow import LeadScoringWorkflow
+
 
 class TestLeadScoringWorkflow(unittest.TestCase):
 
@@ -20,10 +22,10 @@ class TestLeadScoringWorkflow(unittest.TestCase):
         # Patch the clients within the workflow's scope
         self.ollama_client_patcher = patch('src.workflows.lead_scoring_workflow.OllamaClient')
         self.mautic_client_patcher = patch('src.workflows.lead_scoring_workflow.MauticClient')
-        
+
         self.MockOllamaClient = self.ollama_client_patcher.start()
         self.MockMauticClient = self.mautic_client_patcher.start()
-        
+
         self.mock_ollama_instance = self.MockOllamaClient.return_value
         self.mock_mautic_instance = self.MockMauticClient.return_value
 

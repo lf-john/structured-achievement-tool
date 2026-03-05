@@ -1,13 +1,12 @@
 """Tests for src.workflows.assignment_workflow — assignment story workflow."""
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
+from src.workflows.approval_workflow import ApprovalConfig
 from src.workflows.assignment_workflow import (
     AssignmentWorkflow,
     validate_decision,
 )
-from src.workflows.approval_workflow import ApprovalConfig
 
 
 class TestValidateDecision:

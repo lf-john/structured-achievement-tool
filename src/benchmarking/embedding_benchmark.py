@@ -6,17 +6,16 @@ This module provides benchmarking functionality for embedding models using the
 to measure throughput and latency metrics.
 """
 
-import time
 import json
-from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Any, Callable
 import os
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 
 # Mock ollama object for compatibility with tests (created at module level)
 class MockOllama:
     """Mock Ollama client for testing."""
-    def embeddings(self, prompt: str) -> Dict[str, Any]:
+    def embeddings(self, prompt: str) -> dict[str, Any]:
         """Mock embeddings endpoint."""
         return {
             "embedding": [0.1] * 768,
@@ -47,12 +46,12 @@ class BenchmarkRun:
     embedding_dimension: int = 768
     status: str = "success"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'BenchmarkRun':
+    def from_dict(cls, data: dict[str, Any]) -> 'BenchmarkRun':
         """Create BenchmarkRun from dictionary."""
         return cls(
             run_number=data.get("run_number", 1),
@@ -72,12 +71,12 @@ class BenchmarkResult:
     tokens_per_sec: float
     time_to_first_token: float
     total_response_time: float
-    runs: List[BenchmarkRun] = field(default_factory=list)
+    runs: list[BenchmarkRun] = field(default_factory=list)
     timestamp: Any = None
     embedding_dimension: int = 768
     status: str = "completed"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "model_name": self.model_name,
@@ -91,7 +90,7 @@ class BenchmarkResult:
         }
 
 
-def _call_embedding_api(text: str) -> Dict[str, Any]:
+def _call_embedding_api(text: str) -> dict[str, Any]:
     """Call the ollama.embeddings endpoint."""
     return ollama.embeddings(prompt=text)
 
@@ -108,7 +107,7 @@ def _measure_throughput(text: str) -> float:
         return float(len(text) / 4)  # Fallback approximation
 
 
-def run_embedding_benchmark(model_name: str, output_file: str) -> Dict[str, Any]:
+def run_embedding_benchmark(model_name: str, output_file: str) -> dict[str, Any]:
     """
     Run benchmarking for nomic-embed-text using the /api/embeddings endpoint.
 
@@ -176,7 +175,7 @@ def run_embedding_benchmark(model_name: str, output_file: str) -> Dict[str, Any]
                 total_time_to_first_token += run.time_to_first_token
                 total_response_time += run.total_latency
 
-            except Exception as e:
+            except Exception:
                 # Record failed run
                 result.runs.append(
                     BenchmarkRun(

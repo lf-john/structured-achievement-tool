@@ -1,6 +1,7 @@
 # src/utils/mautic_client.py
+
 import requests
-from typing import Dict, Any
+
 
 class MauticClient:
     def __init__(self, api_url: str, token: str):

@@ -6,17 +6,16 @@ for deterministic tests.
 """
 
 import json
-import os
-import pytest
 from unittest.mock import patch
 
+import pytest
+
 from src.execution.rate_limit_handler import (
-    RateLimitHandler,
-    RetryEntry,
-    INITIAL_BACKOFF,
-    MAX_BACKOFF,
     BACKOFF_MULTIPLIER,
+    INITIAL_BACKOFF,
     JITTER_FACTOR,
+    MAX_BACKOFF,
+    RateLimitHandler,
 )
 
 
@@ -273,7 +272,7 @@ class TestStatePersistence:
         h.queue_retry("task_001.md", "story_A")
         h.mark_token_exhausted()
 
-        with open(state_file, "r") as f:
+        with open(state_file) as f:
             data = json.load(f)
 
         assert data["token_exhausted"] is True

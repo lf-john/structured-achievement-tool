@@ -1,15 +1,13 @@
 """Tests for src.workflows.dev_tdd_workflow — Graph structure and conditional edges."""
 
-import pytest
-from langgraph.graph import END
 
-from src.workflows.dev_tdd_workflow import DevTDDWorkflow
+from src.workflows.base_workflow import check_test_decision, mediator_decision, verify_decision
 from src.workflows.config_tdd_workflow import ConfigTDDWorkflow
-from src.workflows.maintenance_workflow import MaintenanceWorkflow
 from src.workflows.debug_workflow import DebugWorkflow
+from src.workflows.dev_tdd_workflow import DevTDDWorkflow
+from src.workflows.maintenance_workflow import MaintenanceWorkflow
 from src.workflows.research_workflow import ResearchWorkflow
 from src.workflows.review_workflow import ReviewWorkflow
-from src.workflows.base_workflow import verify_decision, check_test_decision, mediator_decision
 
 
 class TestDevTDDWorkflowStructure:

@@ -1,10 +1,9 @@
 """Unit tests for FuseSentinel (no FUSE mount required)."""
 
 import json
-import os
-import tempfile
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from src.execution.fuse_sentinel import FuseSentinel
 
@@ -36,7 +35,7 @@ class TestFuseSentinelUnit:
     def test_consecutive_failures_increment(self):
         """Failures should count up."""
         sentinel = FuseSentinel(sentinel_path="/nonexistent/path.md")
-        for i in range(5):
+        for _i in range(5):
             sentinel.is_healthy()
         assert sentinel.consecutive_failures == 5
 

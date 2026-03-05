@@ -5,14 +5,13 @@ Tracks tasks, stories, events, error signatures, learnings, and notifications.
 Uses WAL mode for concurrent read access (dashboard + daemon).
 """
 
-import sqlite3
 import json
 import logging
 import os
+import sqlite3
 import uuid
-from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +165,7 @@ STORY_TRANSITIONS = {
 class DatabaseManager:
     """SQLite state manager for SAT tasks, stories, and events."""
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         if db_path is None:
             db_path = os.path.join(
                 os.path.expanduser("~/projects/structured-achievement-tool"),
@@ -201,7 +200,7 @@ class DatabaseManager:
 
     @staticmethod
     def _now() -> str:
-        return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
     # --- Tasks ---
 
@@ -236,17 +235,17 @@ class DatabaseManager:
             self._log_event(conn, "task_status_change", task_id=task_id, detail=f"{old_status}->{new_status}")
         return True
 
-    def get_task(self, task_id: str) -> Optional[Dict]:
+    def get_task(self, task_id: str) -> dict | None:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
             return dict(row) if row else None
 
-    def get_tasks_by_project(self, project: str) -> List[Dict]:
+    def get_tasks_by_project(self, project: str) -> list[dict]:
         with self._connect() as conn:
             rows = conn.execute("SELECT * FROM tasks WHERE project=? ORDER BY created_at DESC", (project,)).fetchall()
             return [dict(r) for r in rows]
 
-    def get_active_tasks(self) -> List[Dict]:
+    def get_active_tasks(self) -> list[dict]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM tasks WHERE status IN ('pending', 'working') ORDER BY created_at DESC"
@@ -257,9 +256,9 @@ class DatabaseManager:
 
     def create_story(
         self, task_id: str, title: str, story_type: str = "development",
-        complexity: int = 5, depends_on: List[str] = None,
-        acceptance_criteria: List[str] = None,
-        verification_agents: List[str] = None,
+        complexity: int = 5, depends_on: list[str] = None,
+        acceptance_criteria: list[str] = None,
+        verification_agents: list[str] = None,
         outcome_verification: bool = False,
     ) -> str:
         story_id = self._gen_id()
@@ -325,7 +324,7 @@ class DatabaseManager:
                 (worktree_path, self._now(), story_id),
             )
 
-    def get_story(self, story_id: str) -> Optional[Dict]:
+    def get_story(self, story_id: str) -> dict | None:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM stories WHERE id=?", (story_id,)).fetchone()
             if not row:
@@ -338,7 +337,7 @@ class DatabaseManager:
                     d.setdefault(field, [])
             return d
 
-    def get_stories_for_task(self, task_id: str) -> List[Dict]:
+    def get_stories_for_task(self, task_id: str) -> list[dict]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM stories WHERE task_id=? ORDER BY created_at", (task_id,)
@@ -354,7 +353,7 @@ class DatabaseManager:
                 result.append(d)
             return result
 
-    def get_ready_stories(self, task_id: str) -> List[Dict]:
+    def get_ready_stories(self, task_id: str) -> list[dict]:
         stories = self.get_stories_for_task(task_id)
         ready = []
         for s in stories:
@@ -368,7 +367,7 @@ class DatabaseManager:
                     ready.append(s)
         return ready
 
-    def get_stuck_stories(self, timeout_minutes: int = 30) -> List[Dict]:
+    def get_stuck_stories(self, timeout_minutes: int = 30) -> list[dict]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM stories WHERE status='working' "
@@ -401,7 +400,7 @@ class DatabaseManager:
             self._log_event(conn, event_type, story_id, task_id, phase,
                             provider, detail, tokens_used, cost_estimate)
 
-    def get_recent_events(self, limit: int = 50, story_id: str = None, task_id: str = None) -> List[Dict]:
+    def get_recent_events(self, limit: int = 50, story_id: str = None, task_id: str = None) -> list[dict]:
         with self._connect() as conn:
             query = ["SELECT * FROM events"]
             params = []
@@ -430,7 +429,7 @@ class DatabaseManager:
             )
             return cursor.lastrowid
 
-    def lookup_error_signature(self, error_hash: str) -> Optional[Dict]:
+    def lookup_error_signature(self, error_hash: str) -> dict | None:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM error_signatures WHERE error_hash=? ORDER BY timestamp DESC LIMIT 1",
@@ -442,7 +441,7 @@ class DatabaseManager:
 
     def store_learning(
         self, story_id: str, category: str, content: str,
-        anti_patterns: List[str] = None,
+        anti_patterns: list[str] = None,
     ) -> int:
         with self._connect() as conn:
             cursor = conn.execute(
@@ -451,7 +450,7 @@ class DatabaseManager:
             )
             return cursor.lastrowid
 
-    def get_recent_anti_patterns(self, limit: int = 10) -> List[str]:
+    def get_recent_anti_patterns(self, limit: int = 10) -> list[str]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT anti_patterns FROM learnings WHERE anti_patterns != '[]' "
@@ -515,7 +514,7 @@ class DatabaseManager:
                 params,
             )
 
-    def get_active_prd_session(self, project: str) -> Optional[Dict]:
+    def get_active_prd_session(self, project: str) -> dict | None:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM prd_sessions WHERE project=? AND status='active' "
@@ -526,7 +525,7 @@ class DatabaseManager:
 
     # --- Summaries ---
 
-    def get_task_summary(self, task_id: str) -> Dict:
+    def get_task_summary(self, task_id: str) -> dict:
         task = self.get_task(task_id)
         stories = self.get_stories_for_task(task_id)
         return {
@@ -630,7 +629,7 @@ class DatabaseManager:
             ).fetchone()
             return row["retry_count"] if row else 0
 
-    def get_task_state(self, task_path: str) -> Optional[Dict]:
+    def get_task_state(self, task_path: str) -> dict | None:
         """Get the current state of a task from the hub."""
         with self._connect() as conn:
             row = conn.execute(
@@ -638,7 +637,7 @@ class DatabaseManager:
             ).fetchone()
             return dict(row) if row else None
 
-    def get_tasks_by_state(self, status: str) -> List[Dict]:
+    def get_tasks_by_state(self, status: str) -> list[dict]:
         """Get all tasks with a given status."""
         with self._connect() as conn:
             rows = conn.execute(
@@ -648,7 +647,7 @@ class DatabaseManager:
             ).fetchall()
             return [dict(r) for r in rows]
 
-    def get_stuck_task_states(self, timeout_minutes: int = 30) -> List[Dict]:
+    def get_stuck_task_states(self, timeout_minutes: int = 30) -> list[dict]:
         """Get tasks stuck in 'working' state beyond the timeout."""
         with self._connect() as conn:
             rows = conn.execute(
@@ -658,7 +657,7 @@ class DatabaseManager:
             ).fetchall()
             return [dict(r) for r in rows]
 
-    def get_failed_task_states(self, max_retries: int = 10) -> List[Dict]:
+    def get_failed_task_states(self, max_retries: int = 10) -> list[dict]:
         """Get failed tasks that haven't exceeded max retries."""
         with self._connect() as conn:
             rows = conn.execute(
@@ -688,7 +687,7 @@ class DatabaseManager:
             ).fetchone()
             return row["c"] > 0
 
-    def find_task_state_by_name(self, name: str) -> Optional[Dict]:
+    def find_task_state_by_name(self, name: str) -> dict | None:
         """Find a task_state by basename match.
 
         Searches for task_paths whose basename matches the given name.
@@ -775,7 +774,7 @@ class DatabaseManager:
             self._log_event(conn, "project_created", detail=f"project={name}")
         return project_id
 
-    def get_project(self, project_id_or_name: str) -> Optional[Dict]:
+    def get_project(self, project_id_or_name: str) -> dict | None:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM projects WHERE id=? OR name=?",
@@ -783,7 +782,7 @@ class DatabaseManager:
             ).fetchone()
             return dict(row) if row else None
 
-    def get_all_projects(self) -> List[Dict]:
+    def get_all_projects(self) -> list[dict]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM projects ORDER BY name"
@@ -810,7 +809,7 @@ class DatabaseManager:
                 params,
             )
 
-    def get_project_for_task(self, task_id: str) -> Optional[Dict]:
+    def get_project_for_task(self, task_id: str) -> dict | None:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT p.* FROM projects p "
@@ -820,7 +819,7 @@ class DatabaseManager:
             ).fetchone()
             return dict(row) if row else None
 
-    def get_system_status(self) -> Dict:
+    def get_system_status(self) -> dict:
         """Overall system status for monitoring."""
         with self._connect() as conn:
             active_tasks = conn.execute(

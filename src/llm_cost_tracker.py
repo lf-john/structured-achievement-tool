@@ -10,7 +10,6 @@ Wraps LLMCostDB with:
 
 import logging
 import os
-from typing import Dict, Optional
 from datetime import datetime, timedelta
 
 from src.db.llm_cost_db import LLMCostDB
@@ -122,12 +121,12 @@ class LLMCostTracker:
             f"${estimated_cost:.4f} ({duration_seconds:.1f}s)"
         )
 
-    def get_total_api_calls_for_day(self, date: Optional[datetime] = None) -> Dict[str, int]:
+    def get_total_api_calls_for_day(self, date: datetime | None = None) -> dict[str, int]:
         """Count API calls by provider family for a given day."""
         d = date or datetime.now()
         date_str = d.strftime('%Y-%m-%d')
         import sqlite3
-        counts: Dict[str, int] = {}
+        counts: dict[str, int] = {}
         try:
             with sqlite3.connect(self.db.db_path) as conn:
                 cursor = conn.cursor()
@@ -143,12 +142,12 @@ class LLMCostTracker:
             logger.warning(f"Error getting API call counts: {e}")
         return counts
 
-    def get_daily_cost_summary(self, date: Optional[datetime] = None) -> Dict[str, float]:
+    def get_daily_cost_summary(self, date: datetime | None = None) -> dict[str, float]:
         """Get cost breakdown by provider for a given day."""
         d = date or datetime.now()
         date_str = d.strftime('%Y-%m-%d')
         import sqlite3
-        costs: Dict[str, float] = {}
+        costs: dict[str, float] = {}
         try:
             with sqlite3.connect(self.db.db_path) as conn:
                 cursor = conn.cursor()
@@ -164,21 +163,21 @@ class LLMCostTracker:
             logger.warning(f"Error getting daily cost summary: {e}")
         return costs
 
-    def get_weekly_cost_summary(self, end_date: Optional[datetime] = None) -> Dict[str, float]:
+    def get_weekly_cost_summary(self, end_date: datetime | None = None) -> dict[str, float]:
         """Get cost breakdown for the past 7 days."""
         end = end_date or datetime.now()
         start = end - timedelta(days=7)
         return self._cost_range(start, end)
 
-    def get_monthly_cost_summary(self, end_date: Optional[datetime] = None) -> Dict[str, float]:
+    def get_monthly_cost_summary(self, end_date: datetime | None = None) -> dict[str, float]:
         """Get cost breakdown for the past 30 days."""
         end = end_date or datetime.now()
         start = end - timedelta(days=30)
         return self._cost_range(start, end)
 
-    def _cost_range(self, start: datetime, end: datetime) -> Dict[str, float]:
+    def _cost_range(self, start: datetime, end: datetime) -> dict[str, float]:
         import sqlite3
-        costs: Dict[str, float] = {}
+        costs: dict[str, float] = {}
         try:
             with sqlite3.connect(self.db.db_path) as conn:
                 cursor = conn.cursor()
@@ -198,7 +197,7 @@ class LLMCostTracker:
         """Get comparison of estimated vs actual token counts."""
         return self.db.get_token_accuracy_report()
 
-    def get_cost_per_lead(self) -> Dict[str, float]:
+    def get_cost_per_lead(self) -> dict[str, float]:
         return {"scored": 0.0, "emailed": 0.0}
 
     def can_afford_claude(self, requested_budget: float) -> bool:

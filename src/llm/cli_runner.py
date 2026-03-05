@@ -7,16 +7,15 @@ environmental error classification.
 """
 
 import asyncio
-import os
 import logging
+import os
 import re
 import time
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
-from src.llm.providers import ProviderConfig, get_env_for_provider
-from src.execution.stream_parser import StreamParser
 from src.execution.session_continuator import SessionContinuator
+from src.execution.stream_parser import StreamParser
+from src.llm.providers import ProviderConfig, get_env_for_provider
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +45,7 @@ class CLIResult:
     exit_code: int = 0
     is_api_error: bool = False
     is_environmental: bool = False
-    api_error_code: Optional[int] = None
+    api_error_code: int | None = None
     duration_seconds: float = 0.0
     provider_name: str = ""
 
@@ -63,7 +62,7 @@ RATE_LIMIT_PATTERN = re.compile(
 )
 
 
-def classify_error_category(error_code: Optional[int], stderr: str) -> str:
+def classify_error_category(error_code: int | None, stderr: str) -> str:
     """Classify an API error into a category for circuit breaker routing."""
     from src.llm.routing_engine import ErrorCategory
     if error_code == 429:
@@ -72,16 +71,14 @@ def classify_error_category(error_code: Optional[int], stderr: str) -> str:
         return ErrorCategory.AUTH_ERROR
     elif error_code in (500, 502, 503):
         return ErrorCategory.SERVER_ERROR
-    elif error_code == 408:
-        return ErrorCategory.TIMEOUT
-    elif "timeout" in stderr.lower() or "timed out" in stderr.lower():
+    elif error_code == 408 or "timeout" in stderr.lower() or "timed out" in stderr.lower():
         return ErrorCategory.TIMEOUT
     elif "connection" in stderr.lower() or "refused" in stderr.lower():
         return ErrorCategory.CONNECTION
     return ErrorCategory.UNKNOWN
 
 
-def _detect_api_error(stdout: str, stderr: str) -> tuple[bool, Optional[int]]:
+def _detect_api_error(stdout: str, stderr: str) -> tuple[bool, int | None]:
     """Check if output contains API error indicators.
 
     Checks stderr for all patterns (API errors, auth, rate limits).
@@ -119,7 +116,7 @@ _GENERIC_INPUT_PATTERN = re.compile(r'"prompt_tokens"\s*:\s*(\d+)')
 _GENERIC_OUTPUT_PATTERN = re.compile(r'"completion_tokens"\s*:\s*(\d+)')
 
 
-def _parse_token_usage(stdout: str, stderr: str) -> tuple[Optional[int], Optional[int]]:
+def _parse_token_usage(stdout: str, stderr: str) -> tuple[int | None, int | None]:
     """Extract actual token counts from LLM API response output.
 
     Checks both stdout and stderr for token usage patterns from various providers.
@@ -148,7 +145,7 @@ def _parse_token_usage(stdout: str, stderr: str) -> tuple[Optional[int], Optiona
     return None, None
 
 
-def _build_command(provider: ProviderConfig, prompt_file: Optional[str] = None, prompt: Optional[str] = None, agentic: bool = True) -> list[str]:
+def _build_command(provider: ProviderConfig, prompt_file: str | None = None, prompt: str | None = None, agentic: bool = True) -> list[str]:
     """Build the CLI command for a provider.
 
     Args:
@@ -192,13 +189,13 @@ def _build_command(provider: ProviderConfig, prompt_file: Optional[str] = None, 
 
 async def invoke(
     provider: ProviderConfig,
-    prompt: Optional[str] = None,
-    prompt_file: Optional[str] = None,
-    working_directory: Optional[str] = None,
+    prompt: str | None = None,
+    prompt_file: str | None = None,
+    working_directory: str | None = None,
     timeout: int = DEFAULT_TIMEOUT,
-    stream_output_file: Optional[str] = None,
-    task_id: Optional[str] = None,
-    session_continuator: Optional[SessionContinuator] = None,
+    stream_output_file: str | None = None,
+    task_id: str | None = None,
+    session_continuator: SessionContinuator | None = None,
     agentic: bool = True,
 ) -> CLIResult:
     """Invoke an LLM via CLI subprocess.
@@ -358,7 +355,7 @@ async def invoke(
 
         return result
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         duration = time.monotonic() - start_time
         logger.error(f"Timeout after {timeout}s for {provider.name}")
         if stream_parser:
@@ -369,7 +366,7 @@ async def invoke(
             process.terminate()
             try:
                 await asyncio.wait_for(process.wait(), timeout=10)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(
                     "Process did not exit after SIGTERM+10s, sending SIGKILL"
                 )
@@ -383,7 +380,7 @@ async def invoke(
         if stream_output_file:
             try:
                 if os.path.exists(stream_output_file):
-                    with open(stream_output_file, 'r', encoding='utf-8') as f:
+                    with open(stream_output_file, encoding='utf-8') as f:
                         partial_stdout = f.read()
                     if partial_stdout:
                         logger.info(

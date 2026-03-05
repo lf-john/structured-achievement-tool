@@ -6,7 +6,6 @@ that return uniform VerifyResult objects. Used across all workflow types.
 """
 
 import configparser
-import io
 import json
 import logging
 import os
@@ -15,10 +14,10 @@ import socket
 import stat
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, List, Tuple
-from urllib.request import urlopen, Request
-from urllib.error import URLError, HTTPError
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +50,7 @@ class FileChecker:
             passed=exists,
             checker=self.CHECKER_NAME,
             target=path,
-            message=f"{kind} exists" if exists else f"path does not exist",
+            message=f"{kind} exists" if exists else "path does not exist",
             details={"is_directory": is_dir} if exists else {},
         )
 
@@ -88,7 +87,7 @@ class FileChecker:
                 message="file does not exist, cannot check content",
             )
         try:
-            with open(path, "r", errors="replace") as f:
+            with open(path, errors="replace") as f:
                 content = f.read()
             match = re.search(pattern, content)
             return VerifyResult(
@@ -121,7 +120,7 @@ class FileChecker:
                 message="file does not exist, cannot check content",
             )
         try:
-            with open(path, "r", errors="replace") as f:
+            with open(path, errors="replace") as f:
                 content = f.read()
             match = re.search(pattern, content)
             return VerifyResult(
@@ -166,7 +165,7 @@ class PortChecker:
                 message="port is listening" if passed else f"connection refused or timed out (errno {result})",
                 details={"host": host, "port": port, "errno": result},
             )
-        except socket.timeout:
+        except TimeoutError:
             return VerifyResult(
                 passed=False,
                 checker=self.CHECKER_NAME,
@@ -337,7 +336,7 @@ class ConfigValidator:
                 message="file does not exist",
             )
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 data = json.load(f)
             return VerifyResult(
                 passed=True,
@@ -383,7 +382,7 @@ class ConfigValidator:
                 details={"error": "ImportError: yaml module not available"},
             )
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 data = yaml.safe_load(f)
             return VerifyResult(
                 passed=True,
@@ -420,7 +419,7 @@ class ConfigValidator:
             )
         try:
             parser = configparser.ConfigParser()
-            with open(path, "r") as f:
+            with open(path) as f:
                 parser.read_file(f)
             sections = parser.sections()
             return VerifyResult(
@@ -457,7 +456,7 @@ class ConfigValidator:
                 message="file does not exist",
             )
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 lines = f.readlines()
 
             errors = []
@@ -470,7 +469,7 @@ class ConfigValidator:
                 if "=" not in line:
                     errors.append(f"line {lineno}: missing '=' separator")
                     continue
-                key, _, value = line.partition("=")
+                key, _, _value = line.partition("=")
                 if not key:
                     errors.append(f"line {lineno}: empty key")
                     continue
@@ -522,7 +521,7 @@ class DelayedChecker:
         return result
 
 
-def run_checks(checks: List[Tuple]) -> List[VerifyResult]:
+def run_checks(checks: list[tuple]) -> list[VerifyResult]:
     """
     Run multiple verification checks and return all results.
 
@@ -538,7 +537,7 @@ def run_checks(checks: List[Tuple]) -> List[VerifyResult]:
             (pc.check_listening, "localhost", 8080),
         ])
     """
-    results: List[VerifyResult] = []
+    results: list[VerifyResult] = []
     for entry in checks:
         method = entry[0]
         args = entry[1:]

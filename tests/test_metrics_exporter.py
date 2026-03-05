@@ -1,15 +1,14 @@
 """Tests for src.monitoring.metrics_exporter — Prometheus metrics."""
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
+from src.execution.audit_journal import AuditRecord
 from src.monitoring.metrics_exporter import (
-    collect_metrics,
-    format_prometheus,
     MetricsSnapshot,
     _classify_error,
+    collect_metrics,
+    format_prometheus,
 )
-from src.execution.audit_journal import AuditRecord
 
 
 def _make_record(success=True, error_summary="", duration=10.0, story_id="US-001", task_file="task.md"):

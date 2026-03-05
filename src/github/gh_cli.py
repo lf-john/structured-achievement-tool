@@ -8,8 +8,7 @@ This avoids managing OAuth tokens directly — `gh auth` handles authentication.
 import json
 import logging
 import subprocess
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +33,9 @@ class GHResult:
 
 def run_gh(
     args: list[str],
-    repo: Optional[str] = None,
+    repo: str | None = None,
     timeout: int = GH_TIMEOUT,
-    cwd: Optional[str] = None,
+    cwd: str | None = None,
 ) -> GHResult:
     """Run a gh CLI command and return the result.
 
@@ -99,7 +98,7 @@ def check_auth() -> bool:
     return result.success
 
 
-def get_repo_from_remote(cwd: Optional[str] = None) -> Optional[str]:
+def get_repo_from_remote(cwd: str | None = None) -> str | None:
     """Extract owner/repo from git remote origin URL.
 
     Returns None if no remote is configured.

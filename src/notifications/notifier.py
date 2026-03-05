@@ -5,12 +5,11 @@ Extracted from orchestrator._send_notification() and extended with email support
 """
 
 import json
-import os
 import logging
+import os
 import smtplib
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Optional
+from email.mime.text import MIMEText
 
 import requests
 
@@ -25,15 +24,15 @@ class Notifier:
 
     def __init__(
         self,
-        ntfy_topic: Optional[str] = None,
-        ntfy_server: Optional[str] = None,
-        ntfy_min_priority: Optional[str] = None,
-        smtp_host: Optional[str] = None,
+        ntfy_topic: str | None = None,
+        ntfy_server: str | None = None,
+        ntfy_min_priority: str | None = None,
+        smtp_host: str | None = None,
         smtp_port: int = 587,
-        smtp_user: Optional[str] = None,
-        smtp_password: Optional[str] = None,
-        notify_email: Optional[str] = None,
-        config: Optional[dict] = None,
+        smtp_user: str | None = None,
+        smtp_password: str | None = None,
+        notify_email: str | None = None,
+        config: dict | None = None,
     ):
         # Load notification config from config.json if not provided
         if config is None:
@@ -66,7 +65,7 @@ class Notifier:
                 "config.json",
             )
         try:
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 return json.load(f).get("notifications", {})
         except (FileNotFoundError, json.JSONDecodeError, OSError):
             return {}
@@ -108,8 +107,8 @@ class Notifier:
         self,
         subject: str,
         body_html: str,
-        body_text: Optional[str] = None,
-        recipient: Optional[str] = None,
+        body_text: str | None = None,
+        recipient: str | None = None,
     ) -> bool:
         """Send an email notification via SMTP (SES-ready).
 
@@ -166,7 +165,7 @@ class Notifier:
             return
         self.send_ntfy(
             title=f"SAT: {task_id} - {story_count} stories",
-            message=f"Task decomposed and beginning execution.",
+            message="Task decomposed and beginning execution.",
             tags="memo,robot",
         )
 
@@ -179,7 +178,7 @@ class Notifier:
         if not self._config.get("notify_on_story_complete", False):
             return
         self.send_ntfy(
-            title=f"SAT: Story Complete",
+            title="SAT: Story Complete",
             message=f"{story_id}: {story_title}",
             priority="high",
             tags="tada",
@@ -188,7 +187,7 @@ class Notifier:
     def notify_story_failed(self, story_id: str, story_title: str, reason: str):
         """Notify that a story failed after all retries."""
         self.send_ntfy(
-            title=f"SAT: Story Failed",
+            title="SAT: Story Failed",
             message=f"{story_id}: {story_title}\nReason: {reason}",
             tags="x",
             priority="high",
@@ -246,7 +245,7 @@ class Notifier:
         story_id: str,
         story_title: str,
         failure_summary: str,
-        recipient: Optional[str] = None,
+        recipient: str | None = None,
     ):
         """Send escalation notification via ntfy and optionally email."""
         self.send_ntfy(

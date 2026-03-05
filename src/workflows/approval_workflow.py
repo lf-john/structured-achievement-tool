@@ -18,21 +18,24 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Literal
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
-from src.workflows.state import StoryState, PhaseOutput, PhaseStatus
-from src.notifications.notifier import Notifier
 from src.core.checkpoint_manager import (
-    read_checkpoint, write_checkpoint, STATUS_WAITING_FOR_HUMAN, STATUS_IN_PROGRESS,
+    STATUS_IN_PROGRESS,
+    STATUS_WAITING_FOR_HUMAN,
+    read_checkpoint,
+    write_checkpoint,
 )
+from src.notifications.notifier import Notifier
 from src.workflows.control_nodes import (
     _build_signal_content,
-    _read_signal_file,
-    _extract_human_response,
     _default_write_signal,
+    _extract_human_response,
+    _read_signal_file,
 )
+from src.workflows.state import PhaseOutput, PhaseStatus, StoryState
 
 logger = logging.getLogger(__name__)
 
@@ -366,7 +369,7 @@ class ApprovalWorkflow:
     routes directly to the response_decision node.
     """
 
-    def __init__(self, notifier: Notifier, config: Optional[ApprovalConfig] = None):
+    def __init__(self, notifier: Notifier, config: ApprovalConfig | None = None):
         self.notifier = notifier
         self.config = config or ApprovalConfig()
 

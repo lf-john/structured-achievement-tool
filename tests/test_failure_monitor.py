@@ -2,18 +2,16 @@
 
 import os
 import time
-from unittest.mock import patch, mock_open
+from unittest.mock import patch
 
 import pytest
 
 from src.execution.failure_monitor import (
     FailureContext,
     FailureMonitor,
-    DEFAULT_FAILURE_PATTERNS,
-    _truncate,
     _parse_meminfo,
+    _truncate,
 )
-
 
 # ---------------------------------------------------------------
 # Fixtures

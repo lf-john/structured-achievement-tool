@@ -1,16 +1,13 @@
 """Tests for src.execution.multi_invoker — Multiple LLM Invoker with failover."""
 
-import asyncio
 import time
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 
 from src.execution.multi_invoker import (
-    MultiInvoker,
     InvocationResult,
-    ProviderHealth,
-    DEFAULT_FAILURE_THRESHOLD,
-    DEFAULT_COOLDOWN_SECONDS,
+    MultiInvoker,
 )
 from src.llm.cli_runner import CLIResult
 from src.llm.providers import get_provider

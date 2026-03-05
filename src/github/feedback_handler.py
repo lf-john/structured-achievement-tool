@@ -13,12 +13,9 @@ Each review comment becomes a follow-up story with:
 import json
 import logging
 import os
-import re
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Optional
 
-from src.github.gh_cli import run_gh, get_repo_from_remote
+from src.github.gh_cli import get_repo_from_remote, run_gh
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +25,8 @@ class ReviewComment:
     """A single review comment from a PR."""
     body: str
     author: str
-    path: Optional[str] = None
-    line: Optional[int] = None
+    path: str | None = None
+    line: int | None = None
     comment_type: str = "general"  # general, inline, review
 
 
@@ -48,7 +45,7 @@ class FollowUpStory:
 class FeedbackHandler:
     """Processes PR review feedback into actionable follow-up stories."""
 
-    def __init__(self, repo: Optional[str] = None, cwd: Optional[str] = None):
+    def __init__(self, repo: str | None = None, cwd: str | None = None):
         self.repo = repo or get_repo_from_remote(cwd)
         self.cwd = cwd
 
@@ -112,7 +109,7 @@ class FeedbackHandler:
         pr_number: int,
         source_story_id: str,
         task_name: str,
-        comments: Optional[list[ReviewComment]] = None,
+        comments: list[ReviewComment] | None = None,
     ) -> list[FollowUpStory]:
         """Generate follow-up stories from PR review comments.
 
@@ -226,7 +223,7 @@ class FeedbackHandler:
         source_story_id: str,
         task_name: str,
         counter: int,
-        filepath: Optional[str] = None,
+        filepath: str | None = None,
     ) -> FollowUpStory:
         """Create a single follow-up story from a group of comments."""
         # Determine story type from comment content

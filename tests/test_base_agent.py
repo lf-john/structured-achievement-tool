@@ -1,12 +1,12 @@
 """Tests for src.agents.base_agent — Abstract base LLM agent pipeline."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
-from pydantic import BaseModel
 
 from src.agents.base_agent import BaseAgent
-from src.llm.response_parser import ClassifyResponse
 from src.llm.cli_runner import CLIResult
+from src.llm.response_parser import ClassifyResponse
 
 
 class ConcreteAgent(BaseAgent):

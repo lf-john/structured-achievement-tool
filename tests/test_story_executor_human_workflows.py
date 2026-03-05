@@ -1,16 +1,15 @@
 """Tests for human workflow registration in story_executor."""
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from src.execution.story_executor import (
-    WORKFLOW_MAP,
     HUMAN_STORY_TYPES,
+    WORKFLOW_MAP,
     get_workflow_for_story,
 )
 from src.workflows.assignment_workflow import AssignmentWorkflow
-from src.workflows.qa_feedback_workflow import QAFeedbackWorkflow
 from src.workflows.escalation_workflow import EscalationWorkflow
+from src.workflows.qa_feedback_workflow import QAFeedbackWorkflow
 
 
 class TestWorkflowMap:

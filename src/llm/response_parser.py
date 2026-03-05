@@ -6,11 +6,12 @@ Validates against Pydantic models for type safety and hallucination reduction.
 """
 
 import json
-import re
 import logging
-from typing import Type, TypeVar, Optional, List
-from pydantic import BaseModel, Field
+import re
 from enum import Enum
+from typing import TypeVar
+
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class AgentResponse(BaseModel):
     status: AgentStatus
     output: str
     artifacts: dict = Field(default_factory=dict)
-    claims: List[str] = Field(default_factory=list)
+    claims: list[str] = Field(default_factory=list)
 
 
 class ClassifyResponse(BaseModel):
@@ -49,26 +50,26 @@ class StorySchema(BaseModel):
     description: str
     type: str = "development"
     status: str = "pending"
-    dependsOn: List[str] = Field(default_factory=list)
-    acceptanceCriteria: List[str] = Field(default_factory=list)
+    dependsOn: list[str] = Field(default_factory=list)
+    acceptanceCriteria: list[str] = Field(default_factory=list)
     complexity: int = Field(default=5, ge=0, le=10)
-    verification_agents: List[str] = Field(default_factory=list)
+    verification_agents: list[str] = Field(default_factory=list)
     outcome_verification: bool = False
-    output_path: Optional[str] = None
-    output_format: Optional[str] = None
-    doc_type: Optional[str] = None
+    output_path: str | None = None
+    output_format: str | None = None
+    doc_type: str | None = None
     store: bool = False  # If True, persist output to file + vector memory
 
 
 class DecomposeResponse(BaseModel):
     """Response from the Decompose/StoryAgent."""
-    stories: List[StorySchema]
+    stories: list[StorySchema]
 
 
 class VerifyResponse(BaseModel):
     """Response from the Verify phase."""
     status: str  # "pass", "fail", "retry_with_fixes"
-    issues: List[str] = Field(default_factory=list)
+    issues: list[str] = Field(default_factory=list)
     feedback: str = ""
 
 
@@ -92,8 +93,8 @@ class MediatorResponse(BaseModel):
     reasoning: str = ""
     testRegression: dict = Field(default_factory=dict)
     scopeAnalysis: dict = Field(default_factory=dict)
-    actions: List[MediatorAction] = Field(default_factory=list)
-    retryGuidance: Optional[str] = None
+    actions: list[MediatorAction] = Field(default_factory=list)
+    retryGuidance: str | None = None
 
 
 # --- JSON Extraction ---
@@ -146,7 +147,7 @@ def extract_json(text: str) -> dict:
     raise ValueError(f"No valid JSON found in response (length={len(text)})")
 
 
-def validate_response(data: dict, model: Type[T]) -> T:
+def validate_response(data: dict, model: type[T]) -> T:
     """Validate a dict against a Pydantic model.
 
     Args:
@@ -162,7 +163,7 @@ def validate_response(data: dict, model: Type[T]) -> T:
     return model.model_validate(data)
 
 
-def parse_and_validate(text: str, model: Type[T]) -> T:
+def parse_and_validate(text: str, model: type[T]) -> T:
     """Extract JSON from text and validate against a Pydantic model.
 
     Convenience function combining extract_json + validate_response.

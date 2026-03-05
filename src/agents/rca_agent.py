@@ -9,16 +9,12 @@ Complexity: 7-8 (deep reasoning). Routes to commercial models (Sonnet/Opus)
 with DeepSeek R1 as backup.
 """
 
-import json
 import logging
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 from src.agents.failure_classifier import (
-    classify_failure,
-    FailureClassification,
-    FailureType,
     FailureSeverity,
+    classify_failure,
 )
 from src.execution.audit_journal import AuditJournal, AuditRecord
 
@@ -33,9 +29,9 @@ class RCAReport:
     failure_count: int
     root_cause_category: str  # code_bug, env_issue, dependency, design_flaw, resource, unknown
     root_cause_summary: str
-    failure_timeline: List[dict] = field(default_factory=list)
-    common_patterns: List[str] = field(default_factory=list)
-    recommendations: List[str] = field(default_factory=list)
+    failure_timeline: list[dict] = field(default_factory=list)
+    common_patterns: list[str] = field(default_factory=list)
+    recommendations: list[str] = field(default_factory=list)
     escalation_required: bool = False
     suggested_story_type: str = "escalation"  # escalation or debug
 
@@ -86,7 +82,7 @@ PATTERN_CATEGORIES = {
 
 
 def analyze_failure_patterns(
-    audit_records: List[AuditRecord],
+    audit_records: list[AuditRecord],
     story_id: str,
 ) -> RCAReport:
     """Analyze failure patterns from audit records for a specific story.
@@ -248,7 +244,7 @@ def generate_escalation_story(report: RCAReport, task_name: str) -> dict:
             f"**Summary:** {report.root_cause_summary}\n\n"
             f"**Patterns:**\n" +
             "\n".join(f"- {p}" for p in report.common_patterns) + "\n\n"
-            f"**Recommendations:**\n" +
+            "**Recommendations:**\n" +
             "\n".join(f"- {r}" for r in report.recommendations)
         ),
         "type": report.suggested_story_type,

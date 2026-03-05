@@ -4,13 +4,15 @@ Tests for the VectorStore class.
 The VectorStore uses sqlite_vec for similarity search on embedded documents.
 """
 
-import pytest
 import os
-import tempfile
 import shutil
-from unittest.mock import Mock, patch, MagicMock
-from src.core.vector_store import VectorStore
+import tempfile
+from unittest.mock import Mock
+
+import pytest
+
 from src.core.embedding_service import EmbeddingService
+from src.core.vector_store import VectorStore
 
 
 class TestVectorStore:
@@ -44,12 +46,12 @@ class TestVectorStore:
     def test_init_creates_database_file(self, temp_db_path, mock_embedding_service):
         """Test that VectorStore creates a database file on initialization."""
         assert not os.path.exists(temp_db_path)
-        store = VectorStore(db_path=temp_db_path, embedding_service=mock_embedding_service)
+        VectorStore(db_path=temp_db_path, embedding_service=mock_embedding_service)
         assert os.path.exists(temp_db_path)
 
     def test_init_creates_tables(self, temp_db_path, mock_embedding_service):
         """Test that VectorStore creates necessary tables in the database."""
-        store = VectorStore(db_path=temp_db_path, embedding_service=mock_embedding_service)
+        VectorStore(db_path=temp_db_path, embedding_service=mock_embedding_service)
 
         # Verify tables exist by attempting to query them
         import sqlite3

@@ -5,9 +5,11 @@ The EmbeddingService is responsible for generating text embeddings using the
 local 'nomic-embed-text' Ollama model.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from src.core.embedding_service import EmbeddingService, MAX_CHARS
+
+from src.core.embedding_service import MAX_CHARS, EmbeddingService
 
 
 class TestEmbeddingService:

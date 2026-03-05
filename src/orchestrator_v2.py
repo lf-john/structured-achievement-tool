@@ -8,29 +8,28 @@ Keeps: vector memory search, response writing, notifications, task embedding.
 Removes: all Ralph Pro references (prd.json path, ralph-pro CLI, progress.json).
 """
 
-import os
-import json
 import asyncio
+import json
 import logging
-from typing import Dict, Optional
+import os
 
 from src.agents.classifier_agent import ClassifierAgent
 from src.agents.story_agent import StoryAgent
-from src.llm.routing_engine import RoutingEngine
-from src.execution.dag_executor import DAGExecutor
-from src.execution.story_executor import execute_story, StoryResult
-from src.execution.failure_monitor import FailureMonitor, FailureContext
-from src.execution.audit_journal import AuditJournal, AuditRecord
-from src.core.rag_summarizer import RAGSummarizer
-from src.notifications.notifier import Notifier
-from src.core.vector_store import VectorStore
+from src.core.checkpoint_manager import init_db as init_checkpoint_db
+from src.core.checkpoint_manager import read_checkpoint
 from src.core.embedding_service import EmbeddingService
-from src.agents.base_agent import BaseAgent
-from src.llm.prompt_builder import load_template, substitute_placeholders, TEMPLATE_DIR
-from src.llm.response_parser import extract_json
-from src.llm.cli_runner import invoke as cli_invoke
+from src.core.rag_summarizer import RAGSummarizer
+from src.core.vector_store import VectorStore
 from src.db.database_manager import DatabaseManager
-from src.core.checkpoint_manager import read_checkpoint, init_db as init_checkpoint_db
+from src.execution.audit_journal import AuditJournal, AuditRecord
+from src.execution.dag_executor import DAGExecutor
+from src.execution.failure_monitor import FailureContext, FailureMonitor
+from src.execution.story_executor import StoryResult, execute_story
+from src.llm.cli_runner import invoke as cli_invoke
+from src.llm.prompt_builder import TEMPLATE_DIR, substitute_placeholders
+from src.llm.response_parser import extract_json
+from src.llm.routing_engine import RoutingEngine
+from src.notifications.notifier import Notifier
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,7 @@ logger = logging.getLogger(__name__)
 class OrchestratorV2:
     """Task orchestrator that executes stories natively via LangGraph workflows."""
 
-    def __init__(self, project_path: str, vector_db_path: Optional[str] = None):
+    def __init__(self, project_path: str, vector_db_path: str | None = None):
         self.project_path = project_path
         config_path = os.path.join(project_path, "config.json")
 
@@ -178,7 +177,7 @@ class OrchestratorV2:
         except Exception:
             pass
 
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             user_request = f.read()
 
         # --- Classify ---
@@ -764,7 +763,7 @@ class OrchestratorV2:
         task_id = os.path.basename(task_dir)
 
         # Read the full file content (includes user's original request + any annotations)
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             full_content = f.read()
 
         # Strip signal/status tags from content passed to LLM
@@ -800,7 +799,7 @@ class OrchestratorV2:
         for key in ("discovery", "requirements", "architecture"):
             progress_path = os.path.join(task_dir, f"_prd_{key}.md")
             if os.path.exists(progress_path):
-                with open(progress_path, "r") as f:
+                with open(progress_path) as f:
                     prior_outputs[key] = f.read()
 
         # RAG context (Phase 1 only)
@@ -824,7 +823,7 @@ class OrchestratorV2:
         if not os.path.exists(template_path):
             raise FileNotFoundError(f"Missing template: prd_{template_key}.md")
 
-        with open(template_path, "r") as f:
+        with open(template_path) as f:
             template = f.read()
 
         subs = {
@@ -850,7 +849,7 @@ class OrchestratorV2:
             error_msg = f"PRD Phase {phase_label} failed: {result.stderr[:500]}"
             logger.error(error_msg)
             # Write error to file and mark failed
-            with open(file_path, "r") as f:
+            with open(file_path) as f:
                 content = f.read()
             content = content.replace("<Working>", f"<Failed>\n\nPRD Error: {error_msg}")
             with open(file_path, "w") as f:
@@ -926,7 +925,7 @@ class OrchestratorV2:
         logger.info(f"PRD Phase {phase_num} written to {phase_filepath}")
 
         # Mark the triggering file as <Finished>
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             content = f.read()
         content = content.replace("<Working>", "<Finished>")
         with open(file_path, "w") as f:
@@ -955,7 +954,7 @@ class OrchestratorV2:
 
         # Combine all PRD phase outputs
         prd_parts = []
-        for key, label in [
+        for key, _label in [
             ("discovery", "Discovery"),
             ("requirements", "Requirements"),
             ("architecture", "Architecture"),
@@ -963,7 +962,7 @@ class OrchestratorV2:
         ]:
             path = os.path.join(task_dir, f"_prd_{key}.md")
             if os.path.exists(path):
-                with open(path, "r") as f:
+                with open(path) as f:
                     prd_parts.append(f.read())
 
         if not prd_parts:
@@ -980,7 +979,7 @@ class OrchestratorV2:
         # Embed PRD in vector memory
         if self.vector_store:
             try:
-                with open(file_path, "r") as f:
+                with open(file_path) as f:
                     user_request = f.read()
                 user_request = re.sub(
                     r'^\s*<(?:Plan|Working|Pending|PRD|1|2)>\s*$',

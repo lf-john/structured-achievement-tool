@@ -19,10 +19,7 @@ import logging
 import os
 import re
 import subprocess
-import tempfile
-import shutil
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +32,7 @@ class Mutation:
     original: str
     mutated: str
     mutation_type: str
-    detected: Optional[bool] = None  # True if tests caught it
+    detected: bool | None = None  # True if tests caught it
 
 
 @dataclass
@@ -45,7 +42,7 @@ class MutationReport:
     detected: int = 0
     survived: int = 0
     errors: int = 0
-    mutations: List[Mutation] = field(default_factory=list)
+    mutations: list[Mutation] = field(default_factory=list)
 
     @property
     def detection_rate(self) -> float:
@@ -54,7 +51,7 @@ class MutationReport:
         return self.detected / self.total_mutations * 100.0
 
     @property
-    def survived_mutations(self) -> List[Mutation]:
+    def survived_mutations(self) -> list[Mutation]:
         return [m for m in self.mutations if m.detected is False]
 
 
@@ -95,7 +92,7 @@ def _generate_mutations_for_line(
     line: str,
     line_number: int,
     file_path: str,
-) -> List[Mutation]:
+) -> list[Mutation]:
     """Generate possible mutations for a single line of code."""
     mutations = []
 
@@ -166,7 +163,7 @@ def _generate_mutations_for_line(
 def generate_mutations(
     file_path: str,
     max_mutations: int = 20,
-) -> List[Mutation]:
+) -> list[Mutation]:
     """Generate mutations for a Python source file.
 
     Args:
@@ -179,7 +176,7 @@ def generate_mutations(
     if not os.path.exists(file_path):
         return []
 
-    with open(file_path, 'r') as f:
+    with open(file_path) as f:
         lines = f.readlines()
 
     all_mutations = []
@@ -196,7 +193,7 @@ def generate_mutations(
 
         selected = []
         per_type = max(1, max_mutations // len(by_type))
-        for type_name, type_mutations in by_type.items():
+        for _type_name, type_mutations in by_type.items():
             selected.extend(type_mutations[:per_type])
 
         all_mutations = selected[:max_mutations]
@@ -222,7 +219,7 @@ def run_mutation_test(
         True if the mutation was detected (tests failed), False if it survived.
     """
     # Read original file
-    with open(mutation.file_path, 'r') as f:
+    with open(mutation.file_path) as f:
         original_content = f.read()
 
     original_lines = original_content.split('\n')
@@ -268,7 +265,7 @@ def run_mutation_test(
 
 
 def run_mutation_suite(
-    source_files: List[str],
+    source_files: list[str],
     test_command: str = "pytest tests/ -x -q",
     working_directory: str = ".",
     max_mutations_per_file: int = 10,

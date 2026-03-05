@@ -10,24 +10,22 @@ Or via systemd: sat-dashboard.service
 """
 
 import argparse
-import json
 import logging
 import os
-from typing import Optional
 
 from flask import Flask, jsonify, render_template_string
 
 from src.db.database_manager import DatabaseManager
-from src.visibility import TaskVisibility
 from src.execution.audit_journal import AuditJournal
+from src.visibility import TaskVisibility
 
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-_db: Optional[DatabaseManager] = None
-_vis: Optional[TaskVisibility] = None
-_audit: Optional[AuditJournal] = None
+_db: DatabaseManager | None = None
+_vis: TaskVisibility | None = None
+_audit: AuditJournal | None = None
 
 
 def _get_db() -> DatabaseManager:

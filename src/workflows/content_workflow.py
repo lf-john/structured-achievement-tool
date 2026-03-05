@@ -19,17 +19,18 @@ On failure → loops back to WRITE (up to 3 times).
 LEARN extracts learnings for vector memory.
 """
 
+import logging
 import os
 import re
-import logging
 from functools import partial
-from langgraph.graph import StateGraph, END
 
-from src.workflows.state import StoryState, PhaseStatus, PhaseOutput
+from langgraph.graph import END, StateGraph
+
 from src.workflows.base_workflow import (
     BaseWorkflow,
     phase_node,
 )
+from src.workflows.state import PhaseOutput, PhaseStatus, StoryState
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +134,7 @@ def mechanical_verify_node(state: StoryState) -> StoryState:
         failures.append(f"Output file not found: {output_path or 'no path specified'}")
     else:
         try:
-            with open(output_path, "r", encoding="utf-8") as f:
+            with open(output_path, encoding="utf-8") as f:
                 content = f.read()
         except Exception as e:
             failures.append(f"Cannot read output file: {e}")

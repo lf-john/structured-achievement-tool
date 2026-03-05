@@ -1,0 +1,73 @@
+# SAT Ruff Configuration
+# Phase 1 item 1.2 — lint + format rules
+
+target-version = "py312"
+line-length = 120
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "S",    # flake8-bandit (security)
+    "SIM",  # flake8-simplify
+    "TCH",  # flake8-type-checking
+    "RUF",  # ruff-specific rules
+]
+
+ignore = [
+    "E501",   # line too long — handled by formatter
+    "S101",   # assert usage — needed in tests
+    "S603",   # subprocess without shell=True — SAT calls claude CLI
+    "S607",   # partial executable path — SAT uses tool names
+    "S602",   # subprocess with shell=True — intentional in git/CLI commands
+    "S108",   # hardcoded /tmp — acceptable for worktree paths
+    "S112",   # try-except-continue — used in resilience patterns
+    "S113",   # request-without-timeout — will fix incrementally
+    "S311",   # non-crypto random — used for jitter, not security
+    "S704",   # unsafe markup — not a web app
+    "B008",   # function call in default arg — used in Pydantic
+    "UP007",  # use X | Y for union — keep Optional for clarity
+    "UP047",  # non-PEP695 generics — Python 3.12 syntax not required yet
+    "SIM115", # open-file-with-context-handler — some patterns need file handles
+    "RUF012", # mutable class default — used in TypedDict/dataclass patterns
+    "S104",   # hardcoded bind all interfaces — internal server
+    "E741",   # ambiguous variable name — e, l, etc. are fine in context
+    "RUF006", # asyncio dangling task — managed task patterns
+    "SIM102", # collapsible-if — sometimes clarity > brevity
+    "SIM110", # reimplemented-builtin — keep explicit loops for readability
+    "SIM201", # negate-equal-op — style preference
+
+    # --- Phase 3 backlog: re-enable one category at a time ---
+    "RUF013", # implicit-optional — 54 instances, fix in Phase 3
+    "S110",   # try-except-pass — 43 instances, fix with exception hierarchy (C1-C3)
+    "RUF005", # collection-literal-concatenation — 33 instances, cosmetic
+    "B904",   # raise-without-from — 18 instances, fix with exception hierarchy (C1-C3)
+    "E722",   # bare-except — 14 instances, fix with exception hierarchy (C1-C3)
+    "SIM105", # suppressible-exception — 13 instances, fix with exception hierarchy
+    "S310",   # suspicious-url-open — 9 instances, ntfy calls are intentional
+    "S608",   # hardcoded-sql — 8 instances, parameterize in Phase 3
+    "UP042",  # replace-str-enum — 7 instances, cosmetic
+    "SIM108", # if-else ternary — 6 instances, style preference
+    "E402",   # import not at top — 6 instances, some are intentional
+]
+
+[lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S",      # security checks not relevant in tests
+    "B011",   # assert False
+    "B017",   # assert raises Exception — acceptable in tests
+    "B018",   # useless expression — test assertions
+    "SIM117", # multiple with statements — clearer in tests
+    "SIM101", # duplicate isinstance — style preference
+]
+
+[lint.isort]
+known-first-party = ["src"]
+
+[format]
+quote-style = "double"
+indent-style = "space"

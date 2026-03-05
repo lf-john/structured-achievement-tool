@@ -8,7 +8,6 @@ Defines the verification framework for content stories:
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 from enum import Enum
 
 
@@ -32,7 +31,7 @@ class Group1Rule:
     """
     name: str
     description: str
-    value: Optional[str] = None      # Target value (e.g., "500-1000", ">=3", "markdown")
+    value: str | None = None      # Target value (e.g., "500-1000", ">=3", "markdown")
     enabled: bool = True             # False means skip this rule entirely
 
 

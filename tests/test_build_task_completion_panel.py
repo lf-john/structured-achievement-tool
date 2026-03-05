@@ -23,8 +23,9 @@ Edge Cases:
   - Panel with legends
 """
 
-import pytest
 import json
+
+import pytest
 
 # These imports will fail since the implementation doesn't exist yet
 from src.dashboard_builder import DashboardBuilder

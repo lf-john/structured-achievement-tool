@@ -5,12 +5,14 @@ This module uses sqlite-vec for efficient similarity search on
 document embeddings.
 """
 
+import json
 import logging
 import sqlite3
-import json
-from typing import List, Dict, Any, Optional
+from typing import Any
+
 import sqlite_vec
-from src.core.embedding_service import EmbeddingService, MAX_CHARS
+
+from src.core.embedding_service import MAX_CHARS, EmbeddingService
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,7 @@ class VectorStore:
     storing document metadata.
     """
 
-    def __init__(self, db_path: str, embedding_service: EmbeddingService, dimension: Optional[int] = None):
+    def __init__(self, db_path: str, embedding_service: EmbeddingService, dimension: int | None = None):
         """
         Initialize the VectorStore.
 
@@ -78,7 +80,7 @@ class VectorStore:
 
         self.conn.commit()
 
-    def add_document(self, text: str, metadata: Dict[str, Any]) -> int:
+    def add_document(self, text: str, metadata: dict[str, Any]) -> int:
         """
         Add a document to the vector store.
 
@@ -149,7 +151,7 @@ class VectorStore:
             """)
             self.conn.commit()
 
-    def search(self, query_text: str, k: int = 5) -> List[Dict[str, Any]]:
+    def search(self, query_text: str, k: int = 5) -> list[dict[str, Any]]:
         """
         Search for documents similar to the query text.
 
@@ -214,7 +216,7 @@ class VectorStore:
 
         return results
 
-    def _serialize_embedding(self, embedding: List[float]) -> bytes:
+    def _serialize_embedding(self, embedding: list[float]) -> bytes:
         """
         Serialize an embedding vector to bytes for storage.
 

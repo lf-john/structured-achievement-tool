@@ -4,8 +4,9 @@ Implements methods to get, create, and update dashboards via Grafana API.
 """
 
 import os
+from typing import Any
+
 import requests
-from typing import Dict, Any, Optional
 
 
 class GrafanaClient:
@@ -13,7 +14,7 @@ class GrafanaClient:
     Client for interacting with Grafana API with API key authentication.
     """
 
-    def __init__(self, api_key: Optional[str] = None, validate_auth: Optional[bool] = None):
+    def __init__(self, api_key: str | None = None, validate_auth: bool | None = None):
         """
         Initialize GrafanaClient with API key.
 
@@ -44,9 +45,9 @@ class GrafanaClient:
             validate_auth = not os.environ.get('GRAFANA_SKIP_AUTH_VALIDATION', '0').lower() == '1'
 
         self._validate_auth = validate_auth
-        self._headers: Optional[Dict[str, str]] = None
+        self._headers: dict[str, str] | None = None
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         """
         Get authentication headers.
 
@@ -89,8 +90,8 @@ class GrafanaClient:
         self,
         endpoint: str,
         method: str = 'GET',
-        json_data: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        json_data: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Make an HTTP request to Grafana API.
 
@@ -123,7 +124,7 @@ class GrafanaClient:
             return response.json()
         except requests.exceptions.Timeout:
             raise TimeoutError('Request timed out')
-        except requests.exceptions.ConnectionError as e:
+        except requests.exceptions.ConnectionError:
             raise ConnectionError('Cannot connect to Grafana')
         except requests.exceptions.HTTPError as e:
             # Check for authentication errors in response
@@ -142,7 +143,7 @@ class GrafanaClient:
                 raise Exception('403 Forbidden: Permission denied') from e
             raise Exception(str(e))
 
-    def _handle_response(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_response(self, response_data: dict[str, Any]) -> dict[str, Any]:
         """
         Handle API response data.
 
@@ -164,7 +165,7 @@ class GrafanaClient:
             return response_data['dashboard']
         return response_data
 
-    def get_dashboard(self, uid: str) -> Dict[str, Any]:
+    def get_dashboard(self, uid: str) -> dict[str, Any]:
         """
         Fetch dashboard by UID.
 
@@ -181,7 +182,7 @@ class GrafanaClient:
         response = self._make_request(endpoint, 'GET')
         return self._handle_response(response)
 
-    def create_dashboard(self, dashboard_json: Dict[str, Any]) -> Dict[str, Any]:
+    def create_dashboard(self, dashboard_json: dict[str, Any]) -> dict[str, Any]:
         """
         Create a new dashboard.
 
@@ -198,7 +199,7 @@ class GrafanaClient:
         response = self._make_request(endpoint, 'POST', dashboard_json)
         return self._handle_response(response)
 
-    def update_dashboard(self, uid: str, dashboard_json: Dict[str, Any]) -> Dict[str, Any]:
+    def update_dashboard(self, uid: str, dashboard_json: dict[str, Any]) -> dict[str, Any]:
         """
         Update an existing dashboard.
 

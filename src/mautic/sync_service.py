@@ -1,9 +1,10 @@
 import logging
-from typing import Dict, Any
-from src.mautic.mautic_api_client import MauticApiClient
-from src.mautic.suitecrm_client import SuiteCRMClient
+from typing import Any
+
 from src.mautic.engagement_data_mapper import EngagementDataMapper
+from src.mautic.mautic_api_client import MauticApiClient
 from src.mautic.mautic_engagement_service import MauticEngagementService
+from src.mautic.suitecrm_client import SuiteCRMClient
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ class MauticSuiteCRMSyncService:
         self.engagement_data_mapper = engagement_data_mapper
         logger.info("MauticSuiteCRMSyncService initialized with Mautic and SuiteCRM clients, engagement service, and data mapper.")
 
-    def _map_suitecrm_to_mautic(self, suitecrm_contact: Dict[str, Any]) -> Dict[str, Any]:
+    def _map_suitecrm_to_mautic(self, suitecrm_contact: dict[str, Any]) -> dict[str, Any]:
         """
         Maps SuiteCRM contact data to Mautic contact data format.
         """
@@ -29,7 +30,7 @@ class MauticSuiteCRMSyncService:
         logger.debug(f"Mapped SuiteCRM contact {suitecrm_contact.get('id')} to Mautic format.")
         return {k: v for k, v in mautic_contact.items() if v is not None}
 
-    def _map_mautic_to_suitecrm(self, mautic_contact: Dict[str, Any]) -> Dict[str, Any]:
+    def _map_mautic_to_suitecrm(self, mautic_contact: dict[str, Any]) -> dict[str, Any]:
         """
         Maps Mautic contact data to SuiteCRM contact data format.
         """
@@ -42,7 +43,7 @@ class MauticSuiteCRMSyncService:
         logger.debug(f"Mapped Mautic contact {mautic_contact.get('id')} to SuiteCRM format.")
         return {k: v for k, v in suitecrm_contact.items() if v is not None}
 
-    def sync_suitecrm_to_mautic(self, suitecrm_contact_data: Dict[str, Any], mautic_contact_id: int = None):
+    def sync_suitecrm_to_mautic(self, suitecrm_contact_data: dict[str, Any], mautic_contact_id: int = None):
         """
         Synchronizes a SuiteCRM contact to Mautic.
         If mautic_contact_id is provided, updates the existing contact in Mautic.
@@ -70,7 +71,7 @@ class MauticSuiteCRMSyncService:
                 logger.error(f"Failed to create Mautic contact from SuiteCRM: {e}")
                 raise
 
-    def sync_mautic_to_suitecrm(self, mautic_contact_data: Dict[str, Any], suitecrm_contact_id: str = None):
+    def sync_mautic_to_suitecrm(self, mautic_contact_data: dict[str, Any], suitecrm_contact_id: str = None):
         """
         Synchronizes a Mautic contact to SuiteCRM.
         If suitecrm_contact_id is provided, updates the existing contact in SuiteCRM.
@@ -119,7 +120,7 @@ class MauticSuiteCRMSyncService:
             if not suitecrm_payload: # If mapper returns empty, nothing to update
                 logger.info(f"No SuiteCRM relevant data mapped for engagement record: {engagement_record}")
                 continue
-            
+
             try:
                 # In a real scenario, we'd need to link Mautic contact_id to SuiteCRM contact_id
                 # For now, we'll assume a direct mapping or that SuiteCRM can handle updates by email/id

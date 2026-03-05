@@ -27,13 +27,15 @@ Edge Cases:
   - Errors during lead scoring of a batch.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch, call, ANY
+from unittest.mock import ANY, MagicMock, call
 
-from src.batch_processing.lead_scoring_batch_processor import LeadScoringBatchProcessor
+import pytest
+
 from src.batch_processing.lead_data_source import LeadDataSource
 from src.batch_processing.lead_scorer import LeadScorer
+from src.batch_processing.lead_scoring_batch_processor import LeadScoringBatchProcessor
 from src.batch_processing.progress_tracker import ProgressTracker
+
 
 class TestLeadScoringBatchProcessor:
 

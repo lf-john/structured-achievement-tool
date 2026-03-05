@@ -4,8 +4,6 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 
 class TestPathsDefaults:
     """Test that paths module provides sensible defaults."""
@@ -16,18 +14,18 @@ class TestPathsDefaults:
         assert (SAT_PROJECT_DIR / "src").exists()
 
     def test_memory_dir_under_project(self):
-        from src.core.paths import SAT_PROJECT_DIR, MEMORY_DIR
+        from src.core.paths import MEMORY_DIR, SAT_PROJECT_DIR
         assert MEMORY_DIR == SAT_PROJECT_DIR / ".memory"
 
     def test_database_paths_under_memory(self):
-        from src.core.paths import MEMORY_DIR, SAT_DB, CHECKPOINT_DB, VECTORS_DB, LLM_COST_DB
+        from src.core.paths import CHECKPOINT_DB, LLM_COST_DB, MEMORY_DIR, SAT_DB, VECTORS_DB
         assert SAT_DB.parent == MEMORY_DIR
         assert CHECKPOINT_DB.parent == MEMORY_DIR
         assert VECTORS_DB.parent == MEMORY_DIR
         assert LLM_COST_DB.parent == MEMORY_DIR
 
     def test_config_json_under_project(self):
-        from src.core.paths import SAT_PROJECT_DIR, CONFIG_JSON
+        from src.core.paths import CONFIG_JSON, SAT_PROJECT_DIR
         assert CONFIG_JSON == SAT_PROJECT_DIR / "config.json"
 
     def test_monitor_watch_dirs_are_paths(self):
@@ -53,26 +51,29 @@ class TestPathsEnvOverride:
         with patch.dict(os.environ, {"SAT_PROJECT_DIR": "/tmp/test-sat"}):
             # Must reimport to pick up env change
             import importlib
+
             from src.core import paths
             importlib.reload(paths)
-            assert paths.SAT_PROJECT_DIR == Path("/tmp/test-sat")
+            assert Path("/tmp/test-sat") == paths.SAT_PROJECT_DIR
             # Restore
             importlib.reload(paths)
 
     def test_tasks_dir_env_override(self):
         with patch.dict(os.environ, {"SAT_TASKS_DIR": "/tmp/test-tasks"}):
             import importlib
+
             from src.core import paths
             importlib.reload(paths)
-            assert paths.SAT_TASKS_DIR == Path("/tmp/test-tasks")
+            assert Path("/tmp/test-tasks") == paths.SAT_TASKS_DIR
             # Restore
             importlib.reload(paths)
 
     def test_gdrive_root_env_override(self):
         with patch.dict(os.environ, {"SAT_GDRIVE_ROOT": "/tmp/gdrive"}):
             import importlib
+
             from src.core import paths
             importlib.reload(paths)
-            assert paths.SAT_GDRIVE_ROOT == Path("/tmp/gdrive")
+            assert Path("/tmp/gdrive") == paths.SAT_GDRIVE_ROOT
             # Restore
             importlib.reload(paths)

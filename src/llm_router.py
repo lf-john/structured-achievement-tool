@@ -1,6 +1,7 @@
 
 import logging
-from src.core.embedding_service import EmbeddingService, OllamaUnavailableError
+
+from src.core.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
 

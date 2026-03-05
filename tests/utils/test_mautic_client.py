@@ -1,8 +1,11 @@
 # tests/utils/test_mautic_client.py
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import requests
+
 from src.utils.mautic_client import MauticClient
+
 
 class TestMauticClient(unittest.TestCase):
 

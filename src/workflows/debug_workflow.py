@@ -15,14 +15,13 @@ full awareness of what went wrong and why.
 """
 
 import logging
-from functools import partial
-from typing import Literal, Optional
+from typing import Literal
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
-from src.workflows.base_workflow import BaseWorkflow, phase_node
-from src.workflows.state import StoryState
 from src.llm.routing_engine import RoutingEngine
+from src.workflows.base_workflow import BaseWorkflow
+from src.workflows.state import StoryState
 
 logger = logging.getLogger(__name__)
 
@@ -261,7 +260,7 @@ class DebugWorkflow(BaseWorkflow):
     actually performs the fix or investigation.
     """
 
-    def __init__(self, routing_engine: Optional[RoutingEngine] = None):
+    def __init__(self, routing_engine: RoutingEngine | None = None):
         super().__init__(routing_engine)
         self.app = self.compile()
 

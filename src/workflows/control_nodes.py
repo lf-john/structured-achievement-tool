@@ -13,11 +13,10 @@ inserted into any story workflow graph.
 import logging
 import os
 import time
-from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
-from src.workflows.state import StoryState, PhaseOutput, PhaseStatus
 from src.notifications.notifier import Notifier
+from src.workflows.state import PhaseOutput, PhaseStatus, StoryState
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +167,7 @@ def _build_signal_content(state: StoryState) -> str:
     return content
 
 
-def _read_signal_file(signal_path: str) -> Optional[str]:
+def _read_signal_file(signal_path: str) -> str | None:
     """Read signal file and return content if human has responded.
 
     Returns None if the file still contains '# <Pending>' (not yet responded).
@@ -176,7 +175,7 @@ def _read_signal_file(signal_path: str) -> Optional[str]:
     (the '#' prefix removed).
     """
     try:
-        with open(signal_path, "r") as f:
+        with open(signal_path) as f:
             content = f.read()
     except (FileNotFoundError, PermissionError) as e:
         logger.warning(f"PAUSE: Cannot read signal file {signal_path}: {e}")
@@ -275,7 +274,6 @@ def pause_node(
         logger.warning(f"PAUSE node: Failed to send initial notification: {e}")
 
     # 3. Poll for response
-    escalated = False
     elapsed = 0
 
     while elapsed < escalation_timeout:
@@ -292,7 +290,6 @@ def pause_node(
             return state
 
     # 4. Escalation: first timeout expired
-    escalated = True
     logger.warning(f"PAUSE node: Escalation timeout reached for {story_id}")
 
     try:

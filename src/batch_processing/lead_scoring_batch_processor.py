@@ -1,8 +1,10 @@
 import time
-from typing import Dict, Any
+from typing import Any
+
 from src.batch_processing.lead_data_source import LeadDataSource
 from src.batch_processing.lead_scorer import LeadScorer
 from src.batch_processing.progress_tracker import ProgressTracker
+
 
 class LeadScoringBatchProcessor:
     """
@@ -11,7 +13,7 @@ class LeadScoringBatchProcessor:
     """
 
     def __init__(
-        self, 
+        self,
         data_source: LeadDataSource,
         scorer: LeadScorer,
         progress_tracker: ProgressTracker,
@@ -32,7 +34,7 @@ class LeadScoringBatchProcessor:
         initial_progress = self.progress_tracker.get_progress()
         last_processed_id = initial_progress.get("last_processed_id")
         self.total_leads = self.data_source.get_total_leads()
-        
+
         processed_count = self._calculate_processed_count(last_processed_id)
 
         while True:
@@ -72,7 +74,7 @@ class LeadScoringBatchProcessor:
             percentage_complete = 0.0
         else:
             percentage_complete = (processed_count / self.total_leads) * 100
-        
+
         elapsed_time = time.time() - self.start_time
         if processed_count > 0:
             # Estimate total time based on current progress and elapsed time

@@ -5,11 +5,9 @@ Tests every verdict combination for all 3 cases without requiring git repos
 or real LLM calls. For long-term regression testing.
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
 
 from src.workflows.base_workflow import mediator_gate_node
-from src.workflows.state import MediatorVerdict
 
 
 def _make_state(phase, mediator_enabled=True):

@@ -1,11 +1,11 @@
 import abc
-from typing import List, Dict, Optional, Tuple
+
 
 class LeadDataSource(abc.ABC):
     """Abstract base class for fetching leads in batches."""
 
     @abc.abstractmethod
-    def fetch_leads_batch(self, last_id: Optional[int], batch_size: int) -> Tuple[List[Dict], Optional[int]]:
+    def fetch_leads_batch(self, last_id: int | None, batch_size: int) -> tuple[list[dict], int | None]:
         """
         Fetches a batch of leads starting from a given ID.
 

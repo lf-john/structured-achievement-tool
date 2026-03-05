@@ -5,11 +5,12 @@ This module provides functions for retrieving similar tasks from the VectorStore
 and formatting them into readable context for prompt enrichment.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Any
+
 from src.core.vector_store import VectorStore
 
 
-def retrieve_context(query: str, vector_store: VectorStore, k: int = 3) -> List[Dict[str, Any]]:
+def retrieve_context(query: str, vector_store: VectorStore, k: int = 3) -> list[dict[str, Any]]:
     """
     Retrieve similar past tasks from the VectorStore.
 
@@ -35,7 +36,7 @@ def retrieve_context(query: str, vector_store: VectorStore, k: int = 3) -> List[
         return []
 
 
-def format_context(results: List[Dict[str, Any]]) -> str:
+def format_context(results: list[dict[str, Any]]) -> str:
     """
     Format similar task results into readable context text.
 

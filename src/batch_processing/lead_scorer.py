@@ -1,11 +1,11 @@
 import abc
-from typing import List, Dict
+
 
 class LeadScorer(abc.ABC):
     """Abstract base class for scoring leads."""
 
     @abc.abstractmethod
-    def score_leads(self, leads: List[Dict]) -> None:
+    def score_leads(self, leads: list[dict]) -> None:
         """
         Applies scoring logic to a list of leads. Modifies leads in place or persists scores.
 

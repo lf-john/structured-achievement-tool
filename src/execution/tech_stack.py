@@ -6,10 +6,9 @@ Pure Python file-system scanning. No LLM calls.
 Results are cached per directory (invalidated if mtime changes).
 """
 
-import os
 import logging
+import os
 from dataclasses import dataclass
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +139,7 @@ def _refine_from_config(working_directory: str, stack: TechStack) -> TechStack:
         pyproject = os.path.join(working_directory, "pyproject.toml")
         if os.path.exists(pyproject):
             try:
-                with open(pyproject, "r") as f:
+                with open(pyproject) as f:
                     content = f.read()
                 if "[tool.pytest" in content:
                     stack.test_framework = "pytest"
@@ -160,7 +159,7 @@ def _refine_from_config(working_directory: str, stack: TechStack) -> TechStack:
         if os.path.exists(pkg_json):
             try:
                 import json
-                with open(pkg_json, "r") as f:
+                with open(pkg_json) as f:
                     pkg = json.load(f)
                 scripts = pkg.get("scripts", {})
                 test_script = scripts.get("test", "")

@@ -2,15 +2,14 @@
 
 import os
 import tempfile
-import pytest
 
 from src.llm.prompt_builder import (
+    PHASE_CONTEXT,
+    PHASE_TEMPLATES,
+    _format_acceptance_criteria,
+    build_prompt,
     load_template,
     substitute_placeholders,
-    build_prompt,
-    PHASE_TEMPLATES,
-    PHASE_CONTEXT,
-    _format_acceptance_criteria,
 )
 
 

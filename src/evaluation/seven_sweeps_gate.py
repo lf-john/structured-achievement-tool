@@ -3,8 +3,6 @@ Seven Sweeps Quality Gate validator for SAT-compatible JSON scoring.
 """
 
 import json
-from typing import Tuple
-
 
 EXPECTED_SWEEPS = [
     "clarity",
@@ -17,7 +15,7 @@ EXPECTED_SWEEPS = [
 ]
 
 
-def check_quality_gate(llm_response: str) -> Tuple[bool, dict]:
+def check_quality_gate(llm_response: str) -> tuple[bool, dict]:
     """
     Validate LLM JSON output against Seven Sweeps quality gate schema.
 

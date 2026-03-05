@@ -1,11 +1,9 @@
 import asyncio
-import fcntl
-import os
 import time
+
 import pytest
 
-from src.execution.slot_manager import SlotManager, SlotInfo, DEFAULT_MAX_SLOTS, MAX_SLOTS_LIMIT
-
+from src.execution.slot_manager import DEFAULT_MAX_SLOTS, MAX_SLOTS_LIMIT, SlotManager
 
 # ---------------------------------------------------------------------------
 # Fixtures

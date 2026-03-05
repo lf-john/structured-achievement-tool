@@ -4,7 +4,7 @@ Classifier Agent — Classify a user request into a workflow type.
 Complexity: 3 (Classification task). Routes to local models.
 """
 
-from typing import Type
+
 from pydantic import BaseModel
 
 from src.agents.base_agent import BaseAgent
@@ -18,7 +18,7 @@ class ClassifierAgent(BaseAgent):
         return "classifier"
 
     @property
-    def response_model(self) -> Type[BaseModel]:
+    def response_model(self) -> type[BaseModel]:
         return ClassifyResponse
 
     async def classify(self, user_request: str, working_directory: str) -> ClassifyResponse:

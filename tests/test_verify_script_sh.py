@@ -21,8 +21,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 # Test configuration
 SCRIPT_PATH = Path(__file__).parent.parent / "verify_script.sh"
 

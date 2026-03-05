@@ -63,7 +63,7 @@ import pytest
 # ---------------------------------------------------------------------------
 # Module under test — will fail with ImportError until implemented (TDD-RED)
 # ---------------------------------------------------------------------------
-from src.evaluation.seven_sweeps_gate import check_quality_gate  # noqa: E402
+from src.evaluation.seven_sweeps_gate import check_quality_gate
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -372,7 +372,7 @@ class TestCheckQualityGate:
             "sweeps": {s: {"score": 3, "pass": True, "issues": []} for s in EXPECTED_SWEEPS},
             "revised_copy": "Boundary test copy.",
         }
-        passed, result = check_quality_gate(json.dumps(boundary))
+        passed, _result = check_quality_gate(json.dumps(boundary))
         assert passed is False, (
             "All sweeps at 3 gives overall_score=60 which is < 70, so overall_pass must be False"
         )

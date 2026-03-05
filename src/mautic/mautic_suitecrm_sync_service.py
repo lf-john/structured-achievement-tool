@@ -1,7 +1,9 @@
 import logging
+
+from src.mautic.engagement_data_mapper import EngagementDataMapper
 from src.mautic.mautic_engagement_service import MauticEngagementService
 from src.mautic.suitecrm_client import SuiteCRMClient
-from src.mautic.engagement_data_mapper import EngagementDataMapper
+
 
 class MauticSuiteCRMSyncService:
     def __init__(self, mautic_engagement_service: MauticEngagementService,

@@ -2,15 +2,14 @@
 
 import json
 import os
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from src.health_check import (
-    run_proactive_checks,
+    _create_maintenance_story,
+    _hours_since,
     _load_proactive_state,
     _save_proactive_state,
-    _hours_since,
-    _create_maintenance_story,
+    run_proactive_checks,
 )
 
 

@@ -22,8 +22,9 @@ Edge Cases:
   - Panel with custom datasource
 """
 
-import pytest
 import json
+
+import pytest
 
 # These imports will fail since the implementation doesn't exist yet
 from src.dashboard_builder import DashboardBuilder

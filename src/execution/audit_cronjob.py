@@ -6,16 +6,14 @@ sends it to an LLM for assessment, and saves timestamped audit results.
 Sends ntfy notifications when issues are detected.
 """
 
-import os
-import json
-import time
 import hashlib
-import subprocess
+import json
 import logging
+import os
 import shutil
-from datetime import datetime, timedelta
-from typing import Optional
-from pathlib import Path
+import subprocess
+import time
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +43,8 @@ class MaintenanceAuditLog:
         self.max_bytes = max_bytes
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
-    def write(self, source: str, action: str, details: Optional[dict] = None,
-              llm_response_hash: Optional[str] = None):
+    def write(self, source: str, action: str, details: dict | None = None,
+              llm_response_hash: str | None = None):
         """Append one audit entry, rotating if the file exceeds max_bytes."""
         self._rotate_if_needed()
         entry = {
@@ -80,7 +78,7 @@ class MaintenanceAuditLog:
 
 class SystemAuditor:
     def __init__(self, audit_dir: str = AUDIT_DIR,
-                 maintenance_log: Optional[MaintenanceAuditLog] = None):
+                 maintenance_log: MaintenanceAuditLog | None = None):
         self.audit_dir = audit_dir
         self.audit_log = maintenance_log or MaintenanceAuditLog()
         os.makedirs(audit_dir, exist_ok=True)
@@ -248,7 +246,7 @@ class SystemAuditor:
                     try:
                         mtime = os.path.getmtime(fpath)
                         if mtime >= cutoff:
-                            with open(fpath, "r", encoding="utf-8") as f:
+                            with open(fpath, encoding="utf-8") as f:
                                 content = f.read(500)
                             status = "unknown"
                             for tag in ("<Finished>", "<Working>", "<Failed>", "<Pending>"):
@@ -296,7 +294,7 @@ class SystemAuditor:
         if not os.path.exists(debug_file):
             return []
         try:
-            with open(debug_file, "r", encoding="utf-8") as f:
+            with open(debug_file, encoding="utf-8") as f:
                 data = json.load(f)
             entries = []
             for task_id, info in data.items():

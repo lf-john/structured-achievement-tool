@@ -14,14 +14,12 @@ issue_manager for linking PRs to issues.
 import logging
 import re
 from dataclasses import dataclass
-from typing import Optional
 
-from src.github.gh_cli import run_gh, get_repo_from_remote
 from src.execution.git_manager import (
     get_diff_stat,
     get_modified_files,
-    get_current_commit,
 )
+from src.github.gh_cli import get_repo_from_remote, run_gh
 
 logger = logging.getLogger(__name__)
 
@@ -30,15 +28,15 @@ logger = logging.getLogger(__name__)
 class PRResult:
     """Result of a PR operation."""
     success: bool
-    pr_number: Optional[int] = None
-    pr_url: Optional[str] = None
-    error: Optional[str] = None
+    pr_number: int | None = None
+    pr_url: str | None = None
+    error: str | None = None
 
 
 class PRManager:
     """Manages pull requests for SAT story branches."""
 
-    def __init__(self, repo: Optional[str] = None, cwd: Optional[str] = None):
+    def __init__(self, repo: str | None = None, cwd: str | None = None):
         self.repo = repo or get_repo_from_remote(cwd)
         self.cwd = cwd
 
@@ -83,8 +81,8 @@ class PRManager:
         story: dict,
         branch_name: str,
         base_branch: str = "main",
-        working_directory: Optional[str] = None,
-        issue_number: Optional[int] = None,
+        working_directory: str | None = None,
+        issue_number: int | None = None,
         draft: bool = False,
     ) -> PRResult:
         """Create a pull request for a story branch.
@@ -131,7 +129,7 @@ class PRManager:
             logger.error(f"Failed to create PR for {story_id}: {result.stderr}")
             return PRResult(success=False, error=result.stderr)
 
-    def find_pr_by_branch(self, branch_name: str) -> Optional[int]:
+    def find_pr_by_branch(self, branch_name: str) -> int | None:
         """Find an existing PR for a branch.
 
         Returns:
@@ -182,7 +180,7 @@ class PRManager:
 
         return result.success
 
-    def get_pr_status(self, pr_number: int) -> Optional[dict]:
+    def get_pr_status(self, pr_number: int) -> dict | None:
         """Get the current status of a PR.
 
         Returns:
@@ -245,8 +243,8 @@ class PRManager:
     def _build_pr_body(
         self,
         story: dict,
-        working_directory: Optional[str] = None,
-        issue_number: Optional[int] = None,
+        working_directory: str | None = None,
+        issue_number: int | None = None,
     ) -> str:
         """Build the PR description from story context."""
         story_id = story.get("id", "unknown")
@@ -311,7 +309,7 @@ class PRManager:
 
         return "\n".join(lines)
 
-    def _extract_pr_number(self, url: str) -> Optional[int]:
+    def _extract_pr_number(self, url: str) -> int | None:
         """Extract PR number from GitHub URL."""
         match = re.search(r'/pull/(\d+)', url)
         if match:

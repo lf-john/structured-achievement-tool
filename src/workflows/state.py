@@ -6,10 +6,11 @@ PhaseOutput captures the result of each phase execution.
 Pydantic models enforce typed interfaces at all cross-component boundaries.
 """
 
-from typing import TypedDict, List, Optional, Any
-from pydantic import BaseModel, Field
 from datetime import datetime
 from enum import Enum
+from typing import TypedDict
+
+from pydantic import BaseModel, Field
 
 
 class PhaseStatus(str, Enum):
@@ -47,7 +48,7 @@ class MediatorVerdict(BaseModel):
     decision: str  # ACCEPT, REVERT, PARTIAL, RETRY
     confidence: float = 0.0
     reasoning: str = ""
-    retry_guidance: Optional[str] = None
+    retry_guidance: str | None = None
 
 
 # --- Cross-component boundary models (Phase 163 Pydantic improvements) ---
@@ -63,19 +64,19 @@ class StoryModel(BaseModel):
     description: str = ""
     type: str = "development"
     status: str = "pending"
-    dependsOn: List[str] = Field(default_factory=list)
-    acceptanceCriteria: List[str] = Field(default_factory=list)
+    dependsOn: list[str] = Field(default_factory=list)
+    acceptanceCriteria: list[str] = Field(default_factory=list)
     complexity: int = Field(default=5, ge=0, le=10)
-    verification_agents: List[str] = Field(default_factory=list)
+    verification_agents: list[str] = Field(default_factory=list)
     outcome_verification: bool = False
-    output_path: Optional[str] = None
-    output_format: Optional[str] = None
-    doc_type: Optional[str] = None
+    output_path: str | None = None
+    output_format: str | None = None
+    doc_type: str | None = None
     store: bool = False  # If True, persist output to file + vector memory
 
     # Execution-time fields (not from decomposition)
-    working_directory: Optional[str] = None
-    git_branch: Optional[str] = None
+    working_directory: str | None = None
+    git_branch: str | None = None
 
     def to_dict(self) -> dict:
         """Convert to dict for backward compatibility with code expecting raw dicts."""
@@ -94,8 +95,8 @@ class ValidationResult(BaseModel):
     """
     passed: bool
     reason: str = ""
-    checks_run: List[str] = Field(default_factory=list)
-    issues: List[str] = Field(default_factory=list)
+    checks_run: list[str] = Field(default_factory=list)
+    issues: list[str] = Field(default_factory=list)
 
 
 class QAFeedback(BaseModel):
@@ -104,8 +105,8 @@ class QAFeedback(BaseModel):
     Replaces raw qa_feedback_parsed dicts in StoryState.
     """
     verdict: str = ""  # "approved", "needs_changes", "rejected"
-    bugs: List[str] = Field(default_factory=list)
-    suggestions: List[str] = Field(default_factory=list)
+    bugs: list[str] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list)
     comments: str = ""
 
 
@@ -117,7 +118,7 @@ class EscalationPackage(BaseModel):
     reason: str
     severity: str = "medium"  # low, medium, high, critical
     context: str = ""
-    failed_phases: List[str] = Field(default_factory=list)
+    failed_phases: list[str] = Field(default_factory=list)
     error_summary: str = ""
     recommended_action: str = ""
 
@@ -152,12 +153,12 @@ class StoryState(TypedDict):
 
     # Phase tracking — use PhaseOutput.model_validate(d) for each entry
     current_phase: str
-    phase_outputs: List[dict]  # List of PhaseOutput.model_dump() dicts
+    phase_outputs: list[dict]  # List of PhaseOutput.model_dump() dicts
     phase_retry_count: int  # Retries within current phase (resets per phase)
 
     # Verification state — use TestResult.model_validate(state["test_results"])
-    verify_passed: Optional[bool]
-    test_results: Optional[dict]  # TestResult.model_dump() dict
+    verify_passed: bool | None
+    test_results: dict | None  # TestResult.model_dump() dict
 
     # Failure handling
     failure_context: str  # Error output from last failure, fed to retry
@@ -165,43 +166,43 @@ class StoryState(TypedDict):
     max_attempts: int
 
     # Mediator — use MediatorVerdict.model_validate(state["mediator_verdict"])
-    mediator_verdict: Optional[dict]  # MediatorVerdict.model_dump() dict
+    mediator_verdict: dict | None  # MediatorVerdict.model_dump() dict
     mediator_enabled: bool
 
     # Git state
     working_directory: str
-    git_base_commit: Optional[str]  # Commit hash to reset to on retry
+    git_base_commit: str | None  # Commit hash to reset to on retry
 
     # Context for progressive disclosure
     design_output: str  # Architecture decisions from DESIGN phase
     test_files: str  # Test file content from TDD_RED phase
     plan_output: str  # Plan from PLAN phase (config/maint workflows)
-    reproduction_status: Optional[str]
-    reproduction_details: Optional[str]
-    diagnosis_category: Optional[str]  # Category from DIAGNOSE phase (Dev, Config, Maint, Report)
-    diagnosis_reasoning: Optional[str]  # Reasoning for diagnosis categorization
+    reproduction_status: str | None
+    reproduction_details: str | None
+    diagnosis_category: str | None  # Category from DIAGNOSE phase (Dev, Config, Maint, Report)
+    diagnosis_reasoning: str | None  # Reasoning for diagnosis categorization
 
     # Parallel gather/verify results (Phase 3 enhancements)
-    gather_results: Optional[dict]  # Merged results from parallel gather channels
-    verify_check_results: Optional[dict]  # Results from parallel verification checks
-    config_validation_result: Optional[dict]  # Config syntax validation result
-    dependency_check_result: Optional[dict]  # Dependency verification result
+    gather_results: dict | None  # Merged results from parallel gather channels
+    verify_check_results: dict | None  # Results from parallel verification checks
+    config_validation_result: dict | None  # Config syntax validation result
+    dependency_check_result: dict | None  # Dependency verification result
 
     # Approval workflow state
-    pause_response: Optional[str]  # Human response text from approval
-    pause_escalated: Optional[bool]  # Whether escalation was triggered
-    approval_status: Optional[str]  # responded, waiting, timeout, auto_approved
-    approval_signal_path: Optional[str]  # Path to the approval signal file
-    approval_elapsed: Optional[int]  # Total elapsed time in approval
+    pause_response: str | None  # Human response text from approval
+    pause_escalated: bool | None  # Whether escalation was triggered
+    approval_status: str | None  # responded, waiting, timeout, auto_approved
+    approval_signal_path: str | None  # Path to the approval signal file
+    approval_elapsed: int | None  # Total elapsed time in approval
 
     # Human workflow state (Phase 5)
     # Use ValidationResult.model_validate(), QAFeedback.model_validate(),
     # EscalationPackage.model_validate() at boundaries
-    human_summary: Optional[str]  # Prepared human-readable brief from PREPARE node
-    human_deliverables: Optional[str]  # Human's work output from INTEGRATE node
-    qa_feedback_parsed: Optional[dict]  # QAFeedback.model_dump() dict
-    escalation_package: Optional[dict]  # EscalationPackage.model_dump() dict
-    validation_result: Optional[dict]  # ValidationResult.model_dump() dict
+    human_summary: str | None  # Prepared human-readable brief from PREPARE node
+    human_deliverables: str | None  # Human's work output from INTEGRATE node
+    qa_feedback_parsed: dict | None  # QAFeedback.model_dump() dict
+    escalation_package: dict | None  # EscalationPackage.model_dump() dict
+    validation_result: dict | None  # ValidationResult.model_dump() dict
 
 
 def create_initial_state(

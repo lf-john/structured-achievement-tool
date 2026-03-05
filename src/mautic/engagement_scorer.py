@@ -1,4 +1,5 @@
 import logging
+
 from src.core.embedding_service import EmbeddingService
 from src.core.vector_store import VectorStore
 
@@ -33,21 +34,21 @@ class EngagementScorer:
         try:
             # The tests are mocking similarity_search_and_return_scores which returns list of (metadata, score)
             results = self.vector_store.similarity_search_and_return_scores(query_embedding=query_embedding, k=1)
-            
+
             if results and len(results) > 0:
                 # results[0] is a tuple: (Document object, score)
                 # The tests mock this to return ({'tier': 'hot'}, 0.95)
                 document_metadata = results[0][0] # Access the Document object (which is a dict in the mock)
-                
+
                 if isinstance(document_metadata, dict):
                     closest_tier = document_metadata.get("tier")
                 # The actual Document object might have a .metadata attribute. For now, we assume dict for mock.
                 # else:
                 #     closest_tier = document_metadata.metadata.get("tier")
-                
+
                 if closest_tier in self.engagement_tiers:
                     return closest_tier
-            
+
             logger.warning("Could not determine closest tier from vector store. Defaulting to 'cold'.")
             return "cold"
         except Exception as e:
@@ -66,10 +67,10 @@ class EngagementScorer:
     def score_user_engagement(self, user_id: str) -> str:
         """
         Scores user engagement based on Mautic history fetched for the given user_id.
-        
+
         Args:
             user_id: The ID of the user whose engagement is to be scored.
-        
+
         Returns:
             The engagement tier (e.g., "hot", "warm", "cold").
         """
@@ -94,7 +95,7 @@ class EngagementScorer:
             # This ensures similarity_search_and_return_scores is called, as per test expectation.
             dummy_cold_embedding = [0.0] * 768  # A placeholder or a known 'cold' embedding
             return self._find_closest_tier(dummy_cold_embedding)
-        
+
         return self._find_closest_tier(history_embedding)
-        
+
         return self._find_closest_tier(history_embedding)

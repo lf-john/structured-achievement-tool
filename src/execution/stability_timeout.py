@@ -8,10 +8,9 @@ to remove the '#' safety prefix.
 Phase 2, item 2.12.
 """
 
+import logging
 import os
 import time
-import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +120,7 @@ class StabilityTimeout:
         gate that SAT waits for the user to remove.
         """
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
             return "# <Pending>" in content
         except (OSError, UnicodeDecodeError):
@@ -130,7 +129,7 @@ class StabilityTimeout:
     def _has_working_marker(self, file_path: str) -> bool:
         """Check if file contains '<Working>' (should not timeout)."""
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
             return "<Working>" in content
         except (OSError, UnicodeDecodeError):
@@ -144,7 +143,7 @@ class StabilityTimeout:
         """
         now = time.time()
         result = {}
-        for file_path, (tracked_mtime, first_seen_at) in self._tracked_files.items():
+        for file_path, (_tracked_mtime, first_seen_at) in self._tracked_files.items():
             elapsed = now - first_seen_at
             remaining = self.timeout_seconds - elapsed
             result[file_path] = remaining

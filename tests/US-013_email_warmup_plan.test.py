@@ -48,7 +48,7 @@ def assert_true(condition, message):
 def load_doc():
     if not os.path.exists(DOC_PATH):
         return None
-    with open(DOC_PATH, "r") as f:
+    with open(DOC_PATH) as f:
         return f.read()
 
 

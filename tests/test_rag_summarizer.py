@@ -5,11 +5,11 @@ Uses pytest + unittest.mock. All Ollama subprocess calls are mocked.
 """
 
 import subprocess
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
-from src.core.rag_summarizer import RAGSummarizer, _MAX_CHARS_PER_RESULT
-
+from src.core.rag_summarizer import _MAX_CHARS_PER_RESULT, RAGSummarizer
 
 # ---------------------------------------------------------------------------
 # Fixtures

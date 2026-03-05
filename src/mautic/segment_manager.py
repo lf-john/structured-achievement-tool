@@ -1,5 +1,7 @@
 import os
+
 from .mautic_api_client import MauticApiClient
+
 
 def get_mautic_client() -> MauticApiClient:
     # In a real scenario, these would come from secure configuration or environment variables
@@ -47,7 +49,7 @@ def create_all_segments():
             filters=segment["filters"]
         )
         results.append(result)
-        if "simulated_success" in result and result["simulated_success"]:
+        if result.get("simulated_success"):
             print(f"Successfully simulated creation of segment: {segment['name']}")
         else:
             print(f"Failed to simulate creation of segment: {segment['name']} - {result.get('error', 'Unknown error')}")

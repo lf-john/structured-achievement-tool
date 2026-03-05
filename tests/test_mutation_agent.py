@@ -1,17 +1,13 @@
 """Tests for src.agents.mutation_agent — Mutation testing agent."""
 
-import os
-import pytest
-import tempfile
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.agents.mutation_agent import (
-    generate_mutations,
-    _generate_mutations_for_line,
-    run_mutation_test,
-    run_mutation_suite,
     Mutation,
     MutationReport,
+    _generate_mutations_for_line,
+    generate_mutations,
+    run_mutation_test,
 )
 
 

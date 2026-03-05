@@ -5,13 +5,12 @@ Ported from Ralph Pro runTests/executeVerifications (lines 1290-1380, 1770-1810)
 Supports 5 verification types: command, file_exists, manual, test, tdd_test.
 """
 
-import os
-import sys
-import subprocess
-import re
 import logging
+import os
+import re
+import subprocess
+import sys
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +133,7 @@ def _detect_framework(command: str) -> str:
 def get_test_command(
     story: dict,
     working_directory: str,
-    project_test_command: Optional[str] = None,
+    project_test_command: str | None = None,
 ) -> str:
     """Determine the best test command for a story.
 
@@ -246,7 +245,7 @@ def get_test_command(
 def execute_verifications(
     story: dict,
     working_directory: str,
-    project_test_command: Optional[str] = None,
+    project_test_command: str | None = None,
 ) -> VerificationResult:
     """Execute all verification checks for a story.
 

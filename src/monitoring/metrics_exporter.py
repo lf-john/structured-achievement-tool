@@ -13,17 +13,14 @@ Metrics exported:
 - sat_queue_depth (gauge)
 """
 
-import json
 import logging
 import os
 import time
-from collections import Counter
 from dataclasses import dataclass, field
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
-from typing import Dict, List, Optional
 
-from src.execution.audit_journal import AuditJournal, AuditRecord
+from src.execution.audit_journal import AuditJournal
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +32,7 @@ class MetricsSnapshot:
     stories_failed: int = 0
     stories_total: int = 0
     avg_duration_seconds: float = 0.0
-    failure_type_counts: Dict[str, int] = field(default_factory=dict)
+    failure_type_counts: dict[str, int] = field(default_factory=dict)
     tasks_completed: int = 0
     tasks_failed: int = 0
     queue_depth: int = 0
@@ -45,8 +42,8 @@ class MetricsSnapshot:
 
 def collect_metrics(
     audit_journal: AuditJournal,
-    queue_dir: Optional[str] = None,
-    start_time: Optional[float] = None,
+    queue_dir: str | None = None,
+    start_time: float | None = None,
 ) -> MetricsSnapshot:
     """Collect current metrics from audit journal and system state.
 
@@ -100,7 +97,7 @@ def collect_metrics(
                         if f.endswith('.md') and not f.startswith('_'):
                             filepath = os.path.join(item_path, f)
                             try:
-                                with open(filepath, 'r') as fh:
+                                with open(filepath) as fh:
                                     content = fh.read(500)
                                 if '<Pending>' in content and '# <Pending>' not in content:
                                     snapshot.queue_depth += 1
@@ -216,7 +213,7 @@ class MetricsHandler(BaseHTTPRequestHandler):
 def start_metrics_server(
     audit_journal: AuditJournal,
     port: int = 9101,
-    queue_dir: Optional[str] = None,
+    queue_dir: str | None = None,
 ) -> HTTPServer:
     """Start the metrics HTTP server in a background thread.
 

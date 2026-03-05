@@ -7,11 +7,10 @@ Persistent failures (code bugs, test failures, import errors) → create Debug s
 Complexity 1-2: pure Python pattern matching, no LLM needed.
 """
 
-import re
 import logging
-from enum import Enum
+import re
 from dataclasses import dataclass
-from typing import Optional
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 

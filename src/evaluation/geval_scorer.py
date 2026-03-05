@@ -18,10 +18,8 @@ import json
 import logging
 import os
 import sqlite3
-import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, List, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +126,7 @@ def _get_pending_invocations(
     events_file: str,
     db_path: str,
     batch_size: int = BATCH_SIZE,
-) -> List[dict]:
+) -> list[dict]:
     """Read unscored LLM invocations from events.jsonl."""
     if not os.path.exists(events_file):
         return []
@@ -137,7 +135,7 @@ def _get_pending_invocations(
     pending = []
 
     try:
-        with open(events_file, "r") as f:
+        with open(events_file) as f:
             f.seek(offset)
             while True:
                 line = f.readline()
@@ -179,7 +177,7 @@ def score_pending_invocations(
     for event in pending:
         try:
             data = event.get("data", {})
-            provider = data.get("provider", "unknown")
+            data.get("provider", "unknown")
             agent_type = data.get("agent_type", "unknown")
             response_preview = data.get("output_preview", "")[:2000]
             phase = data.get("phase", "unknown")
@@ -211,7 +209,7 @@ def score_pending_invocations(
     return scored
 
 
-def _score_with_nemotron(agent_type: str, phase: str, response_preview: str) -> Optional[InvocationScore]:
+def _score_with_nemotron(agent_type: str, phase: str, response_preview: str) -> InvocationScore | None:
     """Call Nemotron to score a response. Returns None on failure."""
     import subprocess
 
@@ -258,8 +256,8 @@ def _save_score(
     db_path: str,
     score: InvocationScore,
     event_ts: str,
-    agent_confidence: Optional[int] = None,
-    template_version: Optional[str] = None,
+    agent_confidence: int | None = None,
+    template_version: str | None = None,
 ):
     """Save a score to the database."""
     try:
@@ -286,7 +284,7 @@ def _save_score(
         logger.warning(f"Failed to save G-Eval score: {e}")
 
 
-def get_provider_performance(db_path: str = DEFAULT_DB_PATH) -> Dict[str, dict]:
+def get_provider_performance(db_path: str = DEFAULT_DB_PATH) -> dict[str, dict]:
     """Get aggregated performance scores by provider and agent type.
 
     Returns: {provider: {agent_type: {avg_score, sample_count, low_scores, score_distribution}}}
@@ -326,7 +324,7 @@ def get_provider_performance(db_path: str = DEFAULT_DB_PATH) -> Dict[str, dict]:
     return results
 
 
-def _get_score_distribution(conn, provider: str, agent_type: str) -> Dict[str, Dict[int, int]]:
+def _get_score_distribution(conn, provider: str, agent_type: str) -> dict[str, dict[int, int]]:
     """Get per-dimension score counts for a provider/agent_type pair."""
     dist = {"completeness": {}, "correctness": {}, "format_compliance": {}}
     for dim in dist:
@@ -340,7 +338,7 @@ def _get_score_distribution(conn, provider: str, agent_type: str) -> Dict[str, D
     return dist
 
 
-def get_calibration_report(db_path: str = DEFAULT_DB_PATH) -> List[dict]:
+def get_calibration_report(db_path: str = DEFAULT_DB_PATH) -> list[dict]:
     """Get agent self-assessment calibration data.
 
     Compares agent confidence (1-5) with G-Eval scores to measure how
@@ -378,7 +376,7 @@ def get_calibration_report(db_path: str = DEFAULT_DB_PATH) -> List[dict]:
     return results
 
 
-def get_low_scoring_details(db_path: str = DEFAULT_DB_PATH) -> List[dict]:
+def get_low_scoring_details(db_path: str = DEFAULT_DB_PATH) -> list[dict]:
     """Get details of invocations where any dimension scored <= 2.
 
     Used for the daily digest to surface quality issues.

@@ -9,16 +9,15 @@ Query http://localhost:11434/api/tags to verify the availability of expected Oll
 - nomic-embed-text
 """
 
-import requests
 import logging
-from typing import List, Tuple
 
+import requests
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 
-def get_expected_models() -> List[str]:
+def get_expected_models() -> list[str]:
     """
     Get the list of expected model name substrings.
 
@@ -34,7 +33,7 @@ def get_expected_models() -> List[str]:
     ]
 
 
-def _extract_model_core_parts(model_name: str) -> List[str]:
+def _extract_model_core_parts(model_name: str) -> list[str]:
     """
     Extract core components from a model name for flexible matching.
 
@@ -60,7 +59,7 @@ def _extract_model_core_parts(model_name: str) -> List[str]:
     return parts.split('-')
 
 
-def verify_ollama_models(api_url: str = "http://localhost:11434/api/tags") -> Tuple[bool, List[str]]:
+def verify_ollama_models(api_url: str = "http://localhost:11434/api/tags") -> tuple[bool, list[str]]:
     """
     Verify that expected Ollama models are available.
 

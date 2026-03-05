@@ -4,14 +4,15 @@ Tests for AuditJournal — audit journaling module (Phase 2 item 2.10).
 Uses tmp_path fixtures instead of mock_open for reliable JSONL line iteration.
 """
 
-import pytest
-from datetime import datetime
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 
-from src.execution.audit_journal import AuditJournal, AuditRecord
+import pytest
 from pydantic import ValidationError
+
+from src.execution.audit_journal import AuditJournal, AuditRecord
 
 
 @pytest.fixture
@@ -169,7 +170,7 @@ class TestAuditJournal:
     def test_audit_journal_initialization_creates_directory_if_not_exists(self, tmp_path):
         """AC 3: Ensures AuditJournal creates the journal directory if it doesn't exist."""
         nested_path = str(tmp_path / "nested" / "dir" / "journal.jsonl")
-        journal = AuditJournal(nested_path)
+        AuditJournal(nested_path)
         assert os.path.isdir(os.path.dirname(nested_path))
 
     def test_audit_journal_initialization_sets_correct_file_path(self, journal_path):
@@ -191,7 +192,7 @@ class TestAuditJournal:
         )
         journal.log(record)
 
-        with open(journal_path, "r") as f:
+        with open(journal_path) as f:
             lines = f.readlines()
         assert len(lines) == 1
         parsed = json.loads(lines[0])
@@ -203,7 +204,7 @@ class TestAuditJournal:
         for record in mock_audit_records:
             journal.log(record)
 
-        with open(journal_path, "r") as f:
+        with open(journal_path) as f:
             lines = f.readlines()
         assert len(lines) == len(mock_audit_records)
         for i, line in enumerate(lines):

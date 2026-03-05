@@ -27,38 +27,33 @@ Loopbacks:
 import logging
 import os
 from functools import partial
-from typing import Literal, Optional
+from typing import Literal
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
-from src.workflows.state import StoryState, PhaseOutput, PhaseStatus
-from src.workflows.base_workflow import BaseWorkflow, phase_node, _run_async
-from src.workflows.control_nodes import notify_node
-from src.workflows.approval_workflow import (
-    ApprovalConfig,
-    approval_pause_node,
-    pause_initial_decision,
-    approval_follow_up_node,
-    follow_up_decision,
-    approval_escalation_node,
-)
 from src.agents.human_task_agent import (
     HumanTaskAgent,
-    HumanTaskResponse,
-    VerificationCheck,
-    detect_human_needs,
-    detect_provider,
 )
 from src.execution.verification_sdk import (
     DelayedChecker,
-    PortChecker,
     FileChecker,
+    PortChecker,
     ServiceChecker,
-    ConfigValidator,
     VerifyResult,
 )
-from src.notifications.notifier import Notifier
 from src.llm.routing_engine import RoutingEngine
+from src.notifications.notifier import Notifier
+from src.workflows.approval_workflow import (
+    ApprovalConfig,
+    approval_escalation_node,
+    approval_follow_up_node,
+    approval_pause_node,
+    follow_up_decision,
+    pause_initial_decision,
+)
+from src.workflows.base_workflow import BaseWorkflow, _run_async, phase_node
+from src.workflows.control_nodes import notify_node
+from src.workflows.state import PhaseOutput, PhaseStatus, StoryState
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +196,7 @@ def generate_instructions_node(
 
     # Documentation link
     if doc_url:
-        parts.append(f"## Documentation")
+        parts.append("## Documentation")
         parts.append(f"- {doc_url}")
         parts.append("")
 
@@ -258,7 +253,7 @@ def write_instructions_node(
     story = state.get("story", {})
     story_id = story.get("id", "unknown")
     story_title = story.get("title", "Untitled")
-    instructions = state.get("human_summary", "")
+    state.get("human_summary", "")
     provider = state.get("human_task_response", {}).get("provider", "")
 
     # Send notification
@@ -398,7 +393,7 @@ def pre_verify_decision(state: StoryState) -> Literal["needs_work", "already_don
 
 def quick_check_node(
     state: StoryState,
-    notifier: Optional[Notifier] = None,
+    notifier: Notifier | None = None,
 ) -> StoryState:
     """Run immediate verification checks after human signals completion.
 
@@ -578,9 +573,9 @@ class HumanTaskWorkflow(BaseWorkflow):
 
     def __init__(
         self,
-        routing_engine: Optional[RoutingEngine] = None,
-        notifier: Optional[Notifier] = None,
-        config: Optional[ApprovalConfig] = None,
+        routing_engine: RoutingEngine | None = None,
+        notifier: Notifier | None = None,
+        config: ApprovalConfig | None = None,
     ):
         self.routing_engine = routing_engine or RoutingEngine()
         self.notifier = notifier or Notifier()

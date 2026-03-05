@@ -1,7 +1,6 @@
 """Tests for the ntfy progress bar in Notifier."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from src.notifications.notifier import Notifier
 

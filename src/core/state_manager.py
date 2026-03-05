@@ -4,9 +4,8 @@ SQLite State Manager
 Provides key-value storage using SQLite database with JSON serialization.
 """
 
-import sqlite3
 import json
-import os
+import sqlite3
 import threading
 
 

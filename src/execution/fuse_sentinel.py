@@ -20,9 +20,8 @@ import json
 import logging
 import os
 import time
-import urllib.request
 import urllib.error
-from typing import Optional
+import urllib.request
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +58,7 @@ class FuseSentinel:
         self.rc_url = rc_url
         self._last_healthy: float = 0.0
         self._consecutive_failures: int = 0
-        self._rc_available: Optional[bool] = None  # None = not yet checked
+        self._rc_available: bool | None = None  # None = not yet checked
 
     def is_healthy(self) -> bool:
         """Check if the FUSE mount is healthy.
@@ -85,7 +84,7 @@ class FuseSentinel:
 
             # Readability check — try to read a small chunk.
             # On a hung FUSE mount, this will block/timeout.
-            with open(self.sentinel_path, "r", encoding="utf-8") as f:
+            with open(self.sentinel_path, encoding="utf-8") as f:
                 header = f.read(100)
             if not header:
                 self._record_failure("sentinel file read returned empty")
@@ -119,7 +118,7 @@ class FuseSentinel:
             self._record_failure(f"unexpected error: {e}")
             return False
 
-    def _check_rclone_rc(self) -> Optional[bool]:
+    def _check_rclone_rc(self) -> bool | None:
         """Check rclone RC API for VFS health.
 
         Returns:

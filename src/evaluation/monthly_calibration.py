@@ -23,13 +23,13 @@ import logging
 import os
 import sqlite3
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -74,7 +74,7 @@ logger.addHandler(_sh)
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _period_bounds(reference: Optional[datetime] = None) -> Tuple[str, str, str]:
+def _period_bounds(reference: datetime | None = None) -> tuple[str, str, str]:
     """Return (label, start_iso, end_iso) for the preceding calendar month."""
     ref = reference or datetime.utcnow()
     first_of_this_month = ref.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -84,7 +84,7 @@ def _period_bounds(reference: Optional[datetime] = None) -> Tuple[str, str, str]
     return label, start.isoformat(), end.isoformat()
 
 
-def _safe_db_query(db_path: Path, sql: str, params: tuple = ()) -> List[tuple]:
+def _safe_db_query(db_path: Path, sql: str, params: tuple = ()) -> list[tuple]:
     """Run a read-only query against a SQLite database. Returns [] on any error."""
     if not db_path.exists():
         logger.info("Database not found, skipping: %s", db_path)
@@ -99,7 +99,7 @@ def _safe_db_query(db_path: Path, sql: str, params: tuple = ()) -> List[tuple]:
         return []
 
 
-def _safe_db_query_dicts(db_path: Path, sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
+def _safe_db_query_dicts(db_path: Path, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
     """Like _safe_db_query but returns list of dicts."""
     if not db_path.exists():
         logger.info("Database not found, skipping: %s", db_path)
@@ -114,14 +114,14 @@ def _safe_db_query_dicts(db_path: Path, sql: str, params: tuple = ()) -> List[Di
         return []
 
 
-def _read_audit_journal(start_iso: str, end_iso: str) -> List[Dict[str, Any]]:
+def _read_audit_journal(start_iso: str, end_iso: str) -> list[dict[str, Any]]:
     """Read audit_journal.jsonl entries within the period."""
     if not AUDIT_JOURNAL.exists():
         logger.info("Audit journal not found, skipping: %s", AUDIT_JOURNAL)
         return []
     entries = []
     try:
-        with open(AUDIT_JOURNAL, "r") as f:
+        with open(AUDIT_JOURNAL) as f:
             for lineno, line in enumerate(f, 1):
                 line = line.strip()
                 if not line:
@@ -178,13 +178,13 @@ class ReportData:
     start_iso: str = ""
     end_iso: str = ""
     # Cost data
-    cost_rows: List[Dict[str, Any]] = field(default_factory=list)
+    cost_rows: list[dict[str, Any]] = field(default_factory=list)
     # Events data (from sat.db)
-    event_rows: List[Dict[str, Any]] = field(default_factory=list)
+    event_rows: list[dict[str, Any]] = field(default_factory=list)
     # Audit journal entries
-    audit_entries: List[Dict[str, Any]] = field(default_factory=list)
+    audit_entries: list[dict[str, Any]] = field(default_factory=list)
     # G-Eval scores
-    geval_rows: List[Dict[str, Any]] = field(default_factory=list)
+    geval_rows: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _gather_data(label: str, start_iso: str, end_iso: str) -> ReportData:
@@ -236,7 +236,7 @@ def _section_cost(rd: ReportData) -> str:
         return "\n".join(lines)
 
     # Aggregate by provider/model from llm_costs.db
-    by_model: Dict[str, Dict[str, float]] = defaultdict(lambda: {
+    by_model: dict[str, dict[str, float]] = defaultdict(lambda: {
         "cost": 0.0, "prompt_tokens": 0, "completion_tokens": 0, "invocations": 0
     })
     for row in rd.cost_rows:
@@ -247,8 +247,8 @@ def _section_cost(rd: ReportData) -> str:
         by_model[model]["invocations"] += 1
 
     # Also aggregate cost_estimate from sat.db events (may overlap, noted in report)
-    events_cost_by_provider: Dict[str, float] = defaultdict(float)
-    events_invocations_by_provider: Dict[str, int] = defaultdict(int)
+    events_cost_by_provider: dict[str, float] = defaultdict(float)
+    events_invocations_by_provider: dict[str, int] = defaultdict(int)
     for ev in rd.event_rows:
         if ev.get("cost_estimate") and ev.get("provider"):
             events_cost_by_provider[ev["provider"]] += ev["cost_estimate"]
@@ -259,7 +259,7 @@ def _section_cost(rd: ReportData) -> str:
 
     # Successful stories from audit journal
     successful_stories = sum(1 for e in rd.audit_entries if e.get("success"))
-    total_stories = len(rd.audit_entries)
+    len(rd.audit_entries)
 
     lines.append(f"**Total spend (llm_costs.db):** {_fmt_usd(total_cost)}")
     lines.append(f"**Total invocations:** {total_invocations}")
@@ -316,7 +316,7 @@ def _section_reliability(rd: ReportData) -> str:
     lines.append("")
 
     # Success rate by task file (proxy for agent type / domain)
-    by_task: Dict[str, Dict[str, int]] = defaultdict(lambda: {"success": 0, "total": 0})
+    by_task: dict[str, dict[str, int]] = defaultdict(lambda: {"success": 0, "total": 0})
     for e in rd.audit_entries:
         # Use the parent directory name as the task domain
         tf = e.get("task_file", "unknown")
@@ -337,7 +337,7 @@ def _section_reliability(rd: ReportData) -> str:
     # Failure categories
     failure_entries = [e for e in rd.audit_entries if not e.get("success")]
     if failure_entries:
-        error_cats: Dict[str, int] = defaultdict(int)
+        error_cats: dict[str, int] = defaultdict(int)
         for e in failure_entries:
             summary = e.get("error_summary") or "unknown"
             # Normalize to first 80 chars for grouping
@@ -353,7 +353,7 @@ def _section_reliability(rd: ReportData) -> str:
         lines.append("")
 
     # Provider-level reliability from sat.db events
-    provider_outcomes: Dict[str, Dict[str, int]] = defaultdict(lambda: {"success": 0, "fail": 0})
+    provider_outcomes: dict[str, dict[str, int]] = defaultdict(lambda: {"success": 0, "fail": 0})
     for ev in rd.event_rows:
         prov = ev.get("provider")
         etype = ev.get("event_type", "")
@@ -389,7 +389,7 @@ def _section_quality(rd: ReportData) -> str:
         return "\n".join(lines)
 
     # Aggregate by provider x agent_type
-    key_scores: Dict[Tuple[str, str], List[Dict[str, Any]]] = defaultdict(list)
+    key_scores: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in rd.geval_rows:
         key = (row.get("provider", "unknown"), row.get("agent_type", "unknown"))
         key_scores[key].append(row)
@@ -439,7 +439,7 @@ def _section_routing_recommendations(rd: ReportData) -> str:
     recommendations = []
 
     # Analyze cost efficiency: flag models where cost/invocation is high but quality is low
-    model_costs: Dict[str, Dict[str, float]] = defaultdict(lambda: {"cost": 0.0, "invocations": 0})
+    model_costs: dict[str, dict[str, float]] = defaultdict(lambda: {"cost": 0.0, "invocations": 0})
     for row in rd.cost_rows:
         m = row["model_name"]
         model_costs[m]["cost"] += row["estimated_cost"]
@@ -460,7 +460,7 @@ def _section_routing_recommendations(rd: ReportData) -> str:
     local_models = [m for m in model_costs if any(
         tag in m.lower() for tag in ["qwen", "deepseek", "nemotron", "llama", "mistral"]
     )]
-    cloud_models = [m for m in model_costs if m not in local_models]
+    [m for m in model_costs if m not in local_models]
     total_inv = sum(model_costs[m]["invocations"] for m in model_costs)
     local_inv = sum(model_costs[m]["invocations"] for m in local_models)
 
@@ -471,7 +471,7 @@ def _section_routing_recommendations(rd: ReportData) -> str:
         )
 
     # Reliability-based: suggest steering away from high-failure providers
-    provider_fail: Dict[str, Dict[str, int]] = defaultdict(lambda: {"success": 0, "fail": 0})
+    provider_fail: dict[str, dict[str, int]] = defaultdict(lambda: {"success": 0, "fail": 0})
     for e in rd.audit_entries:
         # Try to extract provider from events
         if e.get("success"):
@@ -501,7 +501,7 @@ def _section_routing_recommendations(rd: ReportData) -> str:
             )
 
     # G-Eval based: suggest complexity reduction for low-scoring combos
-    key_scores: Dict[Tuple[str, str], List[Dict[str, Any]]] = defaultdict(list)
+    key_scores: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in rd.geval_rows:
         key = (row.get("provider", "unknown"), row.get("agent_type", "unknown"))
         key_scores[key].append(row)
@@ -561,7 +561,7 @@ def _section_budget_projection(rd: ReportData) -> str:
     lines.append("")
 
     # Breakdown by model for projection
-    model_daily: Dict[str, float] = defaultdict(float)
+    model_daily: dict[str, float] = defaultdict(float)
     for row in rd.cost_rows:
         model_daily[row["model_name"]] += row["estimated_cost"] / days_in_period
 
@@ -592,7 +592,7 @@ def _section_budget_projection(rd: ReportData) -> str:
 # Report assembly
 # ---------------------------------------------------------------------------
 
-def generate_report(reference_date: Optional[datetime] = None) -> Tuple[str, str]:
+def generate_report(reference_date: datetime | None = None) -> tuple[str, str]:
     """
     Generate the full monthly calibration report.
 

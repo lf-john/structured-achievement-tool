@@ -1,15 +1,11 @@
 """Tests for src.execution.tech_stack — Tech stack detection."""
 
-import os
 import json
-import pytest
-from unittest.mock import patch
 
 from src.execution.tech_stack import (
+    _cache,
     detect_tech_stack,
     get_existing_test_files,
-    TechStack,
-    _cache,
 )
 
 

@@ -5,27 +5,25 @@ mark_file_status, is_task_ready, get_latest_md_file, and PID lock management.
 """
 
 import os
-import tempfile
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, mock_open, MagicMock
 
 from src.daemon import (
-    has_tag,
-    detect_signal,
-    mark_file_status,
-    is_task_ready,
-    get_latest_md_file,
+    PRD_SIGNALS,
+    SIGNAL_TAGS,
     _acquire_pid_lock,
-    _release_pid_lock,
-    parse_task_priority,
-    parse_task_project,
-    parse_task_depends_on,
     _check_prerequisites_met,
     _detect_circular_deps,
-    SIGNAL_TAGS,
-    PRD_SIGNALS,
+    _release_pid_lock,
+    detect_signal,
+    get_latest_md_file,
+    has_tag,
+    is_task_ready,
+    mark_file_status,
+    parse_task_depends_on,
+    parse_task_project,
 )
-
 
 # ---------------------------------------------------------------------------
 # has_tag
@@ -181,7 +179,7 @@ class TestDetectSignal:
 
     def test_prd_signals_set(self):
         """PRD_SIGNALS should contain the phase-based signals."""
-        assert PRD_SIGNALS == {"plan", "plan1", "phase2", "phase3", "phase4"}
+        assert {"plan", "plan1", "phase2", "phase3", "phase4"} == PRD_SIGNALS
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +227,7 @@ class TestMarkFileStatus:
         assert "More text." in content
 
     def test_handles_read_error(self):
-        with patch("builtins.open", side_effect=IOError("disk error")):
+        with patch("builtins.open", side_effect=OSError("disk error")):
             result = mark_file_status("/bad/path.md", "<Pending>", "<Working>")
             assert result is False
 

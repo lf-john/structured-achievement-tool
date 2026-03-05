@@ -4,8 +4,8 @@ System Monitor Utility
 Provides functions to collect memory and CPU usage metrics from the system.
 """
 
-import subprocess
 import re
+import subprocess
 
 
 def get_memory_usage():

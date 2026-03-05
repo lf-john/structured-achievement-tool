@@ -24,13 +24,15 @@ Edge Cases:
   - test_should_handle_multiple_entries_different_days_same_month: Verifies correct monthly sum.
   - test_should_handle_db_connection_errors: Ensures graceful degradation on connection issues.
 """
-import pytest
+import os
 import sqlite3
 from datetime import datetime, timedelta
-import os
+
+import pytest
 
 # This import will fail because the module/class does not exist yet
 from src.db.llm_cost_db import LLMCostDB
+
 
 class TestLLMCostDB:
 
@@ -149,7 +151,7 @@ class TestLLMCostDB:
         # at the unit level without direct filesystem manipulation or mocking sqlite3.connect.
         # For now, we'll test that initialization doesn't fail with a bad path (if it's not created)
         # and that adding an entry to a closed connection might raise an error if not handled internally.
-        
+
         # Test bad path during init: Should still try to initialize, possibly create empty db if no permissions
         # or fail if path is truly invalid. For this context, it's expected to create it.
         # This test already covers initialization failure if path is read-only etc. in test_should_initialize_db_at_correct_location

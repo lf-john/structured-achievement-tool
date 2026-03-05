@@ -72,7 +72,7 @@ if str(PROJECT_ROOT) not in sys.path:
 # ---------------------------------------------------------------------------
 # Imports under test — credential_manager does NOT exist yet (TDD-RED)
 # ---------------------------------------------------------------------------
-from src.n8n.credential_manager import N8NCredentialManager, N8NCredentialError  # noqa: E402
+from src.n8n.credential_manager import N8NCredentialError, N8NCredentialManager
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -484,8 +484,8 @@ class TestBatchProcessingRateLimits(unittest.TestCase):
     """Tests verifying RateLimitHandler integration for batch processing."""
 
     def setUp(self):
-        import tempfile
         import os
+        import tempfile
         self.tmp_dir = tempfile.mkdtemp()
         self.state_file = os.path.join(self.tmp_dir, "rate_limit_state.json")
         from src.execution.rate_limit_handler import RateLimitHandler
@@ -504,14 +504,13 @@ class TestBatchProcessingRateLimits(unittest.TestCase):
             reason="rate_limit",
         )
         # get_ready may return empty (retry in future) but queue must be non-empty
-        all_entries = self.handler.queue if hasattr(self.handler, "queue") else []
+        self.handler.queue if hasattr(self.handler, "queue") else []
         # Alternatively check via get_ready after setting next_retry_at to past
         # Either way, no exception must be raised during enqueue
         self.assertTrue(True, "enqueue() completed without exception")
 
     def test_get_ready_returns_only_past_entries(self):
         """Batch rate limits: get_ready returns only entries whose retry time has passed."""
-        import time
         # Enqueue and then manipulate next_retry_at to be in the past
         self.handler.enqueue(
             task_file="tasks/test_task.md",

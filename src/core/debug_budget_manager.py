@@ -1,7 +1,7 @@
-import json
-import os
 import fcntl
+import json
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ class DebugBudgetManager:
 
     def _load_budgets(self):
         if os.path.exists(self.budget_file_path):
-            with open(self.budget_file_path, 'r') as f:
+            with open(self.budget_file_path) as f:
                 return json.load(f)
         return {}
 
@@ -51,7 +51,7 @@ class DebugBudgetManager:
             self._lock_fd.write(str(os.getpid()))
             self._lock_fd.flush()
             return True
-        except (IOError, OSError):
+        except OSError:
             logger.warning("Another debug session is already active")
             if hasattr(self, '_lock_fd'):
                 self._lock_fd.close()
@@ -64,7 +64,7 @@ class DebugBudgetManager:
             try:
                 fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
                 self._lock_fd.close()
-            except (IOError, OSError):
+            except OSError:
                 pass
             self._lock_fd = None
             try:

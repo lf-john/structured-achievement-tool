@@ -1,10 +1,9 @@
 import logging
-from typing import Tuple, Dict, Any
 
-from src.llm_cost_tracker import LLMCostTracker
-from src.notifications.notifier import Notifier
 from src.llm.cli_runner import CLIRunner, LLMCLIExecutionError
 from src.llm.providers import get_provider
+from src.llm_cost_tracker import LLMCostTracker
+from src.notifications.notifier import Notifier
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +15,7 @@ class LLMGenerationService:
         self.notifier = notifier
         self.cli_runner = cli_runner or CLIRunner()
 
-    def generate_email(self, agent_name: str, task_description: str) -> Tuple[str, bool]:
+    def generate_email(self, agent_name: str, task_description: str) -> tuple[str, bool]:
         """
         Generates email content using Claude with fallback to Qwen3 8B.
         Returns a tuple: (generated_content, requires_human_review)
@@ -25,7 +24,7 @@ class LLMGenerationService:
         generated_content = ""
 
         claude_provider_config = get_provider("opus") # Assuming 'opus' is the default Claude model
-        qwen3_provider_config = get_provider("qwen3_8b")
+        get_provider("qwen3_8b")
 
         try:
             # Check Claude budget
@@ -37,7 +36,7 @@ class LLMGenerationService:
 
             # Attempt to generate with Claude
             generated_content = self.cli_runner.execute_llm_command(
-                provider_config=claude_provider_config, 
+                provider_config=claude_provider_config,
                 prompt=task_description
             )
             return generated_content, requires_human_review
@@ -52,7 +51,7 @@ class LLMGenerationService:
             self._send_fallback_notification(agent_name, reason)
             return self._fallback_to_qwen3(task_description)
 
-    def _fallback_to_qwen3(self, prompt: str) -> Tuple[str, bool]:
+    def _fallback_to_qwen3(self, prompt: str) -> tuple[str, bool]:
         """Handles fallback to Qwen3 8B."""
         requires_human_review = True
         qwen3_provider_config = get_provider("qwen3_8b")

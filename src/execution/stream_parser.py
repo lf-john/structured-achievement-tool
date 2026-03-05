@@ -1,8 +1,7 @@
-import os
-import time
 import asyncio
 import logging
-from typing import Optional, TextIO
+import os
+import time
 
 logger = logging.getLogger(__name__)
 

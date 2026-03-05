@@ -12,7 +12,6 @@ produce structured guidance for the human operator.
 """
 
 import logging
-from typing import Type, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -58,7 +57,7 @@ class HumanTaskResponse(BaseModel):
         default="",
         description="Step-by-step instructions for the human operator"
     )
-    required_inputs: List[RequiredInput] = Field(
+    required_inputs: list[RequiredInput] = Field(
         default_factory=list,
         description="List of inputs the human must provide"
     )
@@ -74,7 +73,7 @@ class HumanTaskResponse(BaseModel):
         default=0,
         description="Estimated time for the human to complete the task"
     )
-    verification_checks: List[VerificationCheck] = Field(
+    verification_checks: list[VerificationCheck] = Field(
         default_factory=list,
         description="TDD-style verification checks: quick checks (immediate) and final checks (delayed)"
     )
@@ -190,7 +189,7 @@ class HumanTaskAgent(BaseAgent):
         return "human_task_analyst"
 
     @property
-    def response_model(self) -> Type[BaseModel]:
+    def response_model(self) -> type[BaseModel]:
         return HumanTaskResponse
 
     async def analyze(
@@ -260,7 +259,7 @@ class HumanTaskAgent(BaseAgent):
 
         instructions_parts = [
             f"# Human Action Required: {title}\n",
-            f"## What You Need To Do\n",
+            "## What You Need To Do\n",
             f"{description}\n",
         ]
 

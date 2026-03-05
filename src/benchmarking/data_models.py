@@ -1,5 +1,7 @@
-from pydantic import BaseModel
 import datetime
+
+from pydantic import BaseModel
+
 
 class BenchmarkResult(BaseModel):
     model_name: str

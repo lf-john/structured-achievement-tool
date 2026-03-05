@@ -5,7 +5,6 @@ This module provides functions to generate, merge, and document SPF records
 for domains using Amazon SES.
 """
 
-import re
 
 
 def generate_spf_record(domain: str, includes: list[str]) -> str:
@@ -41,11 +40,10 @@ def merge_spf_records(existing_record: str, new_include: str) -> str:
     includes = []
     mechanisms = []
     all_mechanism = None
-    has_spf1 = False
 
     for part in parts:
         if part == "v=spf1":
-            has_spf1 = True
+            pass
         elif part.endswith("all"):
             all_mechanism = part
         elif part.startswith("include:"):

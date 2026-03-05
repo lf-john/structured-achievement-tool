@@ -6,9 +6,9 @@ All 11 models from the definitive implementation plan (044).
 """
 
 import os
-from typing import Dict, Optional
-from pydantic import BaseModel
 from enum import Enum
+
+from pydantic import BaseModel
 
 
 class CostTier(str, Enum):
@@ -29,8 +29,8 @@ class ProviderConfig(BaseModel):
     context_window: int  # In tokens (approximate)
     cli_command: str  # "claude", "gemini", or "ollama"
     model_id: str  # Model identifier for API calls
-    settings_file: Optional[str] = None  # Path to Claude settings file (for GLM backends)
-    env_vars: Dict[str, str] = {}
+    settings_file: str | None = None  # Path to Claude settings file (for GLM backends)
+    env_vars: dict[str, str] = {}
     local: bool = False  # True for Ollama models
     agentic: bool = False  # True for CLIs that can read/write files (claude, gemini)
 
@@ -45,7 +45,7 @@ class ProviderConfig(BaseModel):
 
 # --- Provider Registry ---
 
-PROVIDERS: Dict[str, ProviderConfig] = {
+PROVIDERS: dict[str, ProviderConfig] = {
     "opus": ProviderConfig(
         name="opus",
         power=9, code_power=9, speed=3,
@@ -175,7 +175,7 @@ def get_provider(name: str) -> ProviderConfig:
     return PROVIDERS[name]
 
 
-def get_env_for_provider(provider: ProviderConfig) -> Dict[str, str]:
+def get_env_for_provider(provider: ProviderConfig) -> dict[str, str]:
     """Build environment variables for a provider.
 
     Returns a copy of os.environ with provider-specific vars applied.

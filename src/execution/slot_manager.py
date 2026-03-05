@@ -1,10 +1,9 @@
-import os
-import fcntl
-import time
-import logging
 import asyncio
-from typing import Optional, Callable, Awaitable
-from dataclasses import dataclass, field
+import fcntl
+import logging
+import os
+import time
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +14,8 @@ MAX_SLOTS_LIMIT = 4
 @dataclass
 class SlotInfo:
     slot_id: int
-    task_file: Optional[str] = None
-    started_at: Optional[float] = None
+    task_file: str | None = None
+    started_at: float | None = None
     status: str = "idle"  # idle, active, error
 
 
@@ -32,7 +31,7 @@ class SlotManager:
         self._slots: list[SlotInfo] = [SlotInfo(slot_id=i) for i in range(self.max_slots)]
         self._lock_fds: dict[str, object] = {}
 
-    def get_available_slot(self) -> Optional[int]:
+    def get_available_slot(self) -> int | None:
         """Return the ID of an available slot, or None if all busy."""
         for slot in self._slots:
             if slot.status == "idle":
@@ -65,7 +64,7 @@ class SlotManager:
             fd.flush()
             self._lock_fds[provider_name] = fd
             return True
-        except (IOError, OSError):
+        except OSError:
             try:
                 fd.close()
             except:

@@ -1,15 +1,12 @@
 """Tests for src.github.issue_manager — Story ↔ GitHub Issue mapping."""
 
-import json
-import pytest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch
 
 from src.github.gh_cli import GHResult
 from src.github.issue_manager import (
-    IssueManager,
-    IssueResult,
-    STORY_TYPE_LABELS,
     STATUS_LABELS,
+    STORY_TYPE_LABELS,
+    IssueManager,
 )
 
 

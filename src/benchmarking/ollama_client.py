@@ -1,5 +1,7 @@
 import requests
+
 from .config import OLLAMA_API_BASE_URL
+
 
 class OllamaClient:
     def __init__(self, base_url: str = OLLAMA_API_BASE_URL):

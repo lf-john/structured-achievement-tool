@@ -1,19 +1,35 @@
-import time, logging, os, asyncio, traceback, re, json, signal, atexit, sys, shutil
 import argparse
-from src.orchestrator_v2 import OrchestratorV2 as Orchestrator
-from src.execution.stability_timeout import StabilityTimeout
-from src.execution.slot_manager import SlotManager
-from src.execution.rate_limit_handler import RateLimitHandler
+import asyncio
+import atexit
+import json
+import logging
+import os
+import re
+import shutil
+import sys
+import time
+
+from src.core.checkpoint_manager import init_db, resume_incomplete_workflows
+from src.core.paths import (
+    AUDIT_JOURNAL as AUDIT_JOURNAL_PATH,
+)
+from src.core.paths import (
+    CHECKPOINT_DB,
+    CONFIG_JSON,
+    MEMORY_DIR,
+    RATE_LIMIT_STATE,
+    SAT_DB,
+    SAT_PROJECT_DIR,
+    SAT_TASKS_DIR,
+)
+from src.db.database_manager import DatabaseManager
 from src.execution.audit_journal import AuditJournal
 from src.execution.fuse_sentinel import FuseSentinel
+from src.execution.rate_limit_handler import RateLimitHandler
+from src.execution.slot_manager import SlotManager
+from src.execution.stability_timeout import StabilityTimeout
 from src.monitoring.metrics_exporter import start_metrics_server
-from src.core.checkpoint_manager import init_db, resume_incomplete_workflows
-from src.db.database_manager import DatabaseManager
-from src.core.paths import (
-    SAT_PROJECT_DIR, SAT_TASKS_DIR, MEMORY_DIR, CHECKPOINT_DB,
-    SAT_DB, CONFIG_JSON, AUDIT_JOURNAL as AUDIT_JOURNAL_PATH,
-    RATE_LIMIT_STATE,
-)
+from src.orchestrator_v2 import OrchestratorV2 as Orchestrator
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -36,7 +52,7 @@ def _acquire_pid_lock():
     """Ensure only one daemon instance is running.  Exit if another is alive."""
     if os.path.exists(PID_FILE):
         try:
-            with open(PID_FILE, "r") as f:
+            with open(PID_FILE) as f:
                 old_pid = int(f.read().strip())
             # Signal 0 checks existence without actually sending a signal
             os.kill(old_pid, 0)
@@ -61,7 +77,7 @@ def _release_pid_lock():
     """Remove the PID file on exit."""
     try:
         if os.path.exists(PID_FILE):
-            with open(PID_FILE, "r") as f:
+            with open(PID_FILE) as f:
                 stored_pid = int(f.read().strip())
             if stored_pid == os.getpid():
                 os.remove(PID_FILE)
@@ -74,10 +90,10 @@ def has_tag(file_path, tag):
     if not os.path.exists(file_path):
         return False
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, encoding='utf-8') as f:
             content = f.read()
         return bool(re.search(rf'^\s*{re.escape(tag)}\s*$', content, re.MULTILINE))
-    except Exception as e:
+    except Exception:
         return False
 
 def is_task_ready(file_path):
@@ -115,9 +131,9 @@ def get_latest_md_file(directory):
 
 def mark_file_status(file_path, old_tag, new_tag):
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, encoding='utf-8') as f:
             content = f.read()
-        
+
         # Replace the last occurrence of old_tag with new_tag
         parts = content.rsplit(old_tag, 1)
         if len(parts) == 2:
@@ -187,7 +203,7 @@ def parse_task_priority(file_path):
     Valid values: high, normal, low.  Defaults to 'normal'.
     """
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, encoding='utf-8') as f:
             header = f.read(500)
         match = re.search(r'<!--\s*priority:\s*(high|normal|low)\s*-->', header, re.IGNORECASE)
         if match:
@@ -226,7 +242,7 @@ def parse_task_project(file_path, passed_project=None):
 
     # 3. Metadata comment (rare — manual override)
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, encoding='utf-8') as f:
             header = f.read(500)
         match = re.search(r'<!--\s*project:\s*(.+?)\s*-->', header, re.IGNORECASE)
         if match:
@@ -245,7 +261,7 @@ def parse_task_depends_on(file_path):
     Returns a list of dependency identifiers (basenames), or empty list.
     """
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, encoding='utf-8') as f:
             header = f.read(500)
         match = re.search(r'<!--\s*depends_on:\s*(.+?)\s*-->', header, re.IGNORECASE)
         if match:
@@ -297,7 +313,7 @@ def _detect_circular_deps(db_manager, task_path, depends_on):
     if not depends_on:
         return depends_on
 
-    from src.execution.dag_executor import DAGExecutor, CircularDependencyError
+    from src.execution.dag_executor import DAGExecutor
 
     # Build a mini dependency graph from task_states
     # Include the candidate task and all its transitive dependencies
@@ -515,7 +531,7 @@ async def async_main(no_resume: bool = False):
 
         config_valid = False
         try:
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 config_data = json.load(f)
             missing = REQUIRED_CONFIG_KEYS - set(config_data.keys())
             if missing:
@@ -562,7 +578,7 @@ async def async_main(no_resume: bool = False):
     config_path = str(CONFIG_JSON)
     metrics_config = {}
     try:
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             metrics_config = json.load(f).get("metrics", {})
     except (OSError, json.JSONDecodeError):
         pass
@@ -636,7 +652,7 @@ async def async_main(no_resume: bool = False):
                             file_path = os.path.join(full_task_dir, filename)
                             # Skip response files written by Claude
                             try:
-                                with open(file_path, 'r', encoding='utf-8') as f:
+                                with open(file_path, encoding='utf-8') as f:
                                     header = f.read(200)
                                 if '<!-- CLAUDE-RESPONSE -->' in header:
                                     continue

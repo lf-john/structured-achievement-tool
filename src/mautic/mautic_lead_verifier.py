@@ -1,6 +1,7 @@
 import logging
 import random
 
+
 class MauticLeadVerificationService:
     def __init__(self, mautic_api_client):
         self.mautic_api_client = mautic_api_client
@@ -26,7 +27,7 @@ class MauticLeadVerificationService:
         try:
             segments_response = self.mautic_api_client.get_segments(limit=50)
             mautic_segments = {segment["name"]: segment["contacts"] for segment in segments_response.get("segments", {}).values()}
-            
+
             all_match = True
             for segment_name, expected_count in expected_segments.items():
                 if segment_name not in mautic_segments:
@@ -63,7 +64,7 @@ class MauticLeadVerificationService:
                 return False
 
             sample_contacts = random.sample(all_contacts, sample_size)
-            
+
             all_fields_present_and_match = True
             for contact in sample_contacts:
                 for field in fields_to_verify:
@@ -81,14 +82,14 @@ class MauticLeadVerificationService:
         except Exception as e:
             self.logger.error(f"Error sampling contacts for field mapping: {e}")
             return False
-    
+
     def confirm_demographic_lead_scores(self, sample_contact_ids, expected_scores):
         try:
             all_scores_match = True
             for contact_id in sample_contact_ids:
                 contact_response = self.mautic_api_client.get_contact_by_id(contact_id)
                 contact = contact_response.get("contact", {})
-                
+
                 actual_lead_score = contact.get("fields", {}).get("core", {}).get("lead_score", {}).get("value")
                 expected_lead_score = expected_scores.get(contact_id, {}).get("lead_score")
 

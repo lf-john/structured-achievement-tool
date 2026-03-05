@@ -8,14 +8,13 @@ including summary tables, detailed results, and model recommendations for SAT ro
 import json
 import os
 import sys
-from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Any
-from unittest.mock import MagicMock
+from typing import Any
+
 import pandas as pd
 
 
-def analyze_results(data: List[Dict[str, Any]]) -> tuple:
+def analyze_results(data: list[dict[str, Any]]) -> tuple:
     """
     Analyze benchmark results and create summary statistics.
 
@@ -113,7 +112,7 @@ def analyze_results(data: List[Dict[str, Any]]) -> tuple:
     return summary, detailed_df
 
 
-def generate_recommendations(summary: Dict[str, Dict[str, Any]]) -> str:
+def generate_recommendations(summary: dict[str, dict[str, Any]]) -> str:
     """
     Generate model recommendations for SAT routing.
 
@@ -161,7 +160,7 @@ def generate_recommendations(summary: Dict[str, Dict[str, Any]]) -> str:
     return "\n".join(recommendations)
 
 
-def generate_report(summary: Dict[str, Dict[str, Any]],
+def generate_report(summary: dict[str, dict[str, Any]],
                     detailed_df: pd.DataFrame,
                     output_path: str) -> None:
     """
@@ -178,14 +177,14 @@ def generate_report(summary: Dict[str, Dict[str, Any]],
 
     # Get all models
     models = list(summary.keys())
-    model_names = [m.split(":")[0] for m in models]  # Extract base model name
+    [m.split(":")[0] for m in models]  # Extract base model name
 
     # Generate timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Build report content
     lines = [
-        f"# Ollama Benchmark Report",
+        "# Ollama Benchmark Report",
         f"**Generated on:** {timestamp}",
         "",
         "## Executive Summary",
@@ -326,9 +325,9 @@ def main() -> None:
 
     # Load benchmark data
     try:
-        with open(args.input, "r") as f:
+        with open(args.input) as f:
             data = json.load(f)
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         print(f"Error: Input file '{args.input}' does not exist", file=sys.stderr)
         sys.exit(1)
     except json.JSONDecodeError as e:

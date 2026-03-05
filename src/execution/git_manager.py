@@ -4,12 +4,10 @@ Git Manager — Worktree management, auto-commit, reset, and diff operations.
 Ported from Ralph Pro GitManager (lines 1130-1288).
 """
 
-import os
-import sys
-import subprocess
 import logging
+import os
+import subprocess
 from dataclasses import dataclass
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +132,7 @@ def remove_worktree(project_path: str, task_id: str, delete_branch: bool = False
 def merge_worktree(
     project_path: str,
     task_id: str,
-    target_branch: Optional[str] = None,
+    target_branch: str | None = None,
 ) -> bool:
     """Merge a task branch into the target branch."""
     branch_name = f"task/{task_id}"
@@ -164,7 +162,7 @@ def merge_worktree(
 # <base_dir>/.worktrees/<story-id> on branch story/<story-id>.
 
 
-def create_story_worktree(story_id: str, base_dir: str, worktree_base: Optional[str] = None) -> str:
+def create_story_worktree(story_id: str, base_dir: str, worktree_base: str | None = None) -> str:
     """Create a git worktree for isolated story execution.
 
     Creates a worktree at ``<worktree_base>/<story_id>`` (or
@@ -400,8 +398,8 @@ def auto_commit(
     working_directory: str,
     story_id: str,
     phase_name: str,
-    message: Optional[str] = None,
-) -> Optional[str]:
+    message: str | None = None,
+) -> str | None:
     """Commit all changes with a standardized message.
 
     Returns the commit hash if a commit was made, None if no changes.
@@ -436,7 +434,7 @@ def auto_commit(
     return None
 
 
-def get_current_commit(working_directory: str) -> Optional[str]:
+def get_current_commit(working_directory: str) -> str | None:
     """Get the current HEAD commit hash."""
     result = _run_git(["rev-parse", "HEAD"], working_directory)
     if result.returncode == 0:
@@ -456,7 +454,7 @@ def reset_to_commit(working_directory: str, commit_hash: str) -> bool:
     return True
 
 
-def get_diff(working_directory: str, against: Optional[str] = None) -> str:
+def get_diff(working_directory: str, against: str | None = None) -> str:
     """Get the diff of changes.
 
     Args:
@@ -470,7 +468,7 @@ def get_diff(working_directory: str, against: Optional[str] = None) -> str:
     return ""
 
 
-def get_diff_stat(working_directory: str, against: Optional[str] = None) -> str:
+def get_diff_stat(working_directory: str, against: str | None = None) -> str:
     """Get a summary of changes (files modified, insertions, deletions)."""
     ref = against or "HEAD~1"
     result = _run_git(["diff", "--stat", ref, "HEAD"], working_directory)
@@ -479,7 +477,7 @@ def get_diff_stat(working_directory: str, against: Optional[str] = None) -> str:
     return ""
 
 
-def get_modified_files(working_directory: str, against: Optional[str] = None) -> list[str]:
+def get_modified_files(working_directory: str, against: str | None = None) -> list[str]:
     """Get list of modified files."""
     ref = against or "HEAD~1"
     result = _run_git(["diff", "--name-only", ref, "HEAD"], working_directory)

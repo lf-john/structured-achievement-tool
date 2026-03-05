@@ -11,15 +11,16 @@ import logging
 import os
 import tempfile
 from abc import ABC, abstractmethod
-from typing import Type, TypeVar, Optional
+from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from src.llm.providers import ProviderConfig
-from src.llm.routing_engine import RoutingEngine
-from src.llm.cli_runner import invoke as cli_invoke, CLIResult
+from src.llm.cli_runner import CLIResult
+from src.llm.cli_runner import invoke as cli_invoke
 from src.llm.prompt_builder import build_prompt
+from src.llm.providers import ProviderConfig
 from src.llm.response_parser import extract_json, validate_response
+from src.llm.routing_engine import RoutingEngine
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +37,8 @@ class BaseAgent(ABC):
 
     def __init__(
         self,
-        routing_engine: Optional[RoutingEngine] = None,
-        config_path: Optional[str] = None,
+        routing_engine: RoutingEngine | None = None,
+        config_path: str | None = None,
     ):
         self.routing_engine = routing_engine or RoutingEngine(config_path)
 
@@ -49,13 +50,13 @@ class BaseAgent(ABC):
 
     @property
     @abstractmethod
-    def response_model(self) -> Type[BaseModel]:
+    def response_model(self) -> type[BaseModel]:
         """Pydantic model class for validating the response."""
         ...
 
     def get_provider(
         self,
-        story_complexity: Optional[int] = None,
+        story_complexity: int | None = None,
         is_code_task: bool = False,
     ) -> ProviderConfig:
         """Get the routed provider for this agent."""
@@ -71,9 +72,9 @@ class BaseAgent(ABC):
         phase: str,
         working_directory: str,
         context: dict = None,
-        story_complexity: Optional[int] = None,
+        story_complexity: int | None = None,
         is_code_task: bool = False,
-        template_dir: Optional[str] = None,
+        template_dir: str | None = None,
     ) -> BaseModel:
         """Execute the agent: route → prompt → invoke → parse → validate.
 
@@ -150,7 +151,6 @@ class BaseAgent(ABC):
             providers.insert(0, provider)
 
         backoff = 5  # Initial backoff in seconds
-        last_result = None
         tried = set()
 
         for candidate in providers:
@@ -169,7 +169,6 @@ class BaseAgent(ABC):
                     f"{self.agent_name}: {candidate.name} rate-limited (429), "
                     f"backoff {backoff}s before next provider"
                 )
-                last_result = result
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 120)
                 continue

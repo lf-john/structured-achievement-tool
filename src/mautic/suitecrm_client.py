@@ -1,6 +1,8 @@
 import logging
-import requests
 import os
+
+import requests
+
 
 class SuiteCRMClient:
     def __init__(self, base_url: str, api_key: str):
@@ -23,7 +25,7 @@ class SuiteCRMClient:
             # response = requests.post(f"{self.base_url}/api/v8/modules/Contacts", json=payload, headers=self.headers)
             # response.raise_for_status()
             # return response.json()
-            
+
             # For now, simulate a successful creation with a dummy ID
             dummy_id = os.urandom(4).hex() # Generate a random hex string as a dummy ID
             logging.info(f"Simulated SuiteCRM contact created with ID: {dummy_id}")
@@ -43,7 +45,7 @@ class SuiteCRMClient:
             # response = requests.put(f"{self.base_url}/api/v8/modules/Contacts/{contact_id}", json=payload, headers=self.headers)
             # response.raise_for_status()
             # return response.json()
-            
+
             # For now, simulate a successful update
             logging.info(f"Simulated SuiteCRM contact {contact_id} updated.")
             return {"id": contact_id, "status": "success", "data": payload}

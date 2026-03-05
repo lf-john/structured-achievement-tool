@@ -1,7 +1,8 @@
+from src.mautic.mautic_api_client import MauticApiClient
 from src.mautic.ollama_client import OllamaClient
 from src.mautic.prompt_builder import PromptBuilder
 from src.mautic.response_parser import ResponseParser
-from src.mautic.mautic_api_client import MauticApiClient
+
 
 class LeadScoringService:
     def __init__(self, ollama_client: OllamaClient, prompt_builder: PromptBuilder,
@@ -27,11 +28,7 @@ class LeadScoringService:
         except Exception as e:
             # Log the error for debugging purposes in a real application
             # For now, we'll return default error values as per test expectations
-            if "Ollama API Error" in str(e): # Specific error for Ollama API issues
-                return 0, 0.0
-            elif "Invalid response format" in str(e): # Specific error for parsing issues
-                return 0, 0.0
-            elif "Mautic API Update Failed" in str(e): # Specific error for Mautic update issues
+            if "Ollama API Error" in str(e) or "Invalid response format" in str(e) or "Mautic API Update Failed" in str(e): # Specific error for Ollama API issues
                 return 0, 0.0
             else:
                 raise e # Re-raise unexpected exceptions

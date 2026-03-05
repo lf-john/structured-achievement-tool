@@ -11,7 +11,6 @@ memory file, and auto-summarize when the file exceeds its token budget.
 
 import logging
 import os
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ def append_learning(
     level: str,
     content: str,
     working_directory: str,
-    tech_stack: Optional[list] = None,
+    tech_stack: list | None = None,
 ) -> bool:
     """Append a learning to the appropriate memory file.
 
@@ -71,7 +70,7 @@ def append_learning(
     try:
         existing = ""
         if os.path.exists(path):
-            with open(path, "r") as f:
+            with open(path) as f:
                 existing = f.read()
 
         # Check for duplicate content (simple substring check)

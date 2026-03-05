@@ -1,12 +1,11 @@
 """Tests for StreamParser — real-time Claude output streaming to Obsidian."""
 
 import os
-import time
-import asyncio
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from src.execution.stream_parser import StreamParser, FLUSH_INTERVAL, MIN_WRITE_SIZE
+import pytest
+
+from src.execution.stream_parser import MIN_WRITE_SIZE, StreamParser
 
 
 @pytest.fixture

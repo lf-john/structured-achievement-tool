@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Any
 
 from src.core.embedding_service import EmbeddingService
 from src.core.vector_store import VectorStore
@@ -21,7 +21,7 @@ class OllamaICPMatcher:
             # If it doesn't exist, create it
             self.vector_store.create_collection(self.collection_name, 768) # 768 is the dimension for nomic-embed-text
 
-    def add_icp_profile(self, profile_id: str, profile_data: Dict[str, Any]) -> bool:
+    def add_icp_profile(self, profile_id: str, profile_data: dict[str, Any]) -> bool:
         """
         Adds an ICP profile to the vector store.
         """
@@ -31,7 +31,7 @@ class OllamaICPMatcher:
 
         try:
             profile_text = self._serialize_profile_data(profile_data)
-            embedding = self.embedding_service.embed_text(profile_text)
+            self.embedding_service.embed_text(profile_text)
             metadata = {"profile_id": profile_id, "type": "icp_profile", **profile_data}
             self.vector_store.add_document(profile_text, metadata)
             return True
@@ -39,7 +39,7 @@ class OllamaICPMatcher:
             logger.error("Error adding ICP profile %s: %s", profile_id, e)
             return False
 
-    def match_icp(self, input_data: Dict[str, Any], top_k: int = 1) -> Dict[str, Any]:
+    def match_icp(self, input_data: dict[str, Any], top_k: int = 1) -> dict[str, Any]:
         """
         Matches input data against stored ICP profiles and returns a fit score and reasoning.
         """
@@ -65,7 +65,7 @@ class OllamaICPMatcher:
             # Sort by similarity (highest score first) and take the top_k
             icp_results.sort(key=lambda x: x.get("score", 0.0), reverse=True)
             best_match = icp_results[0]
-            
+
             score = self._calculate_fit_score(best_match.get("score", 0.0))
             reasoning = self._generate_reasoning(input_data, best_match)
 
@@ -75,7 +75,7 @@ class OllamaICPMatcher:
             logger.error("Error matching ICP: %s", e)
             return {"score": 0.0, "reasoning": f"An error occurred during matching: {e}"}
 
-    def _serialize_profile_data(self, data: Dict[str, Any]) -> str:
+    def _serialize_profile_data(self, data: dict[str, Any]) -> str:
         """
         Converts a dictionary of profile data into a string for embedding.
         """
@@ -90,7 +90,7 @@ class OllamaICPMatcher:
         # This can be adjusted based on desired scaling and distribution.
         return round(similarity * 100, 2)
 
-    def _generate_reasoning(self, input_data: Dict[str, Any], matched_profile: Dict[str, Any]) -> str:
+    def _generate_reasoning(self, input_data: dict[str, Any], matched_profile: dict[str, Any]) -> str:
         """
         Generates reasoning for the ICP fit based on input and matched profile.
         """
@@ -102,19 +102,19 @@ class OllamaICPMatcher:
             f"'{profile_metadata.get('name', profile_metadata.get('profile_id', 'N/A'))}' (ID: {profile_metadata.get('profile_id', 'N/A')}). "
         )
         reasoning += "Key matching points: "
-        
+
         # Example: Compare common fields (can be enhanced with LLM for better reasoning)
         matching_fields = []
         for key, input_value in input_data.items():
             profile_value = profile_metadata.get(key)
             if profile_value and input_value == profile_value:
                 matching_fields.append(key)
-        
+
         if matching_fields:
             reasoning += f"Exact matches on: {', '.join(matching_fields)}. "
         else:
             reasoning += "No exact field matches found, but overall semantic similarity is high. "
-            
+
         reasoning += f"This profile represents a {profile_metadata.get('description', 'typical ICP')}. "
-        
+
         return reasoning

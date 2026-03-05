@@ -1,10 +1,11 @@
 """Tests for src.github.gh_cli — GitHub CLI wrapper."""
 
 import json
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from src.github.gh_cli import run_gh, GHResult, check_auth, get_repo_from_remote
+import pytest
+
+from src.github.gh_cli import GHResult, check_auth, get_repo_from_remote, run_gh
 
 
 class TestGHResult:

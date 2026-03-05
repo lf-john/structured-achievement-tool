@@ -1,16 +1,13 @@
 """Tests for src.workflows.research_workflow."""
 
-import os
-import pytest
-import tempfile
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, mock_open, patch
 
+from src.workflows.base_workflow import _split_into_topics
 from src.workflows.research_workflow import (
     ResearchWorkflow,
-    persist_research_node,
     _extract_research_content,
+    persist_research_node,
 )
-from src.workflows.base_workflow import _split_into_topics
 
 
 class TestExtractResearchContent:

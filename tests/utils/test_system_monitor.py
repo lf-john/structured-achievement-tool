@@ -21,10 +21,10 @@ Edge Cases:
   - Different load average formats
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
 import subprocess
-from src.utils.system_monitor import get_memory_usage, get_cpu_load
+from unittest.mock import MagicMock, patch
+
+from src.utils.system_monitor import get_cpu_load, get_memory_usage
 
 
 class TestMemoryUsage:

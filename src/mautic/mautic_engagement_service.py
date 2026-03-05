@@ -1,5 +1,7 @@
 import logging
+
 from src.mautic.mautic_api_client import MauticApiClient
+
 
 class MauticEngagementService:
     def __init__(self, mautic_client: MauticApiClient):

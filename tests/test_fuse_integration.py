@@ -10,8 +10,8 @@ Not included in standard test suite (requires live FUSE mount).
 """
 
 import os
-import tempfile
 import time
+
 import pytest
 
 from src.execution.fuse_sentinel import FuseSentinel
@@ -75,7 +75,7 @@ class TestFuseReadOperations:
         claude_md = os.path.join(FUSE_ROOT, "sat-tasks", "CLAUDE.md")
         if not os.path.exists(claude_md):
             pytest.skip("CLAUDE.md not found in sat-tasks/")
-        with open(claude_md, "r") as f:
+        with open(claude_md) as f:
             content = f.read()
         assert len(content) > 0
         assert "Claude" in content or "claude" in content.lower()
@@ -94,7 +94,7 @@ class TestFuseReadOperations:
         if not os.path.exists(claude_md):
             pytest.skip("CLAUDE.md not found in sat-tasks/")
         start = time.time()
-        with open(claude_md, "r") as f:
+        with open(claude_md) as f:
             _ = f.read()
         elapsed = time.time() - start
         assert elapsed < 5.0, f"Read took {elapsed:.1f}s (expected < 5s)"
@@ -114,7 +114,7 @@ class TestFuseWriteOperations:
                 f.write(content)
                 f.flush()
                 os.fsync(f.fileno())
-            with open(test_file, "r") as f:
+            with open(test_file) as f:
                 read_back = f.read()
             assert read_back == content
         finally:

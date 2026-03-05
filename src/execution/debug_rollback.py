@@ -10,7 +10,6 @@ Tag naming convention:
 """
 
 import logging
-from typing import Optional
 
 from src.execution.git_manager import (
     _run_git,

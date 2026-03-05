@@ -3,9 +3,8 @@
 import json
 import os
 import tempfile
-import pytest
 
-from src.llm.routing_engine import RoutingEngine, AGENT_COMPLEXITY
+from src.llm.routing_engine import AGENT_COMPLEXITY, RoutingEngine
 
 
 class TestAgentComplexity:

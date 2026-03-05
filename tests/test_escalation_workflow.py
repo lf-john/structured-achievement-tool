@@ -1,10 +1,9 @@
 """Tests for src.workflows.escalation_workflow — escalation story workflow."""
 
-import pytest
 from unittest.mock import MagicMock
 
-from src.workflows.escalation_workflow import EscalationWorkflow
 from src.workflows.approval_workflow import ApprovalConfig
+from src.workflows.escalation_workflow import EscalationWorkflow
 
 
 class TestEscalationWorkflowGraph:

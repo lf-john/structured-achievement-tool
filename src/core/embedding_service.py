@@ -8,10 +8,9 @@ Handles text truncation to stay within the model's context window
 and checks Ollama health before making requests.
 """
 
-import json
 import logging
 import subprocess
-from typing import List, Optional
+
 import ollama
 
 logger = logging.getLogger(__name__)
@@ -118,7 +117,7 @@ class EmbeddingService:
                         raise Exception(f"Ollama embedding failed after restart: {retry_error}")
             raise Exception(f"Ollama embedding failed: {first_error}")
 
-    def embed_text(self, text: str) -> List[float]:
+    def embed_text(self, text: str) -> list[float]:
         """
         Generate an embedding vector for a single text string.
 
@@ -134,7 +133,7 @@ class EmbeddingService:
         response = self._call_ollama(text)
         return response.get('embedding', [])
 
-    def generate_embedding(self, text: str) -> List[float]:
+    def generate_embedding(self, text: str) -> list[float]:
         """
         Generate a 768-dimensional embedding vector for a single text string.
 
@@ -180,14 +179,14 @@ class EmbeddingService:
             raise TimeoutError(f"Ollama request timed out: {e}")
         except KeyError as e:
             raise KeyError(f"Invalid Ollama response format: {e}")
-        except ValueError as e:
+        except ValueError:
             # Re-raise ValueError as-is (dimension validation)
             raise
         except Exception as e:
             # Wrap other exceptions with context
             raise Exception(f"Ollama embedding generation failed: {e}")
 
-    def embed_batch(self, texts: List[str]) -> List[List[float]]:
+    def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """
         Generate embedding vectors for multiple text strings.
 

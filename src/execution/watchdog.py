@@ -6,11 +6,10 @@ Lightweight script that runs every 15 minutes and checks if Layer 1
 auto-restart of failed services and sends ntfy alerts.
 """
 
-import os
-import time
-import subprocess
 import logging
-from typing import Optional
+import os
+import subprocess
+import time
 
 logger = logging.getLogger(__name__)
 

@@ -7,22 +7,18 @@ and ConfigValidator, plus the run_checks utility function.
 
 import json
 import os
-import socket
 import subprocess
-from unittest.mock import patch, MagicMock
-from urllib.error import URLError, HTTPError
-
-import pytest
+from unittest.mock import MagicMock, patch
+from urllib.error import HTTPError, URLError
 
 from src.execution.verification_sdk import (
-    VerifyResult,
+    ConfigValidator,
     FileChecker,
     PortChecker,
     ServiceChecker,
-    ConfigValidator,
+    VerifyResult,
     run_checks,
 )
-
 
 # ---------------------------------------------------------------------------
 # VerifyResult basics
@@ -150,7 +146,7 @@ class TestPortCheckerListening:
 
     def test_timeout(self):
         mock_sock = MagicMock()
-        mock_sock.connect_ex.side_effect = socket.timeout("timed out")
+        mock_sock.connect_ex.side_effect = TimeoutError("timed out")
         with patch("src.execution.verification_sdk.socket.socket", return_value=mock_sock):
             r = PortChecker().check_listening("10.0.0.1", 22, timeout=1)
         assert r.passed is False
@@ -311,8 +307,6 @@ class TestConfigValidatorYAML:
         f.write_text("key: value\n")
         with patch.dict("sys.modules", {"yaml": None}):
             # Force reimport to trigger ImportError
-            import importlib
-            import src.execution.verification_sdk as mod
             # Directly patch the import inside the method
             original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
 

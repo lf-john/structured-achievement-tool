@@ -1,10 +1,8 @@
 """Tests for dry-run verification with retry feedback."""
 
-import pytest
 
+from src.execution.dry_run import DryRunVerifier
 from src.execution.verification_sdk import VerifyResult
-from src.execution.dry_run import DryRunResult, DryRunVerifier
-
 
 # ---------------------------------------------------------------------------
 # Helpers — simple callables that return VerifyResult

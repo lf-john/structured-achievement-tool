@@ -10,12 +10,12 @@ and dependency graph output.
 
 import json
 import logging
-from typing import Type, Optional
+
 from pydantic import BaseModel
 
 from src.agents.base_agent import BaseAgent
+from src.execution.dag_executor import CircularDependencyError, DAGExecutor
 from src.llm.response_parser import DecomposeResponse
-from src.execution.dag_executor import DAGExecutor, CircularDependencyError
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class StoryAgent(BaseAgent):
         return "decomposer"
 
     @property
-    def response_model(self) -> Type[BaseModel]:
+    def response_model(self) -> type[BaseModel]:
         return DecomposeResponse
 
     async def decompose(
@@ -72,8 +72,8 @@ class StoryAgent(BaseAgent):
         user_request: str,
         task_type: str,
         working_directory: str,
-        existing_prd: Optional[dict] = None,
-        existing_progress: Optional[dict] = None,
+        existing_prd: dict | None = None,
+        existing_progress: dict | None = None,
         rag_context: str = "",
     ) -> DecomposeResponse:
         """Decompose a user request into stories with dependencies.
@@ -177,9 +177,9 @@ class StoryAgent(BaseAgent):
     def _notify_reclassification(self, story, original_type: str, new_type: str):
         """Send ntfy notification about a story type reclassification."""
         try:
-            import urllib.request
-            import urllib.error
             import os
+            import urllib.error
+            import urllib.request
 
             topic = os.environ.get("NTFY_TOPIC", "johnlane-claude-tasks")
             server = os.environ.get("NTFY_SERVER", "https://ntfy.sh")

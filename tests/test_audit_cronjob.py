@@ -4,15 +4,13 @@ Tests for SystemAuditor — Layer 2 LLM-powered audit (Phase 2 item 2.5).
 Uses tmp_path and mock subprocess throughout.
 """
 
-import pytest
 import json
 import os
-import time
-from unittest.mock import patch, MagicMock
-from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-from src.execution.audit_cronjob import SystemAuditor, MaintenanceAuditLog
+import pytest
 
+from src.execution.audit_cronjob import MaintenanceAuditLog, SystemAuditor
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -159,7 +157,7 @@ class TestCollectInputs:
         auditor_mod = auditor
         import src.execution.audit_cronjob as mod
         with patch.object(mod.os.path, "exists", return_value=True), \
-             patch("builtins.open", return_value=open(str(budget_file), "r")):
+             patch("builtins.open", return_value=open(str(budget_file))):
             result = auditor_mod._get_debug_history()
 
         assert len(result) == 2

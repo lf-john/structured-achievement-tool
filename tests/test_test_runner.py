@@ -1,19 +1,12 @@
 """Tests for src.execution.test_runner — Test execution and verification."""
 
-import os
-import tempfile
-import pytest
-from unittest.mock import patch, MagicMock
-import subprocess
 
 from src.execution.test_runner import (
-    run_tests,
-    TestResult,
-    get_test_command,
-    execute_verifications,
-    VerificationResult,
-    _parse_test_counts,
     _detect_framework,
+    _parse_test_counts,
+    execute_verifications,
+    get_test_command,
+    run_tests,
 )
 
 

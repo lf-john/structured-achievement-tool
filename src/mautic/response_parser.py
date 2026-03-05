@@ -1,5 +1,6 @@
 import re
 
+
 class ResponseParser:
     def parse_ollama_response(self, response: str) -> tuple[int, float]:
         match = re.search(r"Score: (\d+), Confidence: ([0-9.]+)", response)

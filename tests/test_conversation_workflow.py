@@ -1,14 +1,12 @@
 """Tests for src.workflows.conversation_workflow."""
 
-import os
-import pytest
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, mock_open, patch
 
 from src.workflows.conversation_workflow import (
     ConversationWorkflow,
+    _extract_content,
     persist_conversation_node,
     store_decision,
-    _extract_content,
 )
 
 

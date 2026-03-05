@@ -1,28 +1,26 @@
 """Tests for src.workflows.content_workflow and src.workflows.content_models."""
 
 import os
-import pytest
 import tempfile
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from src.workflows.content_workflow import (
-    ContentWorkflow,
-    mechanical_verify_node,
-    mechanical_verify_decision,
-    agentic_verify_decision,
-    _parse_range,
-    _detect_output_path,
-    _extract_plan_data,
-    MAX_VERIFY_RETRIES,
-)
 from src.workflows.content_models import (
     DocType,
     Group1Rule,
     Group2Quality,
-    get_rules_for_doc_type,
-    get_qualities_for_doc_type,
     format_group1_for_prompt,
     format_group2_for_prompt,
+    get_qualities_for_doc_type,
+    get_rules_for_doc_type,
+)
+from src.workflows.content_workflow import (
+    MAX_VERIFY_RETRIES,
+    ContentWorkflow,
+    _detect_output_path,
+    _parse_range,
+    agentic_verify_decision,
+    mechanical_verify_decision,
+    mechanical_verify_node,
 )
 
 

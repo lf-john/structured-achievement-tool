@@ -1,9 +1,6 @@
-import os
+import logging
 import re
 import subprocess
-import logging
-import time
-from typing import Optional
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -25,7 +22,7 @@ SESSION_ID_PATTERN = r"session[_\s]?id[:\s]+([a-zA-Z0-9_-]+)"
 @dataclass
 class ContinuationResult:
     success: bool
-    session_id: Optional[str] = None
+    session_id: str | None = None
     continuation_count: int = 0
     output: str = ""
     error: str = ""
@@ -42,7 +39,7 @@ class SessionContinuator:
         """Check if the output indicates max turns was hit."""
         return any(p.search(output) for p in self._patterns)
 
-    def extract_session_id(self, output: str) -> Optional[str]:
+    def extract_session_id(self, output: str) -> str | None:
         """Extract session ID from Claude CLI output."""
         match = self._session_pattern.search(output)
         return match.group(1) if match else None

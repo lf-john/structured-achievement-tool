@@ -105,7 +105,7 @@ class EmailValidator:
         # Attempt MX lookup to confirm domain exists; fall back gracefully
         try:
             self._lookup_mx(domain)
-        except (TimeoutError, OSError, socket.error):
+        except (TimeoutError, OSError):
             pass
 
         return self._result(email, "valid_business")

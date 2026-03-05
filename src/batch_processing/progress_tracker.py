@@ -1,11 +1,12 @@
 import abc
-from typing import Dict, Any, Optional
+from typing import Any
+
 
 class ProgressTracker(abc.ABC):
     """Abstract base class for tracking and persisting batch processing progress."""
 
     @abc.abstractmethod
-    def get_progress(self) -> Dict[str, Any]:
+    def get_progress(self) -> dict[str, Any]:
         """
         Retrieves the last saved progress state.
 
@@ -15,7 +16,7 @@ class ProgressTracker(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def update_progress(self, last_processed_id: Optional[int], percentage_complete: float, total_leads: int, estimated_time_remaining: str) -> None:
+    def update_progress(self, last_processed_id: int | None, percentage_complete: float, total_leads: int, estimated_time_remaining: str) -> None:
         """
         Updates and persists the current progress state.
 

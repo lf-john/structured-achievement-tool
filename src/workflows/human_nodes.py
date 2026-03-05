@@ -10,12 +10,8 @@ Each workflow adds type-specific VALIDATE/PARSE/ROUTE logic after PAUSE.
 """
 
 import logging
-import os
-import json
-from typing import Optional
 
-from src.workflows.state import StoryState, PhaseOutput, PhaseStatus
-from src.notifications.notifier import Notifier
+from src.workflows.state import PhaseOutput, PhaseStatus, StoryState
 
 logger = logging.getLogger(__name__)
 
@@ -86,10 +82,10 @@ def prepare_node(
     summary_parts = [
         f"# {story_type.title()}: {story_id}",
         "",
-        f"## TL;DR",
+        "## TL;DR",
         f"{tldr}",
         "",
-        f"## Action Required",
+        "## Action Required",
         f"{action_required}",
         "",
     ]
@@ -102,7 +98,7 @@ def prepare_node(
 
     if deadline:
         summary_parts.extend([
-            f"## Deadline",
+            "## Deadline",
             f"{deadline}",
             "",
         ])

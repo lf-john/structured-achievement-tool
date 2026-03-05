@@ -17,15 +17,11 @@ Requires:
 - pip install python-telegram-bot
 """
 
-import asyncio
-import json
 import logging
 import os
 import sqlite3
 import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +33,7 @@ def _get_telegram():
     global _telegram
     if _telegram is None:
         try:
-            from telegram import Update, BotCommand
+            from telegram import BotCommand, Update
             from telegram.ext import (
                 ApplicationBuilder,
                 CommandHandler,
@@ -153,7 +149,7 @@ async def cmd_status(update, context):
     # Task counts
     cfg = _get_config()
     counts = _count_tasks(cfg["tasks_dir"])
-    lines.append(f"\n*Tasks:*")
+    lines.append("\n*Tasks:*")
     lines.append(f"  Pending: {counts.get('pending', 0)}")
     lines.append(f"  Working: {counts.get('working', 0)}")
     lines.append(f"  Finished: {counts.get('finished', 0)}")
@@ -222,7 +218,7 @@ async def cmd_task_detail(update, context):
 
     # Read first 500 chars of the task file
     try:
-        with open(task["path"], "r") as f:
+        with open(task["path"]) as f:
             content = f.read(500)
         lines.append(f"\n```\n{content}\n```")
     except Exception:
@@ -248,7 +244,7 @@ async def cmd_approve(update, context):
         return
 
     try:
-        with open(signal_path, "r") as f:
+        with open(signal_path) as f:
             content = f.read()
 
         # Replace '# <Pending>' with user response + '<Pending>'
@@ -285,7 +281,7 @@ async def cmd_reject(update, context):
         return
 
     try:
-        with open(signal_path, "r") as f:
+        with open(signal_path) as f:
             content = f.read()
 
         content = content.replace("# <Pending>", f"REJECTED: {reason}\n\n<Pending>")
@@ -384,7 +380,7 @@ async def cmd_costs(update, context):
 
         lines = ["*LLM Cost Summary*\n"]
         total_cost = 0.0
-        for model, calls, pt, ct, cost in rows:
+        for model, calls, _pt, _ct, cost in rows:
             cost = cost or 0.0
             total_cost += cost
             lines.append(f"`{model}`: {calls} calls, ${cost:.2f}")

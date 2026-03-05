@@ -5,10 +5,9 @@ Ported from Ralph Pro buildStoryPrompt (lines 605-754).
 Implements progressive disclosure: each phase gets only relevant context.
 """
 
+import logging
 import os
 import re
-import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -242,7 +241,7 @@ def get_template_version(phase: str) -> str:
     return _template_versions.get(phase, "1.0")
 
 
-def load_template(phase: str, template_dir: Optional[str] = None) -> Optional[str]:
+def load_template(phase: str, template_dir: str | None = None) -> str | None:
     """Load a prompt template for a phase.
 
     Args:
@@ -264,7 +263,7 @@ def load_template(phase: str, template_dir: Optional[str] = None) -> Optional[st
         logger.warning(f"Template not found: {path}")
         return None
 
-    with open(path, "r") as f:
+    with open(path) as f:
         content = f.read()
 
     # Extract and cache version
@@ -296,7 +295,7 @@ def _load_project_rules(working_directory: str) -> str:
     claude_md = os.path.join(working_directory, "CLAUDE.md")
     if os.path.exists(claude_md):
         try:
-            with open(claude_md, "r") as f:
+            with open(claude_md) as f:
                 return f.read()
         except Exception as e:
             logger.warning(f"Failed to read CLAUDE.md: {e}")
@@ -332,7 +331,7 @@ def _load_core_memory(working_directory: str) -> str:
         if not os.path.exists(path):
             continue
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 content = f.read().strip()
             if not content:
                 continue
@@ -362,7 +361,7 @@ def build_prompt(
     phase: str,
     working_directory: str,
     context: dict = None,
-    template_dir: Optional[str] = None,
+    template_dir: str | None = None,
 ) -> str:
     """Build a complete prompt for a phase execution.
 
@@ -406,15 +405,17 @@ def build_prompt(
         # Add progressive disclosure context
         allowed_context = PHASE_CONTEXT.get(phase, [])
         for key in allowed_context:
-            if key in ctx and ctx[key]:
+            if ctx.get(key):
                 subs[key.upper()] = str(ctx[key])
 
         # Inject doc-type-specific verification criteria for content phases
         if phase in ("AGENTIC_VERIFY", "CONTENT_WRITE"):
             try:
                 from src.workflows.content_models import (
-                    get_rules_for_doc_type, get_qualities_for_doc_type,
-                    format_group1_for_prompt, format_group2_for_prompt,
+                    format_group1_for_prompt,
+                    format_group2_for_prompt,
+                    get_qualities_for_doc_type,
+                    get_rules_for_doc_type,
                 )
                 # Extract doc_type from plan output or story
                 doc_type = story.get("doc_type", "technical")
@@ -455,11 +456,11 @@ def build_prompt(
 
         # Add failure context if retrying — wrap in delimiters since it may
         # contain prior LLM output or error messages from external processes
-        if "failure_context" in ctx and ctx["failure_context"]:
+        if ctx.get("failure_context"):
             subs["FAILED_CONTEXT"] = f"<prior-failure>\n{ctx['failure_context']}\n</prior-failure>"
 
         # Wrap human response content if present
-        if "human_response" in ctx and ctx["human_response"]:
+        if ctx.get("human_response"):
             subs["HUMAN_RESPONSE"] = f"<human-response>\n{ctx['human_response']}\n</human-response>"
 
         # Substitute placeholders
@@ -501,10 +502,10 @@ def _build_inline_prompt(story: dict, phase: str, context: dict) -> str:
         f"\n**Acceptance Criteria:**\n{_format_acceptance_criteria(story.get('acceptanceCriteria', []))}",
     ]
 
-    if "failure_context" in context and context["failure_context"]:
+    if context.get("failure_context"):
         parts.append(f"\n## Previous Failure\n{context['failure_context']}")
 
-    if "design_output" in context and context["design_output"]:
+    if context.get("design_output"):
         parts.append(f"\n## Architecture\n{context['design_output']}")
 
     parts.append(f"\n## Instructions\nExecute the {phase} phase for this story. Output your response as JSON.")

@@ -11,39 +11,38 @@ Handles:
 """
 
 import asyncio
-import datetime # Added for checkpoint metadata timestamp
+import datetime  # Added for checkpoint metadata timestamp
 import json
 import logging
 import os
-import time
 from dataclasses import dataclass, field
-from typing import Optional
 
-from src.workflows.state import StoryState, create_initial_state
-from src.workflows.dev_tdd_workflow import DevTDDWorkflow
-from src.workflows.config_tdd_workflow import ConfigTDDWorkflow
-from src.workflows.maintenance_workflow import MaintenanceWorkflow
-from src.workflows.debug_workflow import DebugWorkflow
-from src.workflows.research_workflow import ResearchWorkflow
-from src.workflows.review_workflow import ReviewWorkflow
-from src.workflows.assignment_workflow import AssignmentWorkflow
-from src.workflows.qa_feedback_workflow import QAFeedbackWorkflow
-from src.workflows.escalation_workflow import EscalationWorkflow
-from src.workflows.content_workflow import ContentWorkflow
-from src.workflows.conversation_workflow import ConversationWorkflow
-from src.llm.routing_engine import RoutingEngine
-from src.agents.failure_classifier import classify_failure, FailureSeverity
+from src.agents.failure_classifier import FailureSeverity, classify_failure
+from src.core.checkpoint_manager import Checkpoint, read_checkpoint, write_checkpoint
+from src.core.checkpoint_manager import init_db as init_checkpoint_db
 from src.execution.git_manager import (
     _run_git,
-    get_current_commit,
-    reset_to_commit,
     create_story_worktree,
+    get_current_commit,
+    get_worktree_diff,
     merge_story_worktree,
     remove_story_worktree,
-    get_worktree_diff,
+    reset_to_commit,
 )
+from src.llm.routing_engine import RoutingEngine
 from src.notifications.notifier import Notifier
-from src.core.checkpoint_manager import write_checkpoint, read_checkpoint, Checkpoint, init_db as init_checkpoint_db
+from src.workflows.assignment_workflow import AssignmentWorkflow
+from src.workflows.config_tdd_workflow import ConfigTDDWorkflow
+from src.workflows.content_workflow import ContentWorkflow
+from src.workflows.conversation_workflow import ConversationWorkflow
+from src.workflows.debug_workflow import DebugWorkflow
+from src.workflows.dev_tdd_workflow import DevTDDWorkflow
+from src.workflows.escalation_workflow import EscalationWorkflow
+from src.workflows.maintenance_workflow import MaintenanceWorkflow
+from src.workflows.qa_feedback_workflow import QAFeedbackWorkflow
+from src.workflows.research_workflow import ResearchWorkflow
+from src.workflows.review_workflow import ReviewWorkflow
+from src.workflows.state import create_initial_state
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +88,7 @@ HUMAN_STORY_TYPES = {"assignment", "human_task", "qa_feedback", "escalation"}
 def get_workflow_for_story(
     story: dict,
     routing_engine: RoutingEngine,
-    notifier: Optional[Notifier] = None,
+    notifier: Notifier | None = None,
     checkpointer=None,
 ):
     """Select and compile the appropriate workflow for a story type.
@@ -132,7 +131,7 @@ def _load_execution_config() -> dict:
         "config.json",
     )
     try:
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             return json.load(f).get("execution", {})
     except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
         logger.warning(f"Could not load config.json: {e}")
@@ -144,13 +143,13 @@ async def execute_story(
     task_id: str,
     task_description: str,
     working_directory: str,
-    routing_engine: Optional[RoutingEngine] = None,
-    notifier: Optional[Notifier] = None,
+    routing_engine: RoutingEngine | None = None,
+    notifier: Notifier | None = None,
     max_attempts: int = MAX_ATTEMPTS_PER_STORY,
     mediator_enabled: bool = False,
-    cancellation_event: Optional[asyncio.Event] = None,
+    cancellation_event: asyncio.Event | None = None,
     audit_journal=None,
-    task_file: Optional[str] = None,
+    task_file: str | None = None,
 ) -> StoryResult:
     """Execute a story through its workflow with retry logic.
 
@@ -177,7 +176,7 @@ async def execute_story(
     """
     re = routing_engine or RoutingEngine()
     story_id = story.get("id", "unknown")
-    story_title = story.get("title", "Untitled")
+    story.get("title", "Untitled")
 
     # Set hierarchical correlation context for this story
     try:
@@ -198,7 +197,7 @@ async def execute_story(
         exec_config.get("use_worktree", False)
         and story_type in WORKTREE_TYPES
     )
-    worktree_path: Optional[str] = None
+    worktree_path: str | None = None
     effective_working_dir = working_directory
 
     if use_worktree:
@@ -296,10 +295,10 @@ async def _execute_story_inner(
     task_description: str,
     working_directory: str,
     routing_engine: RoutingEngine,
-    notifier: Optional[Notifier] = None,
+    notifier: Notifier | None = None,
     max_attempts: int = MAX_ATTEMPTS_PER_STORY,
     mediator_enabled: bool = False,
-    cancellation_event: Optional[asyncio.Event] = None,
+    cancellation_event: asyncio.Event | None = None,
 ) -> StoryResult:
     """Inner story execution logic (retry loop, workflow invocation).
 

@@ -5,7 +5,8 @@ This file ensures that the src directory is in the Python path.
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
 import pytest
 
 # Add the project root directory to Python path

@@ -16,23 +16,25 @@ import logging
 import os
 import time
 from abc import ABC, abstractmethod
-from typing import Literal, Optional, Any
-from functools import partial
+from typing import Literal
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph
 
-from src.workflows.state import (
-    StoryState, PhaseOutput, PhaseStatus, TestResult, MediatorVerdict,
-)
-from src.llm.routing_engine import RoutingEngine
+from src.agents.mediator_agent import MediatorAgent, categorize_files, save_intervention, should_trigger
+from src.execution.git_manager import auto_commit, get_diff, get_diff_stat, get_modified_files
+from src.execution.test_runner import get_test_command, run_tests
+from src.execution.verification_sdk import ConfigValidator
 from src.llm.cli_runner import invoke as cli_invoke
 from src.llm.prompt_builder import build_prompt
-from src.llm.response_parser import extract_json, AgentResponse, MediatorResponse
-from src.llm.providers import get_env_for_provider
-from src.execution.git_manager import auto_commit, get_diff, get_diff_stat, get_modified_files
-from src.execution.test_runner import run_tests, get_test_command, TestResult as TRTestResult
-from src.agents.mediator_agent import should_trigger, categorize_files, MediatorAgent, save_intervention
-from src.execution.verification_sdk import ConfigValidator, VerifyResult
+from src.llm.response_parser import MediatorResponse, extract_json
+from src.llm.routing_engine import RoutingEngine
+from src.workflows.state import (
+    MediatorVerdict,
+    PhaseOutput,
+    PhaseStatus,
+    StoryState,
+    TestResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -280,7 +282,7 @@ def phase_node(
         output_text = ""
         try:
             if os.path.exists(stream_file):
-                with open(stream_file, 'r', encoding='utf-8') as f:
+                with open(stream_file, encoding='utf-8') as f:
                     output_text = f.read()
                 if output_text:
                     logger.info(
@@ -309,8 +311,8 @@ def phase_node(
 
     # Log structured event for G-Eval scoring (Enhancement #11)
     try:
-        from src.logging_config import log_event
         from src.llm.prompt_builder import get_template_version
+        from src.logging_config import log_event
         log_event("llm_invocation", "base_workflow", {
             "provider": provider.name,
             "agent_type": agent_name,
@@ -450,7 +452,7 @@ def _invoke_mediator_review(
     story: dict,
     phase: str,
     working_dir: str,
-    test_results: Optional[dict],
+    test_results: dict | None,
 ) -> MediatorResponse:
     """Call the Mediator Agent LLM to review changes. Returns MediatorResponse."""
     diff_stat = get_diff_stat(working_dir)
@@ -1299,7 +1301,7 @@ class BaseWorkflow(ABC):
     The base class handles graph compilation and common patterns.
     """
 
-    def __init__(self, routing_engine: Optional[RoutingEngine] = None):
+    def __init__(self, routing_engine: RoutingEngine | None = None):
         self.routing_engine = routing_engine or RoutingEngine()
 
     @abstractmethod

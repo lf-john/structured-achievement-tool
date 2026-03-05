@@ -2,8 +2,6 @@ import json
 import logging
 import os
 import shutil
-from datetime import datetime
-from typing import List, Optional
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -21,7 +19,7 @@ class AuditRecord(BaseModel):
     success: bool
     duration_seconds: float
     exit_code: int
-    error_summary: Optional[str] = None
+    error_summary: str | None = None
 
 
 class AuditJournal:
@@ -29,7 +27,7 @@ class AuditJournal:
         self.journal_file_path = Path(file_path)
         os.makedirs(os.path.dirname(self.journal_file_path), exist_ok=True)
         if not self.journal_file_path.exists():
-            with open(str(self.journal_file_path), "w", encoding="utf-8") as f:
+            with open(str(self.journal_file_path), "w", encoding="utf-8"):
                 pass
 
     def _maybe_rotate(self):
@@ -51,7 +49,7 @@ class AuditJournal:
             # Rename current → .1
             shutil.move(str(self.journal_file_path), str(rotated))
             # Create fresh empty journal
-            with open(str(self.journal_file_path), "w", encoding="utf-8") as f:
+            with open(str(self.journal_file_path), "w", encoding="utf-8"):
                 pass
             logger.info(f"Rotated audit journal ({size // 1024}KB) → {rotated.name}")
         except OSError as e:
@@ -64,11 +62,11 @@ class AuditJournal:
             f.flush()
             os.fsync(f.fileno())
 
-    def query(self, success: Optional[bool] = None, task_file: Optional[str] = None) -> List[AuditRecord]:
+    def query(self, success: bool | None = None, task_file: str | None = None) -> list[AuditRecord]:
         records = []
         if not self.journal_file_path.exists():
             return records
-        with open(str(self.journal_file_path), "r", encoding="utf-8") as f:
+        with open(str(self.journal_file_path), encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:

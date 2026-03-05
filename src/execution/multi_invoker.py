@@ -13,11 +13,10 @@ Wraps the routing engine + CLI runner and adds:
 
 import logging
 import time
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
-from src.llm.providers import ProviderConfig, get_provider, list_providers
 from src.llm.cli_runner import CLIResult, invoke
+from src.llm.providers import ProviderConfig, get_provider, list_providers
 from src.llm.routing_engine import RoutingEngine
 
 logger = logging.getLogger(__name__)
@@ -44,7 +43,7 @@ class InvocationResult:
     cli_result: CLIResult
     provider_name: str
     was_failover: bool = False
-    failover_from: Optional[str] = None
+    failover_from: str | None = None
     attempts: int = 1
 
     @property
@@ -74,7 +73,7 @@ class MultiInvoker:
 
     def __init__(
         self,
-        routing_engine: Optional[RoutingEngine] = None,
+        routing_engine: RoutingEngine | None = None,
         failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
         cooldown_seconds: float = DEFAULT_COOLDOWN_SECONDS,
     ):
@@ -158,7 +157,7 @@ class MultiInvoker:
         self,
         provider_name: str,
         prompt: str,
-        working_directory: Optional[str] = None,
+        working_directory: str | None = None,
         timeout: int = 600,
     ) -> InvocationResult:
         """Invoke a prompt against a specific provider.
@@ -195,9 +194,9 @@ class MultiInvoker:
         self,
         agent_name: str,
         prompt: str,
-        story_complexity: Optional[int] = None,
+        story_complexity: int | None = None,
         is_code_task: bool = False,
-        working_directory: Optional[str] = None,
+        working_directory: str | None = None,
         timeout: int = 600,
         max_attempts: int = 2,
     ) -> InvocationResult:
@@ -285,9 +284,9 @@ class MultiInvoker:
     async def execute_local_first(
         self,
         prompt: str,
-        working_directory: Optional[str] = None,
+        working_directory: str | None = None,
         timeout: int = 600,
-        preferred_local: Optional[str] = None,
+        preferred_local: str | None = None,
         cloud_fallback: str = "gemini_flash",
     ) -> InvocationResult:
         """Try local Ollama first, fall back to cloud only if local fails.
@@ -360,7 +359,7 @@ class MultiInvoker:
             attempts=2,
         )
 
-    def _select_best_healthy_local(self) -> Optional[ProviderConfig]:
+    def _select_best_healthy_local(self) -> ProviderConfig | None:
         """Select the best healthy local provider by power rating."""
         local_providers = list_providers(local_only=True)
 
@@ -381,7 +380,7 @@ class MultiInvoker:
         healthy.sort(key=lambda p: -p.power)
         return healthy[0]
 
-    def reset_health(self, provider_name: Optional[str] = None):
+    def reset_health(self, provider_name: str | None = None):
         """Reset health state for a provider or all providers.
 
         Args:

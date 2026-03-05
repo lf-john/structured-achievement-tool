@@ -16,11 +16,9 @@ human-readable logs. Events written to .memory/events.jsonl.
 import json
 import logging
 import os
-import time
 import uuid
 from contextvars import ContextVar
 from datetime import datetime
-from typing import Optional
 
 # --- Hierarchical Correlation ID (Enhancement #12) ---
 
@@ -32,7 +30,7 @@ _phase_var: ContextVar[str] = ContextVar("corr_phase", default="")
 correlation_id_var: ContextVar[str] = ContextVar("correlation_id", default="")
 
 
-def set_correlation_id(corr_id: Optional[str] = None, task_id: Optional[str] = None) -> str:
+def set_correlation_id(corr_id: str | None = None, task_id: str | None = None) -> str:
     """Set the task-level correlation ID for the current execution context.
 
     Call this at the start of process_task_file() or any top-level entry point.
@@ -127,8 +125,8 @@ _EVENTS_FILE = os.path.join(_EVENTS_DIR, "events.jsonl")
 def log_event(
     event_type: str,
     component: str = "",
-    data: Optional[dict] = None,
-    events_file: Optional[str] = None,
+    data: dict | None = None,
+    events_file: str | None = None,
 ):
     """Write a structured event to the JSONL event stream.
 

@@ -10,16 +10,15 @@ Complexity: 6 (Mediator). Routes to mid-tier models.
 """
 
 import json
+import logging
 import os
 import re
-import logging
 from datetime import datetime
-from typing import Type, Optional
 
 from pydantic import BaseModel
 
 from src.agents.base_agent import BaseAgent
-from src.llm.response_parser import MediatorResponse, MediatorDecision
+from src.llm.response_parser import MediatorResponse
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +102,7 @@ class MediatorAgent(BaseAgent):
         return "mediator"
 
     @property
-    def response_model(self) -> Type[BaseModel]:
+    def response_model(self) -> type[BaseModel]:
         return MediatorResponse
 
     async def review(
@@ -113,8 +112,8 @@ class MediatorAgent(BaseAgent):
         working_directory: str,
         changes_summary: str,
         changes_diff: str,
-        test_results_before: Optional[dict] = None,
-        test_results_after: Optional[dict] = None,
+        test_results_before: dict | None = None,
+        test_results_after: dict | None = None,
     ) -> MediatorResponse:
         """Review changes made by an agent and return a verdict.
 
@@ -190,7 +189,7 @@ def get_intervention_stats(task_path: str) -> dict:
     by_decision = {}
     total = 0
 
-    with open(tracker_file, "r", encoding="utf-8") as f:
+    with open(tracker_file, encoding="utf-8") as f:
         for line in f:
             try:
                 entry = json.loads(line)

@@ -7,14 +7,12 @@ and creates debug story files that trigger the debug workflow.
 Part of Phase 2 (item 2.4): Enhanced Monitor.
 """
 
+import logging
 import os
 import re
-import time
-import json
 import shutil
-import logging
 import subprocess
-from typing import Optional
+import time
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -67,7 +65,7 @@ class FailureMonitor:
         self,
         output_dir: str = str(SAT_TASKS_DIR / "debug"),
         rate_limit_seconds: int = 600,  # 10 minutes
-        patterns: Optional[list[str]] = None,
+        patterns: list[str] | None = None,
     ):
         self.output_dir = output_dir
         self.rate_limit_seconds = rate_limit_seconds
@@ -100,7 +98,7 @@ class FailureMonitor:
     # Debug story creation
     # ------------------------------------------------------------------
 
-    def create_debug_story(self, context: FailureContext) -> Optional[str]:
+    def create_debug_story(self, context: FailureContext) -> str | None:
         """Create a debug story file from *context*.
 
         Returns the file path on success, or ``None`` if rate-limited or if
@@ -202,7 +200,7 @@ class FailureMonitor:
     # ------------------------------------------------------------------
 
     def capture_log_tail(
-        self, log_file: Optional[str] = None, lines: int = DEFAULT_LOG_TAIL_LINES
+        self, log_file: str | None = None, lines: int = DEFAULT_LOG_TAIL_LINES
     ) -> str:
         """Read the last *lines* lines from *log_file*.
 
@@ -212,7 +210,7 @@ class FailureMonitor:
         try:
             if not os.path.isfile(path):
                 return f"(log file not found: {path})"
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
+            with open(path, encoding="utf-8", errors="replace") as f:
                 all_lines = f.readlines()
             tail = all_lines[-lines:]
             return "".join(tail).rstrip("\n")
@@ -237,7 +235,7 @@ class FailureMonitor:
 
         # Memory (from /proc/meminfo)
         try:
-            with open("/proc/meminfo", "r") as f:
+            with open("/proc/meminfo") as f:
                 meminfo = f.read()
             mem_total = _parse_meminfo(meminfo, "MemTotal")
             mem_avail = _parse_meminfo(meminfo, "MemAvailable")
@@ -284,7 +282,7 @@ def _truncate(text: str, max_lines: int) -> str:
     return "\n".join(kept)
 
 
-def _parse_meminfo(meminfo: str, key: str) -> Optional[int]:
+def _parse_meminfo(meminfo: str, key: str) -> int | None:
     """Extract a kB value from /proc/meminfo content."""
     for line in meminfo.splitlines():
         if line.startswith(key + ":"):

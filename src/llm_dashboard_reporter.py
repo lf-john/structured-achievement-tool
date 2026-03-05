@@ -1,14 +1,16 @@
 import logging
-from typing import Dict, Any, Optional
 from datetime import datetime
+from typing import Any
 
 # Configure logging for the module
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Import LLMCostTracker from its dedicated module
 from src.llm_cost_tracker import LLMCostTracker
+
 # Import the actual OllamaGPUMonitor
 from src.ollama_gpu_monitor import OllamaGPUMonitor
+
 
 class LLMDashboardReporter:
     """
@@ -19,7 +21,7 @@ class LLMDashboardReporter:
         self.gpu_monitor = gpu_monitor
         self.logger = logging.getLogger(__name__)
 
-    def generate_report(self) -> Dict[str, Any]:
+    def generate_report(self) -> dict[str, Any]:
         """
         Collects data and returns a structured report of LLM costs and GPU utilization.
         """

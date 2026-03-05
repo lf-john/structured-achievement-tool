@@ -9,7 +9,7 @@ import json
 import logging
 import sqlite3
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +33,10 @@ class Checkpoint:
         self,
         task_id: str,
         current_phase: str,
-        completed_stories: List[str],
-        pending_stories: List[str],
-        timestamp: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        completed_stories: list[str],
+        pending_stories: list[str],
+        timestamp: str | None = None,
+        metadata: dict[str, Any] | None = None,
         status: str = STATUS_IN_PROGRESS,
     ):
         """
@@ -67,7 +67,7 @@ class Checkpoint:
         self.metadata = metadata if metadata else {}
         self.status = status
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert checkpoint to dictionary for serialization."""
         return {
             "task_id": self.task_id,
@@ -80,7 +80,7 @@ class Checkpoint:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Checkpoint':
+    def from_dict(cls, data: dict[str, Any]) -> 'Checkpoint':
         """Create Checkpoint from dictionary."""
         return cls(
             task_id=data.get("task_id", ""),
@@ -271,7 +271,7 @@ def write_checkpoint(db_path: str, checkpoint: Checkpoint):
             conn.close()
 
 
-def read_checkpoint(db_path: str, task_id: str) -> Optional[Checkpoint]:
+def read_checkpoint(db_path: str, task_id: str) -> Checkpoint | None:
     """
     Retrieve a checkpoint from the database.
 
@@ -326,7 +326,7 @@ def read_checkpoint(db_path: str, task_id: str) -> Optional[Checkpoint]:
         raise
 
 
-def list_checkpoints(db_path: str) -> List[Checkpoint]:
+def list_checkpoints(db_path: str) -> list[Checkpoint]:
     """
     Retrieve all checkpoints from the database.
 

@@ -1,8 +1,13 @@
-import os, time, subprocess, logging, json
+import json
+import logging
+import os
+import subprocess
+import time
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-from src.core.paths import MONITOR_WATCH_DIRS, SAT_DB, RETRY_COUNTS as RETRY_COUNTS_PATH
+from src.core.paths import MONITOR_WATCH_DIRS, SAT_DB
+from src.core.paths import RETRY_COUNTS as RETRY_COUNTS_PATH
 
 # --- Task State Hub integration (Option D) ---
 _db_manager = None
@@ -41,7 +46,7 @@ def _load_retry_counts():
     global retry_counts
     try:
         if os.path.exists(RETRY_COUNT_FILE):
-            with open(RETRY_COUNT_FILE, 'r') as f:
+            with open(RETRY_COUNT_FILE) as f:
                 retry_counts = json.load(f)
     except Exception as e:
         logging.warning(f"Could not load retry counts: {e}")
@@ -82,7 +87,7 @@ def _daemon_pid_alive():
     if not os.path.exists(PID_FILE):
         return False
     try:
-        with open(PID_FILE, 'r') as f:
+        with open(PID_FILE) as f:
             pid = int(f.read().strip())
         os.kill(pid, 0)  # signal 0 = existence check
         return True
@@ -109,7 +114,7 @@ def is_sat_busy():
                 continue
             path = os.path.join(d, f)
             try:
-                with open(path, 'r') as file:
+                with open(path) as file:
                     content = file.read()
                 if "<Working>" in content:
                     if daemon_alive:
@@ -128,7 +133,7 @@ def is_sat_busy():
 def release_safety(file_path):
     """Remove # from '# <Pending>' to make the file ready for processing."""
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path) as f:
             content = f.read()
         if "# <Pending>" in content:
             new_content = content.replace("# <Pending>", "<Pending>")
@@ -187,7 +192,7 @@ def handle_failed_task(file_path, content):
     error_info = ""
     for rf in response_files[-3:]:  # Check last 3 response files
         try:
-            with open(os.path.join(task_dir, rf), 'r') as f:
+            with open(os.path.join(task_dir, rf)) as f:
                 rc = f.read()
             if "failed" in rc.lower() or "error" in rc.lower() or "Exit Code: 1" in rc:
                 error_info += f"\n--- {rf} ---\n{rc[-500:]}"  # Last 500 chars
@@ -226,7 +231,7 @@ def _is_waiting_for_human(file_path):
     not be marked as stuck.
     """
     try:
-        from src.core.checkpoint_manager import read_checkpoint, STATUS_WAITING_FOR_HUMAN
+        from src.core.checkpoint_manager import STATUS_WAITING_FOR_HUMAN, read_checkpoint
         db_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             ".memory", "checkpoints.db"
@@ -317,7 +322,7 @@ def check_queue():
                 continue
             path = os.path.join(d, f)
             try:
-                with open(path, 'r') as file:
+                with open(path) as file:
                     content = file.read()
             except Exception:
                 continue
@@ -330,7 +335,7 @@ def check_queue():
             del stuck_since[tracked_path]
         else:
             try:
-                with open(tracked_path, 'r') as f:
+                with open(tracked_path) as f:
                     c = f.read()
                 if "<Working>" not in c:
                     del stuck_since[tracked_path]
@@ -352,7 +357,7 @@ def check_queue():
         for f in files:
             path = os.path.join(d, f)
             try:
-                with open(path, 'r') as file:
+                with open(path) as file:
                     content = file.read()
             except Exception as e:
                 logging.error(f"Could not read {f}: {e}")
@@ -384,7 +389,7 @@ def _cleanup_retry_counts():
             changed = True
             continue
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path) as f:
                 content = f.read()
             # If task is <Finished> or no longer exists, clear the counter
             if "<Finished>" in content:

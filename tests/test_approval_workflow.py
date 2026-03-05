@@ -9,21 +9,19 @@ Covers:
 - Graph structure for both paths
 """
 
-import pytest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock
 
-from src.workflows.state import create_initial_state, PhaseStatus
 from src.workflows.approval_workflow import (
     ApprovalConfig,
     ApprovalWorkflow,
-    approval_pause_node,
-    approval_follow_up_node,
     approval_escalation_node,
-    pause_initial_decision,
+    approval_follow_up_node,
+    approval_pause_node,
     follow_up_decision,
+    pause_initial_decision,
     response_decision,
 )
-
+from src.workflows.state import create_initial_state
 
 # --- Helpers ---
 

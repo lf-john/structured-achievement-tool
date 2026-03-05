@@ -1,10 +1,7 @@
 """Tests for Telegram bot command handlers."""
 
 import os
-import json
-import tempfile
-import unittest
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import patch
 
 import pytest
 

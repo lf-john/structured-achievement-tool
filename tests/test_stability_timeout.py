@@ -1,13 +1,11 @@
 """Tests for StabilityTimeout fallback module."""
 
 import os
-import time
 from unittest.mock import patch
 
 import pytest
 
 from src.execution.stability_timeout import StabilityTimeout
-
 
 # ---------------------------------------------------------------------------
 # Helpers

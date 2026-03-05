@@ -5,12 +5,11 @@ All git operations are mocked so no real repository is needed.
 """
 
 import subprocess
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.execution.debug_rollback import DebugRollback, DebugRollbackError
-
 
 # ---------------------------------------------------------------------------
 # Helpers

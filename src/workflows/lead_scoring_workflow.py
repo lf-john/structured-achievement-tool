@@ -1,14 +1,16 @@
 # src/workflows/lead_scoring_workflow.py
 import json
-from typing import Dict, Any
-from src.utils.ollama_client import OllamaClient
+from typing import Any
+
 from src.utils.mautic_client import MauticClient
+from src.utils.ollama_client import OllamaClient
+
 
 class LeadScoringWorkflow:
     def __init__(self, config_path: str = "config.json"):
-        with open(config_path, 'r') as f:
+        with open(config_path) as f:
             config = json.load(f)
-        
+
         self.ollama_client = OllamaClient(
             api_url=config["ollama_api_url"],
             model=config["ollama_model"]
@@ -18,15 +20,15 @@ class LeadScoringWorkflow:
             token=config["mautic_api_token"]
         )
 
-    def run(self, contact_id: int, contact_data: Dict[str, Any]) -> bool:
+    def run(self, contact_id: int, contact_data: dict[str, Any]) -> bool:
         """
         Runs the lead scoring workflow for a single contact.
         """
         print(f"Scoring contact ID: {contact_id}")
-        
+
         # 1. Get score from Ollama
         scoring_result = self.ollama_client.score_lead(contact_data)
-        
+
         if "error" in scoring_result or "score" not in scoring_result:
             print(f"Failed to get score for contact {contact_id}. Reason: {scoring_result.get('error', 'Unknown')}")
             return False

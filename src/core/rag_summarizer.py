@@ -6,9 +6,8 @@ to the main LLM, reducing token consumption by condensing verbose results
 into a focused Context Brief.
 """
 
-import subprocess
 import logging
-from typing import Optional
+import subprocess
 
 logger = logging.getLogger(__name__)
 

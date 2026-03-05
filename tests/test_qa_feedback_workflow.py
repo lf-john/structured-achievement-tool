@@ -1,13 +1,12 @@
 """Tests for src.workflows.qa_feedback_workflow — QA feedback story workflow."""
 
-import pytest
 from unittest.mock import MagicMock
 
+from src.workflows.approval_workflow import ApprovalConfig
 from src.workflows.qa_feedback_workflow import (
     QAFeedbackWorkflow,
     qa_route_decision,
 )
-from src.workflows.approval_workflow import ApprovalConfig
 
 
 class TestQARouteDecision:

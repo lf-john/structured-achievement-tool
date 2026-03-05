@@ -1,7 +1,5 @@
 """Tests for routing_engine fallback with DeepSeek backup."""
 
-import pytest
-from unittest.mock import patch
 
 from src.llm.routing_engine import RoutingEngine
 

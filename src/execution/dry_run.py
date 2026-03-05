@@ -4,9 +4,8 @@ Runs verification checks in a non-destructive mode first. If the dry-run
 fails, provides feedback to the LLM for correction before the real run.
 """
 
-from dataclasses import dataclass, field
-from typing import Callable, Optional
 import logging
+from dataclasses import dataclass, field
 
 from src.execution.verification_sdk import VerifyResult
 
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 class DryRunResult:
     """Result of a dry-run verification cycle."""
     dry_run_passed: bool
-    full_run_passed: Optional[bool]  # None if dry-run failed and no full run happened
+    full_run_passed: bool | None  # None if dry-run failed and no full run happened
     dry_run_results: list[VerifyResult] = field(default_factory=list)
     full_run_results: list[VerifyResult] = field(default_factory=list)
     retry_count: int = 0

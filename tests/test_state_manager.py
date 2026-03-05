@@ -22,11 +22,11 @@ Edge Cases:
   - Empty database
 """
 
-import pytest
+import json
 import os
 import tempfile
-import json
-from pathlib import Path
+
+import pytest
 
 # Import the class that doesn't exist yet - this will cause import error
 from src.core.state_manager import SQLiteStateManager
@@ -49,7 +49,7 @@ class TestSQLiteStateManagerInitialization:
         """Test that initialization creates the necessary state table."""
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "test.db")
-            manager = SQLiteStateManager(db_path)
+            SQLiteStateManager(db_path)
 
             # Query the database to verify table exists
             import sqlite3

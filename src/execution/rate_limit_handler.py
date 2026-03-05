@@ -14,12 +14,11 @@ This module provides:
 """
 
 import json
-import os
-import time
-import random
 import logging
-from typing import Optional
-from dataclasses import dataclass, field, asdict
+import os
+import random
+import time
+from dataclasses import asdict, dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +183,7 @@ class RateLimitHandler:
     def queue(self) -> list:
         return self._queue
 
-    def _find_entry(self, task_file: str) -> Optional[RetryEntry]:
+    def _find_entry(self, task_file: str) -> RetryEntry | None:
         """Find an existing queue entry by task file path."""
         for entry in self._queue:
             if entry.task_file == task_file:
@@ -199,7 +198,7 @@ class RateLimitHandler:
         if not os.path.exists(self.state_file):
             return
         try:
-            with open(self.state_file, "r") as f:
+            with open(self.state_file) as f:
                 data = json.load(f)
             self._token_exhausted = data.get("token_exhausted", False)
             self._queue = [

@@ -10,8 +10,8 @@ This module implements a DAG (Directed Acyclic Graph) executor that can:
 """
 
 import asyncio
-from typing import Dict, List, Any, Optional
 from collections import deque
+from typing import Any
 
 
 class CircularDependencyError(Exception):
@@ -28,7 +28,7 @@ class DAGExecutor:
         runner: Optional PhaseRunner instance for executing stories
     """
 
-    def __init__(self, stories: List[Dict[str, Any]], runner: Optional[Any] = None):
+    def __init__(self, stories: list[dict[str, Any]], runner: Any | None = None):
         """Initialize the DAGExecutor with a list of stories.
 
         Args:
@@ -36,7 +36,7 @@ class DAGExecutor:
             runner: Optional PhaseRunner instance for story execution
         """
         self.stories = stories
-        self._stories_by_id: Dict[str, Dict[str, Any]] = {}
+        self._stories_by_id: dict[str, dict[str, Any]] = {}
         self.runner = runner
 
         # Build ID lookup table
@@ -45,13 +45,13 @@ class DAGExecutor:
             if story_id:
                 self._stories_by_id[story_id] = story
 
-    def build_dependency_graph(self) -> Dict[str, List[str]]:
+    def build_dependency_graph(self) -> dict[str, list[str]]:
         """Build an adjacency list representation of the dependency graph.
 
         Returns:
             Dictionary mapping story IDs to lists of their dependencies
         """
-        graph: Dict[str, List[str]] = {}
+        graph: dict[str, list[str]] = {}
 
         for story in self.stories:
             story_id = story.get("id", "")
@@ -62,7 +62,7 @@ class DAGExecutor:
 
         return graph
 
-    def topological_sort(self) -> List[str]:
+    def topological_sort(self) -> list[str]:
         """Perform Kahn's algorithm for topological ordering of stories.
 
         Returns:
@@ -83,7 +83,7 @@ class DAGExecutor:
 
         # Calculate in-degree for each node
         # in-degree = number of dependencies a story has (edges pointing TO it)
-        in_degree: Dict[str, int] = {story_id: 0 for story_id in graph}
+        in_degree: dict[str, int] = {story_id: 0 for story_id in graph}
 
         for story_id in graph:
             for dep in graph[story_id]:
@@ -97,7 +97,7 @@ class DAGExecutor:
         queue = deque([story_id for story_id in graph if in_degree[story_id] == 0])
 
         # Track topological order
-        topo_order: List[str] = []
+        topo_order: list[str] = []
         visited_count = 0
 
         while queue:
@@ -137,7 +137,7 @@ class DAGExecutor:
         except CircularDependencyError:
             return True
 
-    def get_execution_levels(self) -> List[List[str]]:
+    def get_execution_levels(self) -> list[list[str]]:
         """Group stories into levels for parallel execution.
 
         Stories in the same level have no dependencies on each other and can be executed concurrently.
@@ -155,12 +155,12 @@ class DAGExecutor:
         topo_order = self.topological_sort()
 
         # Create mapping of story to its dependencies
-        story_to_deps: Dict[str, set] = {}
+        story_to_deps: dict[str, set] = {}
         for story_id in graph:
             story_to_deps[story_id] = set(graph[story_id])
 
         # Group into levels
-        levels: List[List[str]] = []
+        levels: list[list[str]] = []
         assigned: set = set()
 
         for story_id in topo_order:
@@ -168,7 +168,7 @@ class DAGExecutor:
                 continue
 
             # Find all unassigned stories whose dependencies are all assigned
-            level_candidates: List[str] = []
+            level_candidates: list[str] = []
 
             for candidate_id in topo_order:
                 if candidate_id in assigned:
@@ -186,7 +186,7 @@ class DAGExecutor:
 
         return levels
 
-    def _execute_story(self, story_id: str) -> Dict[str, Any]:
+    def _execute_story(self, story_id: str) -> dict[str, Any]:
         """Execute a single story.
 
         Args:
@@ -203,7 +203,7 @@ class DAGExecutor:
         }
         return result
 
-    async def _execute_story_async(self, story_id: str) -> Dict[str, Any]:
+    async def _execute_story_async(self, story_id: str) -> dict[str, Any]:
         """Execute a single story asynchronously.
 
         Args:
@@ -216,14 +216,14 @@ class DAGExecutor:
         await asyncio.sleep(0)
         return self._execute_story(story_id)
 
-    def execute_sequential(self) -> List[Dict[str, Any]]:
+    def execute_sequential(self) -> list[dict[str, Any]]:
         """Execute stories in topological order (sequential).
 
         Returns:
             List of execution results in order
         """
         order = self.topological_sort()
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
 
         for story_id in order:
             result = self._execute_story(story_id)
@@ -231,7 +231,7 @@ class DAGExecutor:
 
         return results
 
-    async def execute_parallel(self) -> List[Dict[str, Any]]:
+    async def execute_parallel(self) -> list[dict[str, Any]]:
         """Execute stories with parallel execution of independent stories.
 
         Stories in the same execution level run concurrently using asyncio.
@@ -241,7 +241,7 @@ class DAGExecutor:
             List of execution results
         """
         levels = self.get_execution_levels()
-        all_results: List[Dict[str, Any]] = []
+        all_results: list[dict[str, Any]] = []
 
         for level in levels:
             # Execute all stories in this level concurrently

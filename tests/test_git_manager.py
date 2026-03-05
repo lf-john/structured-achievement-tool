@@ -2,20 +2,17 @@
 
 import os
 import subprocess
-import tempfile
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from src.execution.git_manager import (
-    auto_commit,
-    get_current_commit,
-    reset_to_commit,
-    get_diff,
-    get_diff_stat,
-    get_modified_files,
-    create_worktree,
-    WorktreeInfo,
     _run_git,
+    auto_commit,
+    create_worktree,
+    get_current_commit,
+    get_diff,
+    get_modified_files,
+    reset_to_commit,
 )
 
 

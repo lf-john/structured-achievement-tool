@@ -10,13 +10,12 @@ Config overrides via phase_models in config.json bypass these rules.
 """
 
 import json
-import os
 import logging
+import os
 import subprocess
 import time
-from typing import Optional, Tuple
 
-from src.llm.providers import ProviderConfig, PROVIDERS, get_provider, is_provider_available
+from src.llm.providers import PROVIDERS, ProviderConfig, get_provider, is_provider_available
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +98,7 @@ class RoutingEngine:
     CLOUD_CIRCUIT_COOLDOWN = 300   # 5 minutes
     AUTH_CIRCUIT_COOLDOWN = 1800   # 30 minutes (key probably revoked)
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: str | None = None):
         self.config = {}
         self.phase_overrides = {}
         # Track rate-limited providers: {provider_name: timestamp_of_429}
@@ -113,7 +112,7 @@ class RoutingEngine:
         self._circuit_state: dict[str, dict] = {}
 
         if config_path and os.path.exists(config_path):
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 self.config = json.load(f)
             self.phase_overrides = self.config.get("phase_models", {})
 
@@ -305,7 +304,7 @@ class RoutingEngine:
         agent_name: str,
         attempt_number: int = 1,
         failure_is_persistent: bool = False,
-        story_complexity: Optional[int] = None,
+        story_complexity: int | None = None,
         is_code_task: bool = False,
     ) -> ProviderConfig:
         """Select provider with automatic escalation on persistent failures.
@@ -331,7 +330,7 @@ class RoutingEngine:
 
         return self.select(agent_name, effective_complexity, is_code_task)
 
-    def get_complexity(self, agent_name: str, story_complexity: Optional[int] = None) -> int:
+    def get_complexity(self, agent_name: str, story_complexity: int | None = None) -> int:
         """Get the complexity rating for an agent.
 
         For agents with variable complexity (coder, basic_info), use story_complexity.
@@ -343,7 +342,7 @@ class RoutingEngine:
     def select(
         self,
         agent_name: str,
-        story_complexity: Optional[int] = None,
+        story_complexity: int | None = None,
         is_code_task: bool = False,
     ) -> ProviderConfig:
         """Select the best provider for an agent.
@@ -390,7 +389,7 @@ class RoutingEngine:
         # expensive models are ALLOWED; this gates when cheap models are ADEQUATE.
         min_adequate_power = max(complexity - 1, 1)
 
-        for name, provider in PROVIDERS.items():
+        for _name, provider in PROVIDERS.items():
             power = provider.code_power if is_code_task else provider.power
 
             # Skip providers that aren't available (missing API keys, CLI tools)
@@ -412,10 +411,7 @@ class RoutingEngine:
                     eligible.append(provider)
             elif provider.local:
                 # Rule 3: Local preferred when complexity <= 6 AND power >= complexity
-                if complexity <= 6 and power >= complexity:
-                    eligible.append(provider)
-                # Rule 4: Nemotron preferred when complexity <= 3
-                elif provider.name == "nemotron" and complexity <= 3:
+                if (complexity <= 6 and power >= complexity) or (provider.name == "nemotron" and complexity <= 3):
                     eligible.append(provider)
             else:
                 # Rule 2: Other commercial models eligible when complexity >= power - 2
@@ -455,9 +451,9 @@ class RoutingEngine:
     def select_with_fallback(
         self,
         agent_name: str,
-        story_complexity: Optional[int] = None,
+        story_complexity: int | None = None,
         is_code_task: bool = False,
-    ) -> Tuple[ProviderConfig, ProviderConfig]:
+    ) -> tuple[ProviderConfig, ProviderConfig]:
         """Select primary + fallback provider.
 
         Uses routing_preferences from config to select appropriate backups:
@@ -491,7 +487,7 @@ class RoutingEngine:
     def select_all(
         self,
         agent_name: str,
-        story_complexity: Optional[int] = None,
+        story_complexity: int | None = None,
         is_code_task: bool = False,
     ) -> list[ProviderConfig]:
         """Return all eligible providers in priority order (best first).
@@ -516,7 +512,7 @@ class RoutingEngine:
 
         min_adequate_power = max(complexity - 1, 1)
 
-        for name, provider in PROVIDERS.items():
+        for _name, provider in PROVIDERS.items():
             power = provider.code_power if is_code_task else provider.power
 
             if not is_provider_available(provider):
@@ -530,9 +526,7 @@ class RoutingEngine:
                 if complexity >= power:
                     eligible.append(provider)
             elif provider.local:
-                if complexity <= 6 and power >= complexity:
-                    eligible.append(provider)
-                elif provider.name == "nemotron" and complexity <= 3:
+                if (complexity <= 6 and power >= complexity) or (provider.name == "nemotron" and complexity <= 3):
                     eligible.append(provider)
             else:
                 if complexity >= power - 2:

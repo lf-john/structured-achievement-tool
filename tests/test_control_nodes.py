@@ -1,16 +1,16 @@
 """Tests for src.workflows.control_nodes — NOTIFY and PAUSE LangGraph nodes."""
 
-import pytest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
+
 from src.workflows.control_nodes import (
-    notify_node,
-    pause_node,
-    pause_decision,
     _build_signal_content,
     _extract_human_response,
     _read_signal_file,
+    notify_node,
+    pause_decision,
+    pause_node,
 )
-from src.workflows.state import StoryState, PhaseOutput, PhaseStatus
+from src.workflows.state import StoryState
 
 
 def _make_state(**overrides) -> StoryState:
@@ -97,7 +97,7 @@ class TestNotifyNode:
         state = _make_state(verify_passed=True)
         notifier = _make_notifier()
 
-        result = notify_node(state, notifier, channel="all")
+        notify_node(state, notifier, channel="all")
 
         notifier.send_ntfy.assert_called_once()
         notifier.send_email.assert_called_once()
@@ -208,7 +208,7 @@ class TestNotifyNode:
         state = _make_state(phase_outputs=[])
         notifier = _make_notifier()
 
-        result = notify_node(state, notifier, channel="ntfy")
+        notify_node(state, notifier, channel="ntfy")
 
         notifier.send_ntfy.assert_called_once()
         # Message should not contain "Context:" since there's nothing
@@ -240,7 +240,7 @@ class TestPauseNode:
         def mock_read(path):
             return "approved\n\n---\n\napproved\n<Pending>\n"
 
-        result = pause_node(
+        pause_node(
             state, notifier,
             signal_dir="/tmp/test-sat",
             _sleep_fn=lambda x: None,

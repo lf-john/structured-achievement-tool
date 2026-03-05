@@ -1,8 +1,11 @@
 # tests/utils/test_ollama_client.py
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import requests
+
 from src.utils.ollama_client import OllamaClient
+
 
 class TestOllamaClient(unittest.TestCase):
 
@@ -53,7 +56,7 @@ class TestOllamaClient(unittest.TestCase):
     def test_parse_response_valid(self):
         # Arrange
         response_text = 'Here is the JSON you requested: {"score": 78, "confidence": "medium"}. Let me know if you need more.'
-        
+
         # Act
         result = self.client._parse_response(response_text)
 
@@ -63,7 +66,7 @@ class TestOllamaClient(unittest.TestCase):
     def test_parse_response_invalid_json(self):
         # Arrange
         response_text = 'I am unable to provide a score. The format is wrong.'
-        
+
         # Act
         result = self.client._parse_response(response_text)
 
@@ -74,21 +77,21 @@ class TestOllamaClient(unittest.TestCase):
     def test_parse_response_incomplete_json(self):
         # Arrange
         response_text = '{"score": 50'
-        
+
         # Act
         result = self.client._parse_response(response_text)
-        
+
         # Assert
         self.assertEqual(result['score'], 0)
         self.assertIn('Failed to parse response', result['error'])
-        
+
     def test_build_prompt(self):
         # Arrange
         prompt = self._get_expected_prompt()
 
         # Act
         result = self.client._build_prompt(self.contact_data)
-        
+
         # Assert
         # Using strip and replacing spaces to make the comparison less brittle to whitespace changes
         self.assertEqual("".join(result.split()), "".join(prompt.split()))

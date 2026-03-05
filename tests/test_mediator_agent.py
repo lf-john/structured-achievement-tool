@@ -2,15 +2,13 @@
 
 import json
 import os
-import tempfile
-import pytest
 
 from src.agents.mediator_agent import (
-    categorize_files,
-    should_trigger,
-    save_intervention,
-    get_intervention_stats,
     MediatorAgent,
+    categorize_files,
+    get_intervention_stats,
+    save_intervention,
+    should_trigger,
 )
 
 

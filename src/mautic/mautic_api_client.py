@@ -1,5 +1,7 @@
-import requests
 import os
+
+import requests
+
 
 class MauticApiClient:
     def __init__(self, base_url: str, api_key: str):
@@ -86,7 +88,7 @@ class MauticApiClient:
             "3": {"id": 3, "firstname": "Peter", "lastname": "Jones", "email": "peter@example.com", "company": "123 Corp.", "fields": {"core": {"lead_score": {"value": 15}}}},
             "4": {"id": 4, "firstname": "Alice", "lastname": "Brown", "email": "alice@example.com", "company": "Data LLC", "fields": {"core": {"lead_score": {"value": 25}}}}
         }
-        
+
         # Apply basic filtering for simulation
         filtered_contacts = {}
         for contact_id, contact_data in dummy_contacts.items():
@@ -95,9 +97,9 @@ class MauticApiClient:
                     filtered_contacts[contact_id] = contact_data
             else:
                 filtered_contacts[contact_id] = contact_data
-        
+
         total_count = len(filtered_contacts)
-        
+
         # Apply limit and start for simulation
         contacts_list = list(filtered_contacts.values())
         if limit is not None and limit != 0:

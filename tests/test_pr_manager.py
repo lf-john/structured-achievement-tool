@@ -1,11 +1,9 @@
 """Tests for src.github.pr_manager — Pull request management."""
 
-import json
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.github.gh_cli import GHResult
-from src.github.pr_manager import PRManager, PRResult
+from src.github.pr_manager import PRManager
 
 
 def _make_story(**overrides) -> dict:

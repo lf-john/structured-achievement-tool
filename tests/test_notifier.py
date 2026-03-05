@@ -1,7 +1,6 @@
 """Tests for src.notifications.notifier — notification service."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.notifications.notifier import Notifier
 

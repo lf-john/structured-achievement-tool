@@ -1,4 +1,3 @@
-import math
 
 def format_duration(seconds: float) -> str:
     """

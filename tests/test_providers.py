@@ -1,15 +1,14 @@
 """Tests for src.llm.providers — LLM provider registry and env handling."""
 
 import os
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from src.llm.providers import (
     PROVIDERS,
-    ProviderConfig,
-    CostTier,
-    get_provider,
     get_env_for_provider,
+    get_provider,
     list_providers,
 )
 

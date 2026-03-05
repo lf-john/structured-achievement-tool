@@ -15,9 +15,8 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Optional
 
-from src.github.gh_cli import run_gh, get_repo_from_remote
+from src.github.gh_cli import get_repo_from_remote, run_gh
 
 logger = logging.getLogger(__name__)
 
@@ -48,15 +47,15 @@ STATUS_LABELS = {
 class IssueResult:
     """Result of a GitHub Issue operation."""
     success: bool
-    issue_number: Optional[int] = None
-    issue_url: Optional[str] = None
-    error: Optional[str] = None
+    issue_number: int | None = None
+    issue_url: str | None = None
+    error: str | None = None
 
 
 class IssueManager:
     """Manages the SAT story ↔ GitHub Issue mapping."""
 
-    def __init__(self, repo: Optional[str] = None, cwd: Optional[str] = None):
+    def __init__(self, repo: str | None = None, cwd: str | None = None):
         """Initialize with optional repo override.
 
         Args:
@@ -170,7 +169,7 @@ class IssueManager:
 
         return result.success
 
-    def find_issue_by_story_id(self, story_id: str) -> Optional[int]:
+    def find_issue_by_story_id(self, story_id: str) -> int | None:
         """Find a GitHub Issue by SAT story ID.
 
         Searches issue titles for the [story_id] prefix pattern.
@@ -240,7 +239,7 @@ class IssueManager:
         if criteria:
             lines.append("## Acceptance Criteria")
             lines.append("")
-            for i, criterion in enumerate(criteria, 1):
+            for _i, criterion in enumerate(criteria, 1):
                 lines.append(f"- [ ] {criterion}")
             lines.append("")
 
@@ -252,7 +251,7 @@ class IssueManager:
             lines.append("")
 
         lines.append("---")
-        lines.append(f"*Created by SAT (Structured Achievement Tool)*")
+        lines.append("*Created by SAT (Structured Achievement Tool)*")
 
         return "\n".join(lines)
 
@@ -287,14 +286,14 @@ class IssueManager:
                 self._label_cache.add(label)
                 logger.debug(f"Created label: {label}")
 
-    def _ensure_milestone(self, task_name: str) -> Optional[int]:
+    def _ensure_milestone(self, task_name: str) -> int | None:
         """Ensure milestone exists, creating if needed. Returns milestone number."""
         if task_name in self._milestone_cache:
             return self._milestone_cache[task_name]
 
         # Check if milestone exists
         result = run_gh(
-            ["api", f"repos/:owner/:repo/milestones", "--jq",
+            ["api", "repos/:owner/:repo/milestones", "--jq",
              f'.[] | select(.title == "{task_name}") | .number'],
             repo=self.repo, cwd=self.cwd,
         )
@@ -327,7 +326,7 @@ class IssueManager:
 
         return None
 
-    def _extract_issue_number(self, url: str) -> Optional[int]:
+    def _extract_issue_number(self, url: str) -> int | None:
         """Extract issue number from GitHub URL."""
         match = re.search(r'/issues/(\d+)', url)
         if match:

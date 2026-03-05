@@ -4,15 +4,14 @@ Tests for Watchdog — Monitor Watchdog (Phase 2 item 2.6).
 Uses tmp_path and mock subprocess throughout.
 """
 
-import pytest
 import json
 import os
 import time
-from unittest.mock import patch, MagicMock, call
-from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from src.execution.watchdog import Watchdog
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -1,14 +1,12 @@
 """Tests for src.agents.rca_agent — Root Cause Analysis agent."""
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from src.agents.rca_agent import (
-    analyze_failure_patterns,
-    should_trigger_rca,
-    generate_escalation_story,
     RCAReport,
-    PATTERN_CATEGORIES,
+    analyze_failure_patterns,
+    generate_escalation_story,
+    should_trigger_rca,
 )
 from src.execution.audit_journal import AuditRecord
 

@@ -9,11 +9,11 @@ Verdicts: ACCEPT, REVERT, PARTIAL, RETRY (all 4 tested per case).
 
 import os
 import subprocess
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from src.workflows.base_workflow import mediator_gate_node
-from src.workflows.state import MediatorVerdict
 
 
 @pytest.fixture

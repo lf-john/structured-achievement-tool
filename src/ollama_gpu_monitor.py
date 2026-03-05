@@ -1,7 +1,7 @@
 import logging
 import re
-from typing import Dict, Any
-import default_api # Import default_api directly
+
+import default_api  # Import default_api directly
 
 # Configure logging for the module
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -17,10 +17,11 @@ class OllamaGPUMonitor:
         """
         Returns current GPU utilization as a float (0.0-1.0).
         Returns 0.0 if nvidia-smi fails or output cannot be parsed.
-        """        try:
+        """
+        try:
             # The test expects this specific command, so we must call it.
             command_result = default_api.run_shell_command(
-                command="nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits", 
+                command="nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits",
                 description="Get Ollama GPU utilization"
             )
 
@@ -31,7 +32,7 @@ class OllamaGPUMonitor:
             if error or (exit_code is not None and exit_code != 0):
                 self.logger.warning(f"nvidia-smi command failed with exit code {exit_code}: {error}")
                 return 0.0
-            
+
             if not output:
                 self.logger.info("nvidia-smi returned empty output.")
                 return 0.0
@@ -47,7 +48,7 @@ class OllamaGPUMonitor:
                 self.logger.error(f"Could not find GPU utilization in nvidia-smi output: {output}")
                 return 0.0
         except ValueError:
-            self.logger.error(f"Could not parse extracted utilization as a float.")
+            self.logger.error("Could not parse extracted utilization as a float.")
             return 0.0
         except Exception as e:
             self.logger.error(f"Error getting GPU utilization: {e}")

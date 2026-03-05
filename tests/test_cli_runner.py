@@ -1,13 +1,14 @@
 """Tests for src.llm.cli_runner — Async subprocess LLM invocation."""
 
 import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 
 from src.llm.cli_runner import (
     CLIResult,
-    _detect_api_error,
     _build_command,
+    _detect_api_error,
     invoke,
 )
 from src.llm.providers import get_provider
@@ -81,7 +82,7 @@ class TestBuildCommand:
         assert "qwen3:8b" in cmd
 
     def test_unknown_cli_raises(self):
-        from src.llm.providers import ProviderConfig, CostTier
+        from src.llm.providers import CostTier, ProviderConfig
         provider = ProviderConfig(
             name="test", power=5, code_power=5, speed=5,
             cost_tier=CostTier.FREE, context_window=1000,

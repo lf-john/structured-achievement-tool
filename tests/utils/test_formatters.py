@@ -1,5 +1,5 @@
-import pytest
 from src.utils.formatters import format_duration
+
 
 def test_format_duration_less_than_60_seconds():
     assert format_duration(45) == '45s'

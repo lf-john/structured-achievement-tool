@@ -2,12 +2,12 @@
 Tests for Ollama Benchmark Infrastructure (US-001)
 Comprehensive tests for the benchmarking framework.
 """
-import pytest
-import os
-import sys
 import datetime
+import os
+from unittest.mock import MagicMock, patch
+
+import pytest
 import requests.exceptions
-from unittest.mock import patch, MagicMock
 from pydantic import ValidationError
 
 # Import the benchmarking module components
@@ -82,7 +82,7 @@ class TestConfiguration:
         """Verify all 4 models are defined in the configuration."""
         assert len(src.benchmarking.config.MODELS) == 4, f"Expected 4 models, got {len(src.benchmarking.config.MODELS)}"
         expected_models = ["qwen3:8b", "qwen2.5-coder:7b", "deepseek-r1:8b", "nemotron-mini"]
-        assert src.benchmarking.config.MODELS == expected_models, f"Models mismatch: {src.benchmarking.config.MODELS}"
+        assert expected_models == src.benchmarking.config.MODELS, f"Models mismatch: {src.benchmarking.config.MODELS}"
 
     def test_prompts_configured_correctly(self):
         """Verify all 3 prompts are defined in the configuration."""
@@ -92,7 +92,7 @@ class TestConfiguration:
             "What are the main benefits of using a containerized application?",
             "Explain the concept of RAG in large language models.",
         ]
-        assert src.benchmarking.config.PROMPTS == expected_prompts, f"Prompts mismatch: {src.benchmarking.config.PROMPTS}"
+        assert expected_prompts == src.benchmarking.config.PROMPTS, f"Prompts mismatch: {src.benchmarking.config.PROMPTS}"
 
     def test_api_url_configured(self):
         """Verify the Ollama API URL is configured correctly."""

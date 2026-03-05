@@ -1,6 +1,7 @@
 import json
 import os
 
+
 class LLMBudgetConfig:
     def __init__(self, config_path: str = 'config.json'):
         self.config_path = config_path
@@ -11,7 +12,7 @@ class LLMBudgetConfig:
             print(f"Warning: Config file not found at {self.config_path}. Using default values.")
             return {}
         try:
-            with open(self.config_path, 'r') as f:
+            with open(self.config_path) as f:
                 full_config = json.load(f)
             return full_config.get('llm_cost_tracker', {})
         except json.JSONDecodeError as e:

@@ -7,8 +7,7 @@ Used by the dashboard and CLI tools.
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Optional, Dict, List
+from datetime import UTC, datetime
 
 from src.db.database_manager import DatabaseManager
 
@@ -21,7 +20,7 @@ class TaskVisibility:
     def __init__(self, db_manager: DatabaseManager):
         self.db = db_manager
 
-    def get_task_status(self, task_id: str) -> Dict:
+    def get_task_status(self, task_id: str) -> dict:
         """Get detailed status for a specific task including stories and events."""
         task = self.db.get_task(task_id)
         if not task:
@@ -42,7 +41,7 @@ class TaskVisibility:
             "phase_history": phase_history,
         }
 
-    def get_active_work(self) -> Dict:
+    def get_active_work(self) -> dict:
         """Get all active tasks with their stories."""
         status = self.db.get_system_status()
         active_tasks = self.db.get_active_tasks()
@@ -60,7 +59,7 @@ class TaskVisibility:
             "active_tasks": result,
         }
 
-    def get_blocked_stories(self) -> List[Dict]:
+    def get_blocked_stories(self) -> list[dict]:
         """Get all stories that are blocked on dependencies."""
         active_tasks = self.db.get_active_tasks()
         blocked = []
@@ -87,7 +86,7 @@ class TaskVisibility:
         events = self.db.get_recent_events(limit=100)
 
         lines = []
-        lines.append(f"SAT Daily Summary — {datetime.now(timezone.utc).strftime('%Y-%m-%d')}")
+        lines.append(f"SAT Daily Summary — {datetime.now(UTC).strftime('%Y-%m-%d')}")
         lines.append("")
         lines.append(f"Active tasks: {status.get('active_tasks', 0)}")
         lines.append(f"Working stories: {status.get('working_stories', 0)}")
@@ -96,7 +95,7 @@ class TaskVisibility:
         lines.append("")
 
         # Count event types
-        type_counts: Dict[str, int] = {}
+        type_counts: dict[str, int] = {}
         for e in events:
             t = e.get("event_type", "unknown")
             type_counts[t] = type_counts.get(t, 0) + 1
@@ -123,7 +122,7 @@ class TaskVisibility:
 
         # G-Eval provider performance (Enhancement #11)
         try:
-            from src.evaluation.geval_scorer import get_provider_performance, get_low_scoring_details
+            from src.evaluation.geval_scorer import get_low_scoring_details, get_provider_performance
             perf = get_provider_performance()
             if perf:
                 lines.append("")
@@ -294,7 +293,7 @@ def main():
             ".memory", "enhancements.jsonl"
         )
         if _os.path.exists(enh_file):
-            with open(enh_file, "r") as f:
+            with open(enh_file) as f:
                 entries = [json.loads(line) for line in f if line.strip()]
             if entries:
                 print(f"Enhancement Suggestions ({len(entries)} total)\n")

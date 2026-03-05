@@ -1,1 +1,1 @@
-from .debug_budget_manager import DebugBudgetManager
+from .debug_budget_manager import DebugBudgetManager as DebugBudgetManager

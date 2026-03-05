@@ -1,9 +1,9 @@
 """Tests for src.orchestrator_v2 — Integration of classify → decompose → execute."""
 
-import os
 import json
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 
 from src.orchestrator_v2 import OrchestratorV2
 

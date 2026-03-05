@@ -6,17 +6,17 @@ Usage:
     python grafana_setup.py --uid <uid> --name <name> [options]
 """
 
-import os
-import sys
 import argparse
 import json
-from typing import Dict, Any, Optional, List
+import os
+import sys
+from typing import Any
 
 
 class GrafanaSetup:
     """Main orchestrator for Grafana dashboard creation/update operations."""
 
-    def __init__(self, api_key: Optional[str] = None, dry_run: bool = False):
+    def __init__(self, api_key: str | None = None, dry_run: bool = False):
         """
         Initialize GrafanaSetup.
 
@@ -63,7 +63,7 @@ class GrafanaSetup:
         except Exception:
             return False
 
-    def update_dashboard(self, uid: str, dashboard_json: Dict[str, Any]) -> Dict[str, Any]:
+    def update_dashboard(self, uid: str, dashboard_json: dict[str, Any]) -> dict[str, Any]:
         """
         Update an existing dashboard.
 
@@ -85,7 +85,7 @@ class GrafanaSetup:
 
         return self.client.update_dashboard(uid, dashboard_json)
 
-    def create_dashboard(self, dashboard_json: Dict[str, Any]) -> Dict[str, Any]:
+    def create_dashboard(self, dashboard_json: dict[str, Any]) -> dict[str, Any]:
         """
         Create a new dashboard.
 
@@ -110,11 +110,11 @@ class GrafanaSetup:
         self,
         uid: str,
         name: str,
-        panels: Optional[List[Dict[str, Any]]] = None,
-        options: Optional[Dict[str, Any]] = None,
-        datasource: Optional[str] = None,
+        panels: list[dict[str, Any]] | None = None,
+        options: dict[str, Any] | None = None,
+        datasource: str | None = None,
         save: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Main method to create or update a dashboard with idempotency logic.
 
@@ -153,7 +153,7 @@ class GrafanaSetup:
                 with open(filename, 'w') as f:
                     json.dump(dashboard, f, indent=2)
                 print(f"Dashboard JSON saved to {filename}")
-            except IOError as e:
+            except OSError as e:
                 print(f"Warning: Could not save dashboard to file: {e}")
 
         # Check if dashboard exists (idempotency check)
@@ -261,7 +261,7 @@ Examples:
         setup = GrafanaSetup(api_key=args.api_key, dry_run=args.dry_run)
 
         # Setup the dashboard
-        dashboard = setup.setup_dashboard(
+        setup.setup_dashboard(
             uid=args.uid,
             name=args.name,
             panels=panels,
@@ -271,7 +271,7 @@ Examples:
         )
 
         # Print result
-        action = "updated" if args.dry_run else "updated"
+        action = "updated"
         if not setup.check_dashboard_exists(args.uid):
             action = "created"
 

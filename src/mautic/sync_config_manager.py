@@ -17,7 +17,7 @@ def configure_batch_size(num_contacts: int, config_storage: dict):
     """
     if num_contacts < 0:
         raise ValueError("Number of contacts cannot be negative")
-    
+
     if num_contacts == 0:
         config_storage["batch_size"] = 0
         return
@@ -26,9 +26,9 @@ def configure_batch_size(num_contacts: int, config_storage: dict):
     # We'll cap the batch size to a max to prevent excessively large batches.
     max_batch_size = 5000
     calculated_batch_size = min(max_batch_size, num_contacts // 6) # Divide by 6 for 30k contacts to get 5k batch size
-    
+
     # Ensure a minimum batch size if num_contacts is positive but very small
     if calculated_batch_size == 0 and num_contacts > 0:
         calculated_batch_size = min(num_contacts, 100) # Use a small default or num_contacts itself
-        
+
     config_storage["batch_size"] = calculated_batch_size

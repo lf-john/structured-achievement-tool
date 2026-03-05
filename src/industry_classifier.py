@@ -5,11 +5,10 @@ into predefined industry categories using Ollama embeddings.
 """
 
 import logging
-from typing import Dict, List
 
 # Assuming EmbeddingService is in src/core/embedding_service.py
 # It will be mocked during testing.
-from src.core.embedding_service import EmbeddingService # type: ignore
+from src.core.embedding_service import EmbeddingService  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +25,14 @@ class IndustryClassifier:
     """
 
     # Predefined industry categories and their descriptions for embedding
-    INDUSTRY_DESCRIPTIONS: Dict[str, str] = {
+    INDUSTRY_DESCRIPTIONS: dict[str, str] = {
         "healthcare": "Medical services, hospitals, clinics, pharmaceuticals, health technology, insurance.",
         "higher_ed": "Universities, colleges, educational institutions, research, academic programs.",
         "manufacturing": "Production of goods, factories, industrial processes, automotive, electronics, textiles.",
         "other": "General business, services not fitting specific categories, retail, finance, technology, consulting.",
     }
 
-    def __init__(self, embedding_service: EmbeddingService, industry_embeddings: Dict[str, List[float]] | None = None):
+    def __init__(self, embedding_service: EmbeddingService, industry_embeddings: dict[str, list[float]] | None = None):
         """
         Initializes the IndustryClassifier with an EmbeddingService instance.
 
@@ -113,7 +112,7 @@ class IndustryClassifier:
 
         return best_match_industry
 
-    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+    def _cosine_similarity(self, vec1: list[float], vec2: list[float]) -> float:
         """
         Calculates the cosine similarity between two vectors.
 
@@ -124,7 +123,7 @@ class IndustryClassifier:
         Returns:
             The cosine similarity as a float.
         """
-        dot_product = sum(v1 * v2 for v1, v2 in zip(vec1, vec2))
+        dot_product = sum(v1 * v2 for v1, v2 in zip(vec1, vec2, strict=False))
         magnitude1 = (sum(v1**2 for v1 in vec1))**0.5
         magnitude2 = (sum(v2**2 for v2 in vec2))**0.5
 

@@ -17,16 +17,17 @@ Loopbacks:
 """
 
 from functools import partial
-from langgraph.graph import StateGraph, END
 
-from src.workflows.state import StoryState
+from langgraph.graph import END, StateGraph
+
 from src.workflows.base_workflow import (
     BaseWorkflow,
+    check_test_decision,
     phase_node,
     test_check_node,
-    check_test_decision,
     verify_decision,
 )
+from src.workflows.state import StoryState
 
 
 class MaintenanceWorkflow(BaseWorkflow):
