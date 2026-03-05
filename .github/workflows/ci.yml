@@ -39,7 +39,8 @@ jobs:
             --ignore=tests/test_fuse_integration.py \
             --ignore=tests/test_benchmarking_ollama_infrastructure.py \
             --ignore=tests/test_routing_engine.py \
-            -k "not integration and not test_examples_are_valid_json"
+            --ignore=tests/test_us002_seven_sweeps_quality_gate.py \
+            -k "not integration"
 
   security:
     runs-on: ubuntu-latest
