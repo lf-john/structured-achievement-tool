@@ -55,5 +55,5 @@ Last updated: 2026-03-06.
 - **[A3]** User cancellation via `<Cancel>` file tag. SAT also handles graceful shutdown internally (SIGTERM, session invalidation, orphan cleanup).
 - **[A4]** SAT both builds AND operates systems. It is not just a build tool.
 - **[A5]** Weekly calibration produces recommendations, not auto-applied changes. User will decide when/if to change to monthly.
-- **[A6]** Confidence scoring 0.5–0.79: notify user via ntfy (not just log). User can interrupt if needed.
+- **[A6]** Confidence scoring 0.5–0.79: notify user via ntfy AND log. User can interrupt if needed.
 - **[A7]** Notification via Decomp must be implemented in code, not just recorded in learnings. Decomp adds `notify` attribute; story executor sends notification on completion.
