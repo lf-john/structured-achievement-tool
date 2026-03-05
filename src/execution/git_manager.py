@@ -7,6 +7,7 @@ Ported from Ralph Pro GitManager (lines 1130-1288).
 import logging
 import os
 import subprocess
+import sys
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,7 @@ GIT_TIMEOUT = 30  # seconds
 @dataclass
 class WorktreeInfo:
     """Result of worktree creation."""
+
     success: bool
     worktree_path: str = ""
     branch_name: str = ""
@@ -27,9 +29,7 @@ class WorktreeInfo:
 def _run_git(args: list[str], cwd: str, timeout: int = GIT_TIMEOUT) -> subprocess.CompletedProcess:
     """Run a git command and return the result."""
     cmd = ["git"] + args
-    return subprocess.run(
-        cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout
-    )
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
 
 
 def _get_default_branch(project_path: str) -> str:
@@ -213,9 +213,7 @@ def create_story_worktree(story_id: str, base_dir: str, worktree_base: str | Non
         base_dir,
     )
     if result.returncode != 0:
-        raise RuntimeError(
-            f"Failed to create worktree at {worktree_path}: {result.stderr.strip()}"
-        )
+        raise RuntimeError(f"Failed to create worktree at {worktree_path}: {result.stderr.strip()}")
 
     logger.info(f"Created worktree at {worktree_path} on branch {branch_name}")
     return worktree_path
@@ -322,9 +320,7 @@ def merge_story_worktree(
     # Post-merge verification
     if verify_after_merge:
         if not verify_merge(base_dir, safe_id):
-            logger.warning(
-                f"Post-merge verification failed for story {safe_id}; merge has been reverted"
-            )
+            logger.warning(f"Post-merge verification failed for story {safe_id}; merge has been reverted")
             return False
 
     return True
@@ -346,11 +342,10 @@ def remove_story_worktree(worktree_path: str, base_dir: str) -> None:
     if os.path.isdir(worktree_path):
         result = _run_git(["worktree", "remove", worktree_path, "--force"], base_dir)
         if result.returncode != 0:
-            logger.warning(
-                f"git worktree remove failed for {worktree_path}: {result.stderr.strip()}"
-            )
+            logger.warning(f"git worktree remove failed for {worktree_path}: {result.stderr.strip()}")
             # Fallback: manual removal + prune
             import shutil
+
             try:
                 shutil.rmtree(worktree_path)
             except OSError as e:
@@ -492,9 +487,7 @@ def get_modified_files(working_directory: str, against: str | None = None) -> li
 PYTEST_TIMEOUT = 120  # seconds for the test suite
 
 
-def tag_story_commit(
-    working_directory: str, story_id: str, commit_hash: str
-) -> bool:
+def tag_story_commit(working_directory: str, story_id: str, commit_hash: str) -> bool:
     """Create a git tag ``story/<story_id>`` at *commit_hash*.
 
     If the tag already exists it is replaced (force-created) so the tag
@@ -536,7 +529,7 @@ def verify_merge(working_directory: str, story_id: str) -> bool:
 
     try:
         result = subprocess.run(
-            ["pytest", "tests/", "-x", "-q", f"--timeout={PYTEST_TIMEOUT}"],
+            [sys.executable, "-m", "pytest", "tests/", "-x", "-q", f"--timeout={PYTEST_TIMEOUT}"],
             cwd=working_directory,
             capture_output=True,
             text=True,
@@ -555,19 +548,13 @@ def verify_merge(working_directory: str, story_id: str) -> bool:
 
     # Tests failed — revert the merge commit to preserve history
     test_output = result.stdout if result else "(timed out)"
-    logger.error(
-        f"Post-merge tests FAILED for story {story_id}. "
-        f"Output:\n{test_output}\nReverting merge commit."
-    )
+    logger.error(f"Post-merge tests FAILED for story {story_id}. Output:\n{test_output}\nReverting merge commit.")
 
     revert = _run_git(["revert", "HEAD", "--no-edit"], working_directory)
     if revert.returncode == 0:
         logger.info(f"Successfully reverted merge commit for story {story_id}")
     else:
-        logger.error(
-            f"Failed to revert merge commit for story {story_id}: "
-            f"{revert.stderr.strip()}"
-        )
+        logger.error(f"Failed to revert merge commit for story {story_id}: {revert.stderr.strip()}")
 
     return False
 
@@ -601,10 +588,7 @@ def rollback_story(working_directory: str, story_id: str) -> bool:
         logger.info(f"Successfully rolled back story {story_id}")
         return True
 
-    logger.error(
-        f"Revert failed for story {story_id}: {revert.stderr.strip()}. "
-        "Manual intervention may be required."
-    )
+    logger.error(f"Revert failed for story {story_id}: {revert.stderr.strip()}. Manual intervention may be required.")
     # Abort the revert if it left us in a conflicted state
     _run_git(["revert", "--abort"], working_directory)
     return False
