@@ -67,3 +67,23 @@ Thumbs.db
 
 # SAT worktree isolation
 .worktrees/
+
+# Archive (historical artifacts, not part of active codebase)
+_archive/
+
+# Runtime data files
+learnings.json
+plan.json
+*.bak
+command_output.txt
+test_output.txt
+import_leads.log
+
+# Secrets
+.env
+*.credentials
+*.pem
+*.key
+
+# Logs directory
+logs/

@@ -1,0 +1,24 @@
+# Auto-detect text files and normalize line endings
+* text=auto
+
+# Python
+*.py text diff=python
+*.pyi text diff=python
+
+# Markdown templates
+*.md text
+
+# JSON config
+*.json text
+
+# Shell scripts
+*.sh text eol=lf
+
+# Binary files
+*.db binary
+*.sqlite binary
+*.pyc binary
+
+# Don't diff generated files
+htmlcov/** -diff
+*.pyc -diff
