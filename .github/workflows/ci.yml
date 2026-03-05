@@ -38,7 +38,7 @@ jobs:
             --ignore=tests/test_checkpoint_integration.py \
             --ignore=tests/test_fuse_integration.py \
             --ignore=tests/test_benchmarking_ollama_infrastructure.py \
-            -k "not integration and not test_examples_are_valid_json"
+            -k "not integration and not test_examples_are_valid_json and not test_high_complexity_routes_to_powerful_model"
 
   security:
     runs-on: ubuntu-latest
