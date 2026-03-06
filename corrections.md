@@ -57,3 +57,8 @@ Last updated: 2026-03-06.
 - **[A5]** Weekly calibration produces recommendations, not auto-applied changes. User will decide when/if to change to monthly.
 - **[A6]** Confidence scoring 0.5–0.79: notify user via ntfy AND log. User can interrupt if needed.
 - **[A7]** Notification via Decomp must be implemented in code, not just recorded in learnings. Decomp adds `notify` attribute; story executor sends notification on completion.
+- **[A8]** Every story must have acceptance criteria. Decomp creates these during decomposition.
+- **[A9]** Multi-story tasks end with a Verify story that checks the combined result against task-level acceptance criteria. Failure triggers a Debug instance.
+- **[A10]** After a failed-then-fixed task, present both attempts to user for selection (original, fixed, or reject-and-rework).
+- **[A11]** Artifact manifests (files expected to be created/modified) are part of task-level acceptance criteria, verified by the Verify story.
+- **[A12]** Content deliverable format is specified in acceptance criteria, not hardcoded rules. Could be .md, .xlsx, .pdf, .docx, etc.
