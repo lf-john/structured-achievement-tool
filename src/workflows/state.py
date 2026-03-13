@@ -23,6 +23,7 @@ class PhaseStatus(str, Enum):
 
 class PhaseOutput(BaseModel):
     """Result of a single phase execution."""
+
     phase: str
     status: PhaseStatus
     output: str = ""
@@ -35,6 +36,7 @@ class PhaseOutput(BaseModel):
 
 class TestResult(BaseModel):
     """Result of test execution."""
+
     passed: bool
     total: int = 0
     failures: int = 0
@@ -45,6 +47,7 @@ class TestResult(BaseModel):
 
 class MediatorVerdict(BaseModel):
     """Result of a Mediator review."""
+
     decision: str  # ACCEPT, REVERT, PARTIAL, RETRY
     confidence: float = 0.0
     reasoning: str = ""
@@ -53,12 +56,14 @@ class MediatorVerdict(BaseModel):
 
 # --- Cross-component boundary models (Phase 163 Pydantic improvements) ---
 
+
 class StoryModel(BaseModel):
     """Typed representation of a story flowing through execution.
 
     Replaces raw story dicts passed between orchestrator, story_executor,
     workflows, and agents. Created from StorySchema after decomposition.
     """
+
     id: str
     title: str
     description: str = ""
@@ -93,6 +98,7 @@ class ValidationResult(BaseModel):
 
     Replaces raw validation_result dicts in StoryState.
     """
+
     passed: bool
     reason: str = ""
     checks_run: list[str] = Field(default_factory=list)
@@ -104,6 +110,7 @@ class QAFeedback(BaseModel):
 
     Replaces raw qa_feedback_parsed dicts in StoryState.
     """
+
     verdict: str = ""  # "approved", "needs_changes", "rejected"
     bugs: list[str] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
@@ -115,6 +122,7 @@ class EscalationPackage(BaseModel):
 
     Replaces raw escalation_package dicts in StoryState.
     """
+
     reason: str
     severity: str = "medium"  # low, medium, high, critical
     context: str = ""
@@ -128,6 +136,7 @@ class ExecutionConfig(BaseModel):
 
     Replaces raw config dicts passed to story_executor and workflows.
     """
+
     max_attempts: int = 5
     mediator_enabled: bool = False
     checkpoint_db: str = ""
@@ -146,6 +155,7 @@ class StoryState(TypedDict):
     but the Pydantic models above define the schema. Use StoryModel.from_dict()
     and .to_dict() for conversions at component boundaries.
     """
+
     # Story identity — use StoryModel.from_dict(state["story"]) at boundaries
     story: dict  # StoryModel.model_dump() — typed via StoryModel
     task_id: str  # Parent task identifier
@@ -204,6 +214,19 @@ class StoryState(TypedDict):
     escalation_package: dict | None  # EscalationPackage.model_dump() dict
     validation_result: dict | None  # ValidationResult.model_dump() dict
 
+    # Snapshot state (config/maintenance workflows)
+    snapshot_hash: str | None  # Git commit hash for pre-execute snapshot
+
+    # Failure classification (debug workflow)
+    failure_classification: dict | None  # FailureClassification from failure_classifier
+
+    # Critic review state (post-agentic-verify quality gate)
+    critic_passed: bool | None  # Whether critic review passed thresholds
+    critic_ratings: list[dict] | None  # List of ACRating dicts from CriticResponse
+    critic_average: float | None  # Average rating across all ACs
+    critic_validation: dict | None  # ValidationResult dict from validate_ratings()
+    critic_retry_count: int  # Number of critic-triggered rewrites
+
 
 def create_initial_state(
     story: "dict | StoryModel",
@@ -261,4 +284,11 @@ def create_initial_state(
         qa_feedback_parsed=None,
         escalation_package=None,
         validation_result=None,
+        snapshot_hash=None,
+        failure_classification=None,
+        critic_passed=None,
+        critic_ratings=None,
+        critic_average=None,
+        critic_validation=None,
+        critic_retry_count=0,
     )

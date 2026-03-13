@@ -18,7 +18,7 @@ from src.workflows.content_workflow import (
     ContentWorkflow,
     _detect_output_path,
     _parse_range,
-    agentic_verify_decision,
+    content_critic_decision,
     mechanical_verify_decision,
     mechanical_verify_node,
 )
@@ -48,31 +48,33 @@ class TestParseRange:
 
 
 class TestMechanicalVerifyDecision:
-    def test_pass_routes_to_agentic(self):
+    def test_pass_routes_to_critic(self):
         state = {"verify_passed": True, "phase_retry_count": 0}
-        assert mechanical_verify_decision(state) == "agentic_verify"
+        assert mechanical_verify_decision(state) == "critic_review"
 
     def test_fail_routes_to_write(self):
         state = {"verify_passed": False, "phase_retry_count": 1}
         assert mechanical_verify_decision(state) == "write"
 
-    def test_fail_at_retry_limit_skips_to_agentic(self):
+    def test_fail_at_retry_limit_skips_to_critic(self):
         state = {"verify_passed": False, "phase_retry_count": MAX_VERIFY_RETRIES}
-        assert mechanical_verify_decision(state) == "agentic_verify"
+        assert mechanical_verify_decision(state) == "critic_review"
 
 
-class TestAgenticVerifyDecision:
+class TestContentCriticDecision:
     def test_pass_routes_to_learn(self):
-        state = {"verify_passed": True, "phase_retry_count": 0}
-        assert agentic_verify_decision(state) == "learn"
+        state = {"critic_passed": True, "critic_retry_count": 0}
+        assert content_critic_decision(state) == "learn"
 
     def test_fail_routes_to_write(self):
-        state = {"verify_passed": False, "phase_retry_count": 1}
-        assert agentic_verify_decision(state) == "write"
+        state = {"critic_passed": False, "critic_retry_count": 1}
+        assert content_critic_decision(state) == "write"
 
-    def test_fail_at_retry_limit_routes_to_learn(self):
-        state = {"verify_passed": False, "phase_retry_count": MAX_VERIFY_RETRIES}
-        assert agentic_verify_decision(state) == "learn"
+    def test_fail_at_retry_limit_routes_to_fail(self):
+        from src.workflows.content_workflow import MAX_CRITIC_RETRIES
+
+        state = {"critic_passed": False, "critic_retry_count": MAX_CRITIC_RETRIES}
+        assert content_critic_decision(state) == "fail"
 
 
 class TestMechanicalVerifyNode:
@@ -149,19 +151,11 @@ class TestMechanicalVerifyNode:
 
 class TestDetectOutputPath:
     def test_extracts_from_json_output(self):
-        state = {
-            "phase_outputs": [
-                {"phase": "WRITE", "output": '{"output_path": "docs/readme.md"}'}
-            ]
-        }
+        state = {"phase_outputs": [{"phase": "WRITE", "output": '{"output_path": "docs/readme.md"}'}]}
         assert _detect_output_path(state, "/project") == "docs/readme.md"
 
     def test_extracts_from_text_path(self):
-        state = {
-            "phase_outputs": [
-                {"phase": "WRITE", "output": "Created file at docs/output.md done."}
-            ]
-        }
+        state = {"phase_outputs": [{"phase": "WRITE", "output": "Created file at docs/output.md done."}]}
         assert _detect_output_path(state, "/project") == "docs/output.md"
 
     def test_returns_empty_when_no_write_output(self):
@@ -234,7 +228,7 @@ class TestContentWorkflowGraph:
         workflow = ContentWorkflow(routing_engine=MagicMock())
         graph = workflow.build_graph()
         node_names = set(graph.nodes.keys())
-        expected = {"plan", "write", "mechanical_verify", "agentic_verify", "learn"}
+        expected = {"plan", "write", "mechanical_verify", "critic_review", "learn"}
         assert expected == node_names
 
     def test_compiles_without_error(self):
@@ -247,8 +241,8 @@ class TestContentWorkflowGraph:
         graph = workflow.build_graph()
         assert "plan" in graph.nodes
 
-    def test_pass_routes_to_agentic(self):
-        assert mechanical_verify_decision({"verify_passed": True}) == "agentic_verify"
+    def test_pass_routes_to_critic(self):
+        assert mechanical_verify_decision({"verify_passed": True}) == "critic_review"
 
-    def test_agentic_pass_routes_to_learn(self):
-        assert agentic_verify_decision({"verify_passed": True}) == "learn"
+    def test_critic_pass_routes_to_learn(self):
+        assert content_critic_decision({"critic_passed": True}) == "learn"

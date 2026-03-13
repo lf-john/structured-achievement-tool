@@ -40,9 +40,21 @@ class TestWorkflowSelection:
             get_workflow_for_story(story, MagicMock())
 
     def test_all_workflow_types_in_map(self):
-        expected = {"development", "config", "maintenance", "debug", "research", "review",
-                    "conversation", "content",
-                    "assignment", "qa_feedback", "escalation"}
+        expected = {
+            "development",
+            "config",
+            "maintenance",
+            "debug",
+            "research",
+            "review",
+            "conversation",
+            "content",
+            "task_verification",
+            "document_assembly",
+            "assignment",
+            "qa_feedback",
+            "escalation",
+        }
         assert set(WORKFLOW_MAP.keys()) == expected
 
 
@@ -53,10 +65,7 @@ class TestStoryResult:
         assert result.attempts == 1
 
     def test_failed_result(self):
-        result = StoryResult(
-            story_id="US-001", success=False, attempts=5,
-            reason="Exhausted retries"
-        )
+        result = StoryResult(story_id="US-001", success=False, attempts=5, reason="Exhausted retries")
         assert not result.success
         assert result.reason == "Exhausted retries"
 
@@ -95,12 +104,14 @@ class TestExecuteStory:
             "failure_context": "test failure",
         }
 
-        with patch("src.execution.story_executor.get_workflow_for_story", return_value=mock_graph), \
-             patch("src.execution.story_executor.get_current_commit", return_value="abc123"), \
-             patch("src.execution.story_executor.classify_failure") as mock_classify, \
-             patch("asyncio.sleep", new_callable=AsyncMock):
-
+        with (
+            patch("src.execution.story_executor.get_workflow_for_story", return_value=mock_graph),
+            patch("src.execution.story_executor.get_current_commit", return_value="abc123"),
+            patch("src.execution.story_executor.classify_failure") as mock_classify,
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
             from src.agents.failure_classifier import FailureSeverity
+
             mock_classify.return_value = MagicMock(
                 severity=FailureSeverity.PERSISTENT,
                 message="test failure",
@@ -129,12 +140,13 @@ class TestExecuteStory:
         }
 
         # AMENDED BY US-002: Patch checkpoint manager to avoid side effects
-        with patch("src.execution.story_executor.get_workflow_for_story", return_value=mock_graph), \
-             patch("src.execution.story_executor.get_current_commit", return_value="def456"), \
-             patch("src.execution.story_executor.read_checkpoint", return_value=None), \
-             patch("src.execution.story_executor.write_checkpoint"), \
-             patch("asyncio.sleep", new_callable=AsyncMock):
-
+        with (
+            patch("src.execution.story_executor.get_workflow_for_story", return_value=mock_graph),
+            patch("src.execution.story_executor.get_current_commit", return_value="def456"),
+            patch("src.execution.story_executor.read_checkpoint", return_value=None),
+            patch("src.execution.story_executor.write_checkpoint"),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
             result = await execute_story(
                 story=story,
                 task_id="task-2",
@@ -146,4 +158,3 @@ class TestExecuteStory:
         assert result.success
         assert result.attempts == 1
         assert result.story_id == "US-002"
-

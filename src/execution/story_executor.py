@@ -37,12 +37,14 @@ from src.workflows.content_workflow import ContentWorkflow
 from src.workflows.conversation_workflow import ConversationWorkflow
 from src.workflows.debug_workflow import DebugWorkflow
 from src.workflows.dev_tdd_workflow import DevTDDWorkflow
+from src.workflows.document_assembly_workflow import DocumentAssemblyWorkflow
 from src.workflows.escalation_workflow import EscalationWorkflow
 from src.workflows.maintenance_workflow import MaintenanceWorkflow
 from src.workflows.qa_feedback_workflow import QAFeedbackWorkflow
 from src.workflows.research_workflow import ResearchWorkflow
 from src.workflows.review_workflow import ReviewWorkflow
 from src.workflows.state import create_initial_state
+from src.workflows.task_verification_workflow import TaskVerificationWorkflow
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,7 @@ CIRCUIT_BREAKER_THRESHOLD = 3
 @dataclass
 class StoryResult:
     """Result of executing a single story."""
+
     story_id: str
     success: bool
     attempts: int = 1
@@ -78,6 +81,8 @@ WORKFLOW_MAP = {
     # human_task: lazy-imported in get_workflow_for_story (DelayedChecker dependency)
     "qa_feedback": QAFeedbackWorkflow,
     "escalation": EscalationWorkflow,
+    "task_verification": TaskVerificationWorkflow,
+    "document_assembly": DocumentAssemblyWorkflow,
 }
 
 
@@ -100,14 +105,12 @@ def get_workflow_for_story(
 
     if story_type == "human_task":
         from src.workflows.human_task_workflow import HumanTaskWorkflow
+
         workflow_cls = HumanTaskWorkflow
     else:
         workflow_cls = WORKFLOW_MAP.get(story_type)
         if workflow_cls is None:
-            raise ValueError(
-                f"No workflow for story type '{story_type}'. "
-                f"Valid types: {sorted(WORKFLOW_MAP.keys())}"
-            )
+            raise ValueError(f"No workflow for story type '{story_type}'. Valid types: {sorted(WORKFLOW_MAP.keys())}")
 
     # Human workflows need notifier in addition to routing_engine
     if story_type in HUMAN_STORY_TYPES:
@@ -181,6 +184,7 @@ async def execute_story(
     # Set hierarchical correlation context for this story
     try:
         from src.logging_config import set_story_context
+
         set_story_context(story_id)
     except Exception:
         pass
@@ -193,10 +197,7 @@ async def execute_story(
     WORKTREE_TYPES = {"development", "config", "debug", "maintenance"}
     exec_config = _load_execution_config()
     story_type = story.get("type", "development")
-    use_worktree = (
-        exec_config.get("use_worktree", False)
-        and story_type in WORKTREE_TYPES
-    )
+    use_worktree = exec_config.get("use_worktree", False) and story_type in WORKTREE_TYPES
     worktree_path: str | None = None
     effective_working_dir = working_directory
 
@@ -204,14 +205,9 @@ async def execute_story(
         try:
             worktree_path = create_story_worktree(story_id, working_directory)
             effective_working_dir = worktree_path
-            logger.info(
-                f"Story {story_id}: using worktree isolation at {worktree_path}"
-            )
+            logger.info(f"Story {story_id}: using worktree isolation at {worktree_path}")
         except RuntimeError as e:
-            logger.error(
-                f"Story {story_id}: failed to create worktree, "
-                f"falling back to main repo: {e}"
-            )
+            logger.error(f"Story {story_id}: failed to create worktree, falling back to main repo: {e}")
             worktree_path = None
             effective_working_dir = working_directory
 
@@ -235,10 +231,7 @@ async def execute_story(
         if worktree_path and result.success:
             diff_output = get_worktree_diff(worktree_path)
             if diff_output:
-                logger.info(
-                    f"Story {story_id}: worktree has uncommitted changes, "
-                    f"they will be committed before merge"
-                )
+                logger.info(f"Story {story_id}: worktree has uncommitted changes, they will be committed before merge")
             merged = merge_story_worktree(worktree_path, working_directory)
             if merged:
                 logger.info(f"Story {story_id}: merged worktree changes into main repo")
@@ -248,10 +241,9 @@ async def execute_story(
                     f"Story {story_id}: worktree merge FAILED — changes remain "
                     f"on branch story/{story_id} for manual review"
                 )
-                result.reason = (
-                    f"{result.reason}; worktree merge failed — "
-                    f"changes on branch story/{story_id}"
-                ).strip("; ")
+                result.reason = (f"{result.reason}; worktree merge failed — changes on branch story/{story_id}").strip(
+                    "; "
+                )
 
         return result
 
@@ -309,6 +301,7 @@ async def _execute_story_inner(
     story_title = story.get("title", "Untitled")
 
     from langgraph.checkpoint.sqlite import SqliteSaver
+
     db_path = os.path.join(working_directory, ".memory", "langgraph_checkpoints.db")
     sat_db_path = os.path.join(working_directory, ".memory", "checkpoints.db")
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -430,7 +423,7 @@ async def _execute_story_inner(
                                 task_id=task_id,
                                 current_phase="EXECUTION",
                                 completed_stories=[story_id],
-                                pending_stories=[]
+                                pending_stories=[],
                             )
                         write_checkpoint(sat_db_path, checkpoint)
                         logger.info(f"Updated checkpoint for task {task_id} after story {story_id}")
@@ -467,7 +460,8 @@ async def _execute_story_inner(
                     )
                     if notifier:
                         notifier.notify_story_failed(
-                            story_id, story_title,
+                            story_id,
+                            story_title,
                             f"Stuck: identical failure x3: {classification.message}",
                         )
                     return StoryResult(
@@ -479,8 +473,7 @@ async def _execute_story_inner(
                     )
                 elif identical_count == 2:
                     logger.warning(
-                        "Identical failure x2 for %s — one more attempt allowed "
-                        "with potential escalation",
+                        "Identical failure x2 for %s — one more attempt allowed with potential escalation",
                         story_id,
                     )
 
@@ -526,7 +519,9 @@ async def _execute_story_inner(
 
                 # Circuit breaker
                 if consecutive_env_failures >= CIRCUIT_BREAKER_THRESHOLD:
-                    logger.error(f"Circuit breaker triggered for {story_id} after {consecutive_env_failures} environmental failures")
+                    logger.error(
+                        f"Circuit breaker triggered for {story_id} after {consecutive_env_failures} environmental failures"
+                    )
                     return StoryResult(
                         story_id=story_id,
                         success=False,

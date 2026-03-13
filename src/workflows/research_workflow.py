@@ -24,15 +24,21 @@ from functools import partial
 
 from langgraph.graph import END, StateGraph
 
+from src.agents.ac_templates import get_default_acs, merge_acs
+from src.agents.critic_agent import CriticAgent, validate_ratings
 from src.workflows.base_workflow import (
     BaseWorkflow,
+    _run_async,
     parallel_analyze_node,
     parallel_gather_node,
     phase_node,
 )
-from src.workflows.state import StoryState
+from src.workflows.state import PhaseOutput, PhaseStatus, StoryState
 
 logger = logging.getLogger(__name__)
+
+# After 2 critic→rework loops, story FAILS
+MAX_CRITIC_RETRIES = 2
 
 
 def persist_research_node(state: StoryState) -> StoryState:
@@ -129,23 +135,154 @@ def _extract_research_content(output: str, story: dict) -> str:
     return header + content
 
 
-class ResearchWorkflow(BaseWorkflow):
+def research_critic_node(state: StoryState, routing_engine=None) -> StoryState:
+    """Critic review of synthesized research output against acceptance criteria."""
+    state = dict(state)
+    state["current_phase"] = "CRITIC_REVIEW"
+    story = state["story"]
+    story_id = story.get("id", "unknown")
+    working_dir = state["working_directory"]
 
+    story_acs = story.get("acceptanceCriteria", [])
+    default_acs = get_default_acs("research")
+    acceptance_criteria = merge_acs(story_acs, default_acs)
+
+    output_content = ""
+    for po in reversed(state.get("phase_outputs", [])):
+        if po.get("phase") == "SYNTHESIZE" and po.get("output"):
+            output_content = po["output"]
+            break
+
+    if not output_content:
+        logger.warning(f"Story {story_id}: Research critic skipped — no synthesize output")
+        state["critic_passed"] = True
+        state["critic_ratings"] = []
+        state["critic_average"] = 0.0
+        state["critic_validation"] = {"passed": True, "message": "Skipped — no content"}
+        phase_output = PhaseOutput(
+            phase="CRITIC_REVIEW",
+            status=PhaseStatus.SKIPPED,
+            output="Skipped — no synthesize output.",
+            exit_code=0,
+            provider_used="none",
+        )
+        state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
+        return state
+
+    task_description = state.get("task_description", story.get("description", ""))
+    critic_retry_count = state.get("critic_retry_count", 0)
+    critic = CriticAgent(mode="content_critic", routing_engine=routing_engine, escalation=critic_retry_count * 5)
+
+    try:
+        response = _run_async(
+            critic.evaluate(
+                acceptance_criteria=acceptance_criteria,
+                output_content=output_content,
+                task_description=task_description,
+                working_directory=working_dir,
+            ),
+            timeout=180,
+        )
+    except (ValueError, RuntimeError) as e:
+        logger.error(f"Story {story_id}: Research critic failed: {e}")
+        state["critic_passed"] = True
+        state["critic_ratings"] = []
+        state["critic_average"] = 0.0
+        state["critic_validation"] = {"passed": True, "message": f"Critic error: {e}"}
+        phase_output = PhaseOutput(
+            phase="CRITIC_REVIEW",
+            status=PhaseStatus.FAILED,
+            output=f"Critic error: {e}",
+            exit_code=1,
+            provider_used="content_critic",
+        )
+        state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
+        return state
+
+    validation = validate_ratings(response, acceptance_criteria)
+    state["critic_passed"] = validation.passed
+    state["critic_ratings"] = [r.model_dump() for r in response.ratings]
+    state["critic_average"] = validation.average
+    state["critic_validation"] = {
+        "passed": validation.passed,
+        "missing_acs": validation.missing_acs,
+        "failing_acs": validation.failing_acs,
+        "average": validation.average,
+        "message": validation.message,
+    }
+
+    status = PhaseStatus.COMPLETE if validation.passed else PhaseStatus.FAILED
+    phase_output = PhaseOutput(
+        phase="CRITIC_REVIEW",
+        status=status,
+        output=f"Research critic: {'PASSED' if validation.passed else 'FAILED'} avg={validation.average}",
+        exit_code=0 if validation.passed else 1,
+        provider_used="content_critic",
+    )
+    state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
+
+    if not validation.passed:
+        state["critic_retry_count"] = critic_retry_count + 1
+        failing_details = [
+            f"  - {f['ac_id']} ({f['ac_name']}): {f['rating']}/10 — {f['justification']}"
+            for f in validation.failing_acs
+        ]
+        content_preview = output_content[:10000]
+        if len(output_content) > 10000:
+            content_preview += "\n[...truncated...]"
+        state["failure_context"] = (
+            f"Critic failed (avg={validation.average}):\n{validation.message}\n"
+            + "\n".join(failing_details)
+            + f"\n\nExisting output to revise:\n```\n{content_preview}\n```"
+        )
+        logger.info(
+            f"Story {story_id}: Research critic FAILED (avg={validation.average}, "
+            f"retry {state['critic_retry_count']}/{MAX_CRITIC_RETRIES})"
+        )
+    else:
+        logger.info(f"Story {story_id}: Research critic PASSED (avg={validation.average})")
+
+    return state
+
+
+def research_critic_decision(state: StoryState) -> str:
+    """Route after research CRITIC_REVIEW: pass → persist, fail → synthesize, max → fail."""
+    if state.get("critic_passed"):
+        return "persist"
+    if state.get("critic_retry_count", 0) >= MAX_CRITIC_RETRIES:
+        logger.warning(f"Research critic retry limit ({MAX_CRITIC_RETRIES}) reached — story FAILS")
+        return "fail"
+    return "synthesize"
+
+
+class ResearchWorkflow(BaseWorkflow):
     def build_graph(self) -> StateGraph:
         builder = StateGraph(StoryState)
         re = self.routing_engine
 
-        # Parallel gather replaces single gather node
         builder.add_node("parallel_gather", partial(parallel_gather_node, routing_engine=re))
-        # Parallel analyze splits topics and analyzes concurrently
         builder.add_node("parallel_analyze", partial(parallel_analyze_node, routing_engine=re))
-        builder.add_node("synthesize", partial(phase_node, phase_name="SYNTHESIZE", agent_name="synthesizer", routing_engine=re))
+        builder.add_node(
+            "synthesize", partial(phase_node, phase_name="SYNTHESIZE", agent_name="synthesizer", routing_engine=re)
+        )
+        builder.add_node("critic_review", partial(research_critic_node, routing_engine=re))
         builder.add_node("persist", persist_research_node)
 
         builder.set_entry_point("parallel_gather")
         builder.add_edge("parallel_gather", "parallel_analyze")
         builder.add_edge("parallel_analyze", "synthesize")
-        builder.add_edge("synthesize", "persist")
+        builder.add_edge("synthesize", "critic_review")
+
+        builder.add_conditional_edges(
+            "critic_review",
+            research_critic_decision,
+            {
+                "persist": "persist",
+                "synthesize": "synthesize",
+                "fail": "persist",  # Still persist what we have
+            },
+        )
+
         builder.add_edge("persist", END)
 
         return builder

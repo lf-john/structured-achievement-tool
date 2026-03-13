@@ -21,44 +21,63 @@ logger = logging.getLogger(__name__)
 
 # Valid story types — canonical lowercase names matching classify.md and WORKFLOW_MAP
 STORY_TYPES = {
-    "development", "config", "maintenance", "debug", "research", "review",
-    "conversation", "content",
+    "development",
+    "config",
+    "maintenance",
+    "debug",
+    "research",
+    "review",
+    "conversation",
+    "content",
+    "task_verification",
+    "document_assembly",
     # Human story types
-    "assignment", "human_task", "approval", "qa_feedback", "escalation",
+    "assignment",
+    "human_task",
+    "approval",
+    "qa_feedback",
+    "escalation",
 }
 
 # Map common aliases/variants to canonical names
 _TYPE_MAP = {t: t for t in STORY_TYPES}
-_TYPE_MAP.update({
-    "dev": "development",
-    "Dev": "development",
-    "Development": "development",
-    "Config": "config",
-    "Maintenance": "maintenance",
-    "Debug": "debug",
-    "Research": "research",
-    "Review": "review",
-    "Conversation": "conversation",
-    "Content": "content",
-    "document": "content",
-    "Document": "content",
-    "documentation": "content",
-    "writing": "content",
-    "template": "content",
-    "Assignment": "assignment",
-    "human_task": "human_task",
-    "Human_Task": "human_task",
-    "HumanTask": "human_task",
-    "human task": "human_task",
-    "Approval": "approval",
-    "QA_Feedback": "qa_feedback",
-    "qa feedback": "qa_feedback",
-    "Escalation": "escalation",
-})
+_TYPE_MAP.update(
+    {
+        "dev": "development",
+        "Dev": "development",
+        "Development": "development",
+        "Config": "config",
+        "Maintenance": "maintenance",
+        "Debug": "debug",
+        "Research": "research",
+        "Review": "review",
+        "Conversation": "conversation",
+        "Content": "content",
+        "document": "content",
+        "Document": "content",
+        "documentation": "content",
+        "writing": "content",
+        "template": "content",
+        "Assignment": "assignment",
+        "human_task": "human_task",
+        "Human_Task": "human_task",
+        "HumanTask": "human_task",
+        "human task": "human_task",
+        "Approval": "approval",
+        "QA_Feedback": "qa_feedback",
+        "qa feedback": "qa_feedback",
+        "Escalation": "escalation",
+        "task_verification": "task_verification",
+        "Task_Verification": "task_verification",
+        "verification": "task_verification",
+        "document_assembly": "document_assembly",
+        "Document_Assembly": "document_assembly",
+        "assembly": "document_assembly",
+    }
+)
 
 
 class StoryAgent(BaseAgent):
-
     @property
     def agent_name(self) -> str:
         return "decomposer"
@@ -75,6 +94,7 @@ class StoryAgent(BaseAgent):
         existing_prd: dict | None = None,
         existing_progress: dict | None = None,
         rag_context: str = "",
+        rework_context: str = "",
     ) -> DecomposeResponse:
         """Decompose a user request into stories with dependencies.
 
@@ -83,6 +103,9 @@ class StoryAgent(BaseAgent):
         - dependsOn: list of story IDs this depends on
         - complexity: 1-10 rating for LLM routing
         - acceptanceCriteria: list of verifiable criteria
+
+        If rework_context is provided, injects rework guidance into the
+        decomposition prompt so the LLM can account for previous failures.
         """
         # Build context for decomposition
         context = {}
@@ -96,10 +119,19 @@ class StoryAgent(BaseAgent):
         if rag_context:
             context["rag_context"] = rag_context
 
+        description = f"Request: {user_request}\nType: {task_type}"
+        if rework_context:
+            description += (
+                f"\n\n---\n## REWORK CONTEXT\n"
+                f"This is a rework of a previously failed attempt. "
+                f"Account for the following failures in your decomposition:\n\n"
+                f"{rework_context}\n---"
+            )
+
         story = {
             "id": "DECOMPOSE",
             "title": "Task Decomposition",
-            "description": f"Request: {user_request}\nType: {task_type}",
+            "description": description,
         }
 
         result = await self.execute(
@@ -134,8 +166,7 @@ class StoryAgent(BaseAgent):
                 reclassified = self._reclassify_story_type(story)
                 story.type = reclassified
                 logger.warning(
-                    f"Unknown story type '{original_type}' for {story.id}, "
-                    f"re-classified as '{reclassified}'"
+                    f"Unknown story type '{original_type}' for {story.id}, re-classified as '{reclassified}'"
                 )
                 # Notify user via ntfy so they can intervene if needed
                 self._notify_reclassification(story, original_type, reclassified)
@@ -149,19 +180,34 @@ class StoryAgent(BaseAgent):
 
         # Keyword-based matching ordered by specificity
         type_keywords = {
-            "content": ["document", "template", "write", "create file", "guide",
-                        "email", "reference", "readme", "markdown", "html template"],
-            "research": ["research", "gather", "analyze", "compare", "summarize",
-                         "investigate", "survey", "benchmark"],
-            "config": ["config", "configure", "setup", "install", "deploy",
-                        "docker", "nginx", "systemd", "environment"],
-            "maintenance": ["update", "upgrade", "cleanup", "rotate", "migrate",
-                            "backup", "archive", "prune"],
-            "debug": ["fix", "bug", "error", "broken", "failing", "crash",
-                       "debug", "diagnose", "troubleshoot"],
+            "content": [
+                "document",
+                "template",
+                "write",
+                "create file",
+                "guide",
+                "email",
+                "reference",
+                "readme",
+                "markdown",
+                "html template",
+            ],
+            "research": ["research", "gather", "analyze", "compare", "summarize", "investigate", "survey", "benchmark"],
+            "config": [
+                "config",
+                "configure",
+                "setup",
+                "install",
+                "deploy",
+                "docker",
+                "nginx",
+                "systemd",
+                "environment",
+            ],
+            "maintenance": ["update", "upgrade", "cleanup", "rotate", "migrate", "backup", "archive", "prune"],
+            "debug": ["fix", "bug", "error", "broken", "failing", "crash", "debug", "diagnose", "troubleshoot"],
             "review": ["review", "audit", "assess", "evaluate", "inspect"],
-            "development": ["implement", "build", "code", "feature", "function",
-                            "class", "module", "api", "endpoint"],
+            "development": ["implement", "build", "code", "feature", "function", "class", "module", "api", "endpoint"],
         }
 
         best_type = "development"
@@ -214,9 +260,7 @@ class StoryAgent(BaseAgent):
         for story in response.stories:
             invalid = [d for d in story.dependsOn if d not in story_ids]
             if invalid:
-                logger.warning(
-                    f"Story {story.id} depends on unknown stories {invalid}, removing"
-                )
+                logger.warning(f"Story {story.id} depends on unknown stories {invalid}, removing")
                 story.dependsOn = [d for d in story.dependsOn if d in story_ids]
 
         # Check for circular dependencies

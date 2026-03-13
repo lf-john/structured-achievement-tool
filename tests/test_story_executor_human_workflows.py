@@ -33,7 +33,7 @@ class TestWorkflowMap:
         assert "development" not in HUMAN_STORY_TYPES
 
     def test_total_workflow_count(self):
-        assert len(WORKFLOW_MAP) == 11
+        assert len(WORKFLOW_MAP) == 13
 
 
 class TestGetWorkflowForHumanStory:

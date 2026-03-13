@@ -50,6 +50,7 @@ def _collect_enhancements(story_id: str, phase: str, enhancements, working_dir: 
     """
     import json as _json
     from datetime import datetime as _dt
+
     target = os.path.join(ENHANCEMENTS_DIR, "enhancements.jsonl")
     os.makedirs(os.path.dirname(target), exist_ok=True)
     items = enhancements if isinstance(enhancements, list) else [str(enhancements)]
@@ -69,7 +70,9 @@ def _collect_enhancements(story_id: str, phase: str, enhancements, working_dir: 
 
 
 # Directory for streaming LLM output to disk (enables partial recovery on timeout)
-STREAM_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".memory", "streams")
+STREAM_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".memory", "streams"
+)
 
 MAX_PHASE_RETRIES = 10
 CHECK_RETRY_LIMIT = 3  # Max retries for test check loops before moving on
@@ -110,6 +113,7 @@ def get_phase_timeout(phase_name: str) -> int:
     """Return wall-clock timeout in seconds for a given phase."""
     return PHASE_WALL_CLOCK_TIMEOUTS.get(phase_name, DEFAULT_PHASE_TIMEOUT)
 
+
 # Thread pool for running async code from synchronous LangGraph nodes.
 # LangGraph's graph.invoke() is synchronous, but our CLI runner is async.
 # We bridge with a dedicated thread that runs its own event loop.
@@ -128,6 +132,7 @@ def _run_async(coro, timeout: int = 660):
         coro: The async coroutine to run.
         timeout: Wall-clock timeout in seconds. Defaults to 660 (11 min).
     """
+
     def _run():
         loop = asyncio.new_event_loop()
         try:
@@ -156,6 +161,7 @@ def _revert_files(working_directory: str, files: list[str]) -> list[str]:
     Returns list of successfully reverted files.
     """
     import subprocess
+
     reverted = []
     for filepath in files:
         try:
@@ -178,6 +184,7 @@ def _revert_files(working_directory: str, files: list[str]) -> list[str]:
 
 # --- Node Factories ---
 
+
 def phase_node(
     state: StoryState,
     phase_name: str,
@@ -191,6 +198,7 @@ def phase_node(
     # Set hierarchical correlation context for this phase
     try:
         from src.logging_config import set_phase_context
+
         set_phase_context(phase_name)
     except Exception:
         pass
@@ -225,7 +233,9 @@ def phase_node(
     try:
         result = _run_async(
             cli_invoke(
-                provider=provider, prompt=prompt, working_directory=working_dir,
+                provider=provider,
+                prompt=prompt,
+                working_directory=working_dir,
                 stream_output_file=stream_file,
             ),
             timeout=phase_timeout,
@@ -256,15 +266,18 @@ def phase_node(
                 enhancements = parsed.get("enhancements_noted")
                 if enhancements:
                     _collect_enhancements(
-                        story.get("id", "unknown"), phase_name,
-                        enhancements, working_dir,
+                        story.get("id", "unknown"),
+                        phase_name,
+                        enhancements,
+                        working_dir,
                     )
 
                 # Collect architecture_change_proposed from debug agents
                 arch_change = parsed.get("architecture_change_proposed")
                 if arch_change:
                     _collect_enhancements(
-                        story.get("id", "unknown"), phase_name,
+                        story.get("id", "unknown"),
+                        phase_name,
                         [f"ARCHITECTURE CHANGE PROPOSED: {arch_change}"],
                         working_dir,
                     )
@@ -282,7 +295,7 @@ def phase_node(
         output_text = ""
         try:
             if os.path.exists(stream_file):
-                with open(stream_file, encoding='utf-8') as f:
+                with open(stream_file, encoding="utf-8") as f:
                     output_text = f.read()
                 if output_text:
                     logger.info(
@@ -313,17 +326,22 @@ def phase_node(
     try:
         from src.llm.prompt_builder import get_template_version
         from src.logging_config import log_event
-        log_event("llm_invocation", "base_workflow", {
-            "provider": provider.name,
-            "agent_type": agent_name,
-            "phase": phase_name,
-            "story_id": story.get("id", "unknown"),
-            "duration": round(duration, 1),
-            "status": status.value,
-            "output_preview": output_text[:2000] if output_text else "",
-            "template_version": get_template_version(phase_name),
-            "agent_confidence": state.get("agent_self_confidence"),
-        })
+
+        log_event(
+            "llm_invocation",
+            "base_workflow",
+            {
+                "provider": provider.name,
+                "agent_type": agent_name,
+                "phase": phase_name,
+                "story_id": story.get("id", "unknown"),
+                "duration": round(duration, 1),
+                "status": status.value,
+                "output_preview": output_text[:2000] if output_text else "",
+                "template_version": get_template_version(phase_name),
+                "agent_confidence": state.get("agent_self_confidence"),
+            },
+        )
     except Exception:
         pass  # Best-effort
 
@@ -349,7 +367,7 @@ def phase_node(
 
     # Update verify_passed for VERIFY phases to feed verify_decision
     if phase_name in ("VERIFY", "VERIFY_SCRIPT"):
-        state["verify_passed"] = (status == PhaseStatus.COMPLETE)
+        state["verify_passed"] = status == PhaseStatus.COMPLETE
         logger.info(f"VERIFY phase setting verify_passed={state['verify_passed']} (status={status.value})")
         # Reset check retry counter — each VERIFY→CODE→CHECK cycle gets fresh budget
         state["phase_retry_count"] = 0
@@ -357,10 +375,19 @@ def phase_node(
         if status == PhaseStatus.FAILED:
             state["verify_retry_count"] = state.get("verify_retry_count", 0) + 1
 
-    logger.info(f"Phase {phase_name} completed: status={status.value}, duration={duration:.1f}s, provider={provider.name}")
+    logger.info(
+        f"Phase {phase_name} completed: status={status.value}, duration={duration:.1f}s, provider={provider.name}"
+    )
 
     # Auto-commit after phases that produce files
-    if status == PhaseStatus.COMPLETE and phase_name in ("TDD_RED", "CODE", "FIX", "VERIFY", "EXECUTE", "CONTENT_WRITE"):
+    if status == PhaseStatus.COMPLETE and phase_name in (
+        "TDD_RED",
+        "CODE",
+        "FIX",
+        "VERIFY",
+        "EXECUTE",
+        "CONTENT_WRITE",
+    ):
         commit_hash = auto_commit(working_dir, story.get("id", "unknown"), phase_name)
         if commit_hash:
             logger.debug(f"Auto-committed after {phase_name}: {commit_hash}")
@@ -369,6 +396,7 @@ def phase_node(
     if phase_name == "LEARN" and status == PhaseStatus.COMPLETE and output_text:
         try:
             from src.core.memory_writer import process_learn_output
+
             parsed_learn = extract_json(output_text)
             if isinstance(parsed_learn, dict):
                 process_learn_output(parsed_learn, working_dir)
@@ -396,7 +424,9 @@ def test_check_node(
 
     test_cmd = get_test_command(story, working_dir)
     phase_timeout = get_phase_timeout(phase_name)
-    logger.info(f"Test check {phase_name}: running '{test_cmd}' (expect_failure={expect_failure}, timeout={phase_timeout}s)")
+    logger.info(
+        f"Test check {phase_name}: running '{test_cmd}' (expect_failure={expect_failure}, timeout={phase_timeout}s)"
+    )
     result = run_tests(working_dir, test_cmd, timeout=phase_timeout)
     logger.info(f"Test check {phase_name}: passed={result.passed}, total={result.total}, failures={result.failures}")
 
@@ -550,7 +580,11 @@ def mediator_gate_node(
         mediator = MediatorAgent(routing_engine=routing_engine)
         try:
             result = _invoke_mediator_review(
-                mediator, story, current_phase, working_dir, state.get("test_results"),
+                mediator,
+                story,
+                current_phase,
+                working_dir,
+                state.get("test_results"),
             )
 
             state["mediator_verdict"] = MediatorVerdict(
@@ -596,9 +630,15 @@ def mediator_gate_node(
         if test_files:
             try:
                 result = _invoke_mediator_review(
-                    mediator, story, "VERIFY", working_dir, state.get("test_results"),
+                    mediator,
+                    story,
+                    "VERIFY",
+                    working_dir,
+                    state.get("test_results"),
                 )
-                combined_reasoning_parts.append(f"Test files ({test_files}): {result.decision.value} — {result.reasoning}")
+                combined_reasoning_parts.append(
+                    f"Test files ({test_files}): {result.decision.value} — {result.reasoning}"
+                )
                 combined_confidence = min(combined_confidence, result.confidence or 1.0)
 
                 if result.decision.value == "REVERT":
@@ -625,9 +665,15 @@ def mediator_gate_node(
         if code_files:
             try:
                 result = _invoke_mediator_review(
-                    mediator, story, "VERIFY", working_dir, state.get("test_results"),
+                    mediator,
+                    story,
+                    "VERIFY",
+                    working_dir,
+                    state.get("test_results"),
                 )
-                combined_reasoning_parts.append(f"Code files ({code_files}): {result.decision.value} — {result.reasoning}")
+                combined_reasoning_parts.append(
+                    f"Code files ({code_files}): {result.decision.value} — {result.reasoning}"
+                )
                 combined_confidence = min(combined_confidence, result.confidence or 1.0)
 
                 if result.decision.value == "REVERT":
@@ -661,11 +707,14 @@ def mediator_gate_node(
 
     # Fallback: unknown phase that somehow triggered — auto-accept
     logger.warning(f"Mediator gate: unexpected phase {current_phase} triggered, auto-accepting")
-    state["mediator_verdict"] = MediatorVerdict(decision="ACCEPT", reasoning=f"Unexpected phase: {current_phase}").model_dump()
+    state["mediator_verdict"] = MediatorVerdict(
+        decision="ACCEPT", reasoning=f"Unexpected phase: {current_phase}"
+    ).model_dump()
     return state
 
 
 # --- Enhanced Node Factories (Phase 3) ---
+
 
 def parallel_verify_node(
     state: StoryState,
@@ -741,10 +790,7 @@ def parallel_verify_node(
                 failure_reasons.append(f"{agent_name}: {output_text[:200]}")
 
         except (concurrent.futures.TimeoutError, TimeoutError):
-            logger.error(
-                f"WATCHDOG TIMEOUT: Parallel verify check {agent_name} exceeded "
-                f"{check_timeout}s — killing"
-            )
+            logger.error(f"WATCHDOG TIMEOUT: Parallel verify check {agent_name} exceeded {check_timeout}s — killing")
             future.cancel()
             results[agent_name] = {
                 "passed": False,
@@ -770,9 +816,7 @@ def parallel_verify_node(
 
     if not all_passed:
         state["failure_context"] = (
-            f"Parallel verification failed. "
-            f"{len(failure_reasons)} check(s) failed:\n" +
-            "\n".join(failure_reasons)
+            f"Parallel verification failed. {len(failure_reasons)} check(s) failed:\n" + "\n".join(failure_reasons)
         )
         # Track verify retry count
         state["verify_retry_count"] = state.get("verify_retry_count", 0) + 1
@@ -827,11 +871,13 @@ def config_validate_node(
         if ext in config_extensions:
             full_path = os.path.join(working_dir, filepath) if not os.path.isabs(filepath) else filepath
             result = config_extensions[ext](full_path)
-            check_results.append({
-                "file": filepath,
-                "passed": result.passed,
-                "message": result.message,
-            })
+            check_results.append(
+                {
+                    "file": filepath,
+                    "passed": result.passed,
+                    "message": result.message,
+                }
+            )
             if not result.passed:
                 all_passed = False
 
@@ -848,16 +894,17 @@ def config_validate_node(
         state["verify_passed"] = all_passed
         if not all_passed:
             failed = [c for c in check_results if not c["passed"]]
-            state["failure_context"] = (
-                f"Config validation failed for {len(failed)} file(s): " +
-                "; ".join(f"{c['file']}: {c['message']}" for c in failed)
+            state["failure_context"] = f"Config validation failed for {len(failed)} file(s): " + "; ".join(
+                f"{c['file']}: {c['message']}" for c in failed
             )
 
     status = PhaseStatus.COMPLETE if state["verify_passed"] else PhaseStatus.FAILED
     phase_output = PhaseOutput(
         phase="CONFIG_VALIDATE",
         status=status,
-        output=f"Validated {len(check_results)} config file(s), all_passed={all_passed}" if check_results else "No config files to validate",
+        output=f"Validated {len(check_results)} config file(s), all_passed={all_passed}"
+        if check_results
+        else "No config files to validate",
         exit_code=0 if state["verify_passed"] else 1,
     )
     state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
@@ -917,7 +964,10 @@ def dependency_check_node(
     stream_file = _stream_file_path(story_id, "DEPENDENCY_CHECK")
     dep_timeout = get_phase_timeout("DEPENDENCY_CHECK")
     try:
-        result = _run_async(cli_invoke(provider=provider, prompt=prompt, working_directory=working_dir, stream_output_file=stream_file), timeout=dep_timeout)
+        result = _run_async(
+            cli_invoke(provider=provider, prompt=prompt, working_directory=working_dir, stream_output_file=stream_file),
+            timeout=dep_timeout,
+        )
         output_text = result.stdout if result else ""
         check_passed = True
 
@@ -950,7 +1000,7 @@ def dependency_check_node(
     phase_output = PhaseOutput(
         phase="DEPENDENCY_CHECK",
         status=status,
-        output=output_text[:2000] if 'output_text' in dir() else "",
+        output=output_text[:2000] if "output_text" in dir() else "",
         exit_code=0 if state.get("verify_passed", False) else 1,
         provider_used=provider.name,
     )
@@ -1022,10 +1072,7 @@ def parallel_gather_node(
             }
             all_outputs.append(f"=== {agent_name} ===\n{output_text[:2000]}")
         except (concurrent.futures.TimeoutError, TimeoutError):
-            logger.error(
-                f"WATCHDOG TIMEOUT: Parallel gather channel {agent_name} exceeded "
-                f"{gather_timeout}s — killing"
-            )
+            logger.error(f"WATCHDOG TIMEOUT: Parallel gather channel {agent_name} exceeded {gather_timeout}s — killing")
             future.cancel()
             results[agent_name] = {
                 "output": f"WATCHDOG: killed after {gather_timeout}s timeout",
@@ -1138,7 +1185,9 @@ def parallel_analyze_node(
             result = future.result(timeout=analyze_timeout + 30)
             output_text = result.stdout if result else ""
             all_outputs.append(f"=== Analysis: {topic_name} ===\n{output_text}")
-            logger.info(f"PARALLEL_ANALYZE: Topic '{topic_name}' completed via {provider_name} ({len(output_text)} chars)")
+            logger.info(
+                f"PARALLEL_ANALYZE: Topic '{topic_name}' completed via {provider_name} ({len(output_text)} chars)"
+            )
         except (concurrent.futures.TimeoutError, TimeoutError):
             logger.error(f"WATCHDOG TIMEOUT: Analyze topic '{topic_name}' exceeded {analyze_timeout}s")
             future.cancel()
@@ -1176,7 +1225,7 @@ def _split_into_topics(gather_output: str) -> list[tuple[str, str]]:
     import re
 
     # Try splitting by gather channel headers first
-    channel_pattern = re.compile(r'^=== (\w+) ===\s*$', re.MULTILINE)
+    channel_pattern = re.compile(r"^=== (\w+) ===\s*$", re.MULTILINE)
     channel_matches = list(channel_pattern.finditer(gather_output))
 
     if len(channel_matches) >= 2:
@@ -1192,13 +1241,13 @@ def _split_into_topics(gather_output: str) -> list[tuple[str, str]]:
             return topics
 
     # Fall back to major heading splits (# or ##)
-    heading_pattern = re.compile(r'^(#{1,2})\s+(.+)$', re.MULTILINE)
+    heading_pattern = re.compile(r"^(#{1,2})\s+(.+)$", re.MULTILINE)
     heading_matches = list(heading_pattern.finditer(gather_output))
 
     if len(heading_matches) >= 2:
         topics = []
         for i, match in enumerate(heading_matches):
-            name = re.sub(r'[^a-zA-Z0-9_]', '_', match.group(2).strip())[:40]
+            name = re.sub(r"[^a-zA-Z0-9_]", "_", match.group(2).strip())[:40]
             start = match.start()
             end = heading_matches[i + 1].start() if i + 1 < len(heading_matches) else len(gather_output)
             content = gather_output[start:end].strip()
@@ -1219,6 +1268,7 @@ def config_validate_decision(state: StoryState) -> Literal["pass", "fail"]:
 
 
 # --- Decision Functions ---
+
 
 def verify_decision(state: StoryState) -> Literal["pass", "fail"]:
     """Route after VERIFY: pass → LEARN, fail → CODE."""
@@ -1258,6 +1308,7 @@ def mediator_decision(state: StoryState) -> Literal["accept", "retry"]:
 
 # --- Context Builder ---
 
+
 def _build_phase_context(state: StoryState, phase_name: str) -> dict:
     """Build context dict for a phase using progressive disclosure rules."""
     ctx = {}
@@ -1292,7 +1343,45 @@ def _build_phase_context(state: StoryState, phase_name: str) -> dict:
     return ctx
 
 
+def write_output_node(state: StoryState) -> StoryState:
+    """Terminal node that writes the final output file for the story.
+
+    Extracts the last meaningful phase output and writes it to the
+    story's output_path if specified. Used by workflows that produce
+    file-based deliverables (task verification, document assembly, etc.).
+    """
+    state = dict(state)
+    story = state["story"]
+    output_path = story.get("output_path")
+
+    if not output_path:
+        return state
+
+    working_dir = state.get("working_directory", "")
+    if output_path and not os.path.isabs(output_path):
+        output_path = os.path.join(working_dir, output_path)
+
+    # Find last complete phase output
+    final_output = ""
+    for po in reversed(state.get("phase_outputs", [])):
+        if po.get("status") == "complete" and po.get("output"):
+            final_output = po["output"]
+            break
+
+    if final_output and output_path:
+        try:
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            with open(output_path, "w") as f:
+                f.write(final_output)
+            logger.info(f"Write output: {output_path}")
+        except Exception as e:
+            logger.error(f"Write output failed: {e}")
+
+    return state
+
+
 # --- Base Workflow Class ---
+
 
 class BaseWorkflow(ABC):
     """Abstract base for all LangGraph workflows.

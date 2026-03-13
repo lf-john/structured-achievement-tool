@@ -25,6 +25,7 @@ from src.workflows.state import PhaseStatus, create_initial_state
 
 # --- Fixtures ---
 
+
 def _make_state(**overrides) -> dict:
     """Create a minimal StoryState dict for testing node functions."""
     base = create_initial_state(
@@ -59,6 +60,7 @@ class FakeCLIResult:
 # ============================================================
 # 3.1 Dev TDD Workflow — architect_code/plan_code + parallel verify
 # ============================================================
+
 
 class TestDevTDDWorkflowStructure:
     """Verify the enhanced Dev TDD graph has the correct node set and edges."""
@@ -98,10 +100,16 @@ class TestDevTDDWorkflowStructure:
     def test_has_all_enhanced_nodes(self):
         nodes = set(self.graph.nodes)
         expected = {
-            "architect_code", "plan_code", "test_writer",
-            "code", "parallel_verify", "learn",
-            "tdd_red_check", "tdd_green_check",
-            "mediator_code", "mediator_verify",
+            "architect_code",
+            "plan_code",
+            "test_writer",
+            "code",
+            "parallel_verify",
+            "learn",
+            "tdd_red_check",
+            "tdd_green_check",
+            "mediator_code",
+            "mediator_verify",
         }
         assert expected.issubset(nodes)
 
@@ -123,11 +131,11 @@ class TestDevTDDWorkflowStructure:
         assert "mediator_verify" in self.graph.nodes
 
     def test_node_count(self):
-        """Should have exactly 10 nodes (architect_code, plan_code, test_writer,
+        """Should have exactly 11 nodes (architect_code, plan_code, test_writer,
         code, parallel_verify, learn, tdd_red_check, tdd_green_check,
-        mediator_code, mediator_verify)."""
+        mediator_code, mediator_verify, critic_code_review)."""
         our_nodes = {n for n in self.graph.nodes if not n.startswith("__")}
-        assert len(our_nodes) == 10
+        assert len(our_nodes) == 11
 
 
 class TestParallelVerifyNode:
@@ -168,13 +176,9 @@ class TestParallelVerifyNode:
             call_count[0] += 1
             future = MagicMock()
             if call_count[0] == 2:  # Second check fails
-                future.result.return_value = FakeCLIResult(
-                    stdout='{"passed": false}', exit_code=1
-                )
+                future.result.return_value = FakeCLIResult(stdout='{"passed": false}', exit_code=1)
             else:
-                future.result.return_value = FakeCLIResult(
-                    stdout='{"passed": true}', exit_code=0
-                )
+                future.result.return_value = FakeCLIResult(stdout='{"passed": true}', exit_code=0)
             return future
 
         mock_pool.submit.side_effect = make_future
@@ -273,6 +277,7 @@ class TestParallelVerifyNode:
 # 3.2 Config TDD — TDD pattern with test_writer + checks
 # ============================================================
 
+
 class TestConfigTDDWorkflowStructure:
     """Verify the Config TDD graph has the TDD pattern nodes."""
 
@@ -295,8 +300,20 @@ class TestConfigTDDWorkflowStructure:
 
     def test_has_all_nodes(self):
         nodes = set(self.graph.nodes)
-        expected = {"plan", "test_writer", "tdd_red_check", "execute",
-                    "tdd_green_check", "verify_script", "learn"}
+        expected = {
+            "plan",
+            "test_writer",
+            "tdd_red_check",
+            "snapshot",
+            "execute",
+            "propagation_wait",
+            "tdd_green_check",
+            "rollback",
+            "verify_script",
+            "critic_review",
+            "learn",
+            "write_output",
+        }
         assert expected.issubset(nodes)
 
     def test_compiles_without_error(self):
@@ -304,14 +321,15 @@ class TestConfigTDDWorkflowStructure:
         assert compiled is not None
 
     def test_node_count(self):
-        """Should have exactly 7 nodes."""
+        """Should have exactly 12 nodes."""
         our_nodes = {n for n in self.graph.nodes if not n.startswith("__")}
-        assert len(our_nodes) == 7
+        assert len(our_nodes) == 12
 
 
 # ============================================================
 # 3.3 Maintenance — TDD pattern with test_writer + checks
 # ============================================================
+
 
 class TestMaintenanceWorkflowStructure:
     """Verify the Maintenance graph has the TDD pattern nodes."""
@@ -335,8 +353,20 @@ class TestMaintenanceWorkflowStructure:
 
     def test_has_all_nodes(self):
         nodes = set(self.graph.nodes)
-        expected = {"plan", "test_writer", "tdd_red_check", "execute",
-                    "tdd_green_check", "verify", "learn"}
+        expected = {
+            "plan",
+            "test_writer",
+            "tdd_red_check",
+            "snapshot",
+            "execute",
+            "propagation_wait",
+            "tdd_green_check",
+            "rollback",
+            "verify",
+            "critic_review",
+            "learn",
+            "write_output",
+        }
         assert expected.issubset(nodes)
 
     def test_compiles_without_error(self):
@@ -344,14 +374,15 @@ class TestMaintenanceWorkflowStructure:
         assert compiled is not None
 
     def test_node_count(self):
-        """Should have exactly 7 nodes."""
+        """Should have exactly 12 nodes."""
         our_nodes = {n for n in self.graph.nodes if not n.startswith("__")}
-        assert len(our_nodes) == 7
+        assert len(our_nodes) == 12
 
 
 # ============================================================
 # 3.4 Research — parallel gather channels
 # ============================================================
+
 
 class TestResearchWorkflowStructure:
     """Verify the Research graph uses parallel_gather instead of single gather."""
@@ -486,6 +517,7 @@ class TestParallelGatherNode:
 # 3.5 Review — No changes, sanity check
 # ============================================================
 
+
 class TestReviewWorkflowUnchanged:
     """Verify the Review workflow still compiles and has its original nodes."""
 
@@ -502,6 +534,7 @@ class TestReviewWorkflowUnchanged:
 # ============================================================
 # Decision function tests
 # ============================================================
+
 
 class TestConfigValidateDecision:
     def test_pass_when_verified(self):

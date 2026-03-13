@@ -50,6 +50,19 @@ PHASE_TEMPLATES: dict[str, str] = {
     "CONTENT_PLAN": "content_plan.md",
     "CONTENT_WRITE": "content_write.md",
     "AGENTIC_VERIFY": "agentic_verify.md",
+    # Document assembly workflow phases
+    "GATHER_INPUTS": "gather.md",
+    "DESIGN_LAYOUT": "design.md",
+    "REQUEST_IMAGES": "execute.md",
+    "ASSEMBLE": "execute.md",
+    "QUALITY_CHECK": "verify.md",
+    # Task verification workflow phases
+    "GATHER_OUTPUTS": "gather.md",
+    "VERIFY_ACS": "verify.md",
+    # Debug workflow phases
+    "VALIDATE_FIX": "verify.md",
+    # Config/maintenance workflow phases
+    "PROPAGATION_WAIT": "execute.md",
 }
 
 # Progressive disclosure: what context each phase receives
@@ -81,6 +94,19 @@ PHASE_CONTEXT: dict[str, list[str]] = {
     "CONTENT_PLAN": ["task_description", "acceptance_criteria", "rag_context"],
     "CONTENT_WRITE": ["plan_output", "acceptance_criteria", "failure_context"],
     "AGENTIC_VERIFY": ["plan_output", "acceptance_criteria"],
+    # Document assembly workflow phases
+    "GATHER_INPUTS": ["task_description", "acceptance_criteria"],
+    "DESIGN_LAYOUT": ["task_description", "acceptance_criteria", "gather_output"],
+    "REQUEST_IMAGES": ["task_description", "design_output"],
+    "ASSEMBLE": ["task_description", "design_output", "acceptance_criteria", "failure_context"],
+    "QUALITY_CHECK": ["acceptance_criteria", "diff"],
+    # Task verification workflow phases
+    "GATHER_OUTPUTS": ["task_description", "phase_summary"],
+    "VERIFY_ACS": ["task_description", "acceptance_criteria"],
+    # Debug workflow phases
+    "VALIDATE_FIX": ["failure_context", "diff", "test_results"],
+    # Config/maintenance workflow phases
+    "PROPAGATION_WAIT": [],
 }
 
 
@@ -204,17 +230,13 @@ def trim_to_budget(
             result = result[:start_idx] + f"\n[{label} trimmed for context budget]\n"
         else:
             result = (
-                result[:start_idx]
-                + f"\n[{label} trimmed for context budget]\n"
-                + result[end_idx + len(end_marker):]
+                result[:start_idx] + f"\n[{label} trimmed for context budget]\n" + result[end_idx + len(end_marker) :]
             )
         logger.info(f"Trimmed {label} from prompt")
 
     final_tokens = _estimate_tokens(result)
     if final_tokens > budget:
-        logger.warning(
-            f"Prompt still exceeds budget after trimming: ~{final_tokens} vs {budget}"
-        )
+        logger.warning(f"Prompt still exceeds budget after trimming: ~{final_tokens} vs {budget}")
 
     return result
 
@@ -225,7 +247,7 @@ def _extract_template_version(content: str) -> str:
     Templates may start with a version comment: <!-- version: 1.0 -->
     Returns the version string or "1.0" if no version comment found.
     """
-    match = re.match(r'^\s*<!--\s*version:\s*(\S+)\s*-->', content)
+    match = re.match(r"^\s*<!--\s*version:\s*(\S+)\s*-->", content)
     return match.group(1) if match else "1.0"
 
 
@@ -304,9 +326,9 @@ def _load_project_rules(working_directory: str) -> str:
 
 # Core Memory token budgets per level
 _CORE_MEMORY_LIMITS = {
-    "global": 2000,      # ~/.config/sat/global.md
+    "global": 2000,  # ~/.config/sat/global.md
     "tech_stack": 1000,  # {project}/.memory/tech_stack.md
-    "project": 2000,     # {project}/.memory/project.md
+    "project": 2000,  # {project}/.memory/project.md
 }
 
 
@@ -353,7 +375,7 @@ def _format_acceptance_criteria(criteria: list) -> str:
     """Format acceptance criteria as a numbered list."""
     if not criteria:
         return "No acceptance criteria specified."
-    return "\n".join(f"{i+1}. {c}" for i, c in enumerate(criteria))
+    return "\n".join(f"{i + 1}. {c}" for i, c in enumerate(criteria))
 
 
 def build_prompt(
@@ -417,12 +439,14 @@ def build_prompt(
                     get_qualities_for_doc_type,
                     get_rules_for_doc_type,
                 )
+
                 # Extract doc_type from plan output or story
                 doc_type = story.get("doc_type", "technical")
                 plan_output = ctx.get("plan_output", "")
                 if plan_output:
                     try:
                         from src.llm.response_parser import extract_json
+
                         parsed = extract_json(plan_output)
                         if isinstance(parsed, dict) and parsed.get("doc_type"):
                             doc_type = parsed["doc_type"]
@@ -442,6 +466,7 @@ def build_prompt(
         # Inject tech stack detection for phases that need it
         if phase in ("TDD_RED", "TEST_WRITER", "CODE", "FIX"):
             from src.execution.tech_stack import detect_tech_stack, get_existing_test_files
+
             stack = detect_tech_stack(working_directory)
             subs.setdefault("LANGUAGE", stack.language)
             subs.setdefault("TEST_FRAMEWORK", stack.test_framework)

@@ -38,9 +38,7 @@ class TestPersistResearchNode:
         state = {
             "story": {"id": "R1"},
             "working_directory": "/tmp/test",
-            "phase_outputs": [
-                {"phase": "ANALYZE", "output": "analysis"}
-            ],
+            "phase_outputs": [{"phase": "ANALYZE", "output": "analysis"}],
         }
         result = persist_research_node(state)
         assert result is not None
@@ -51,9 +49,7 @@ class TestPersistResearchNode:
         state = {
             "story": {"id": "R1"},
             "working_directory": "/tmp/test",
-            "phase_outputs": [
-                {"phase": "SYNTHESIZE", "output": "Synthesized research content"}
-            ],
+            "phase_outputs": [{"phase": "SYNTHESIZE", "output": "Synthesized research content"}],
         }
         persist_research_node(state)
         mock_makedirs.assert_called()
@@ -64,9 +60,7 @@ class TestPersistResearchNode:
         state = {
             "story": {"id": "R1", "output_path": "/custom/path/report.md"},
             "working_directory": "/tmp/test",
-            "phase_outputs": [
-                {"phase": "SYNTHESIZE", "output": "content"}
-            ],
+            "phase_outputs": [{"phase": "SYNTHESIZE", "output": "content"}],
         }
         persist_research_node(state)
         mock_makedirs.assert_called()
@@ -78,9 +72,7 @@ class TestPersistResearchNode:
         state = {
             "story": {"id": "R1", "output_path": "/tmp/out.md"},
             "working_directory": "/tmp/test",
-            "phase_outputs": [
-                {"phase": "SYNTHESIZE", "output": "research content"}
-            ],
+            "phase_outputs": [{"phase": "SYNTHESIZE", "output": "research content"}],
         }
         result = persist_research_node(state)
         assert result is not None
@@ -91,7 +83,7 @@ class TestResearchWorkflowGraph:
         workflow = ResearchWorkflow(routing_engine=MagicMock())
         graph = workflow.build_graph()
         node_names = set(graph.nodes.keys())
-        expected = {"parallel_gather", "parallel_analyze", "synthesize", "persist"}
+        expected = {"parallel_gather", "parallel_analyze", "synthesize", "critic_review", "persist"}
         assert expected == node_names
 
     def test_compiles_without_error(self):
@@ -133,10 +125,7 @@ class TestSplitIntoTopics:
         assert topics[0][0] == "full_analysis"
 
     def test_skips_short_chunks(self):
-        gather_output = (
-            "=== channel_a ===\nShort\n\n"
-            "=== channel_b ===\n" + "Long content here. " * 20
-        )
+        gather_output = "=== channel_a ===\nShort\n\n=== channel_b ===\n" + "Long content here. " * 20
         topics = _split_into_topics(gather_output)
         # channel_a is too short (<200 chars), so falls back
         assert len(topics) >= 1

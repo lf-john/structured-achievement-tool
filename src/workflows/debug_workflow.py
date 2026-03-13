@@ -43,7 +43,7 @@ def simulate_reproduction(failure_context: str, working_directory: str = None) -
     import subprocess
 
     test_file_match = re.search(
-        r'(tests?/\S+\.py)(?:::(\S+))?',
+        r"(tests?/\S+\.py)(?:::(\S+))?",
         failure_context,
     )
 
@@ -87,8 +87,16 @@ def simulate_reproduction(failure_context: str, working_directory: str = None) -
 
     # Fallback: keyword heuristic
     error_indicators = [
-        "error", "failure", "fault", "exception", "traceback",
-        "failed", "crash", "timeout", "refused", "denied",
+        "error",
+        "failure",
+        "fault",
+        "exception",
+        "traceback",
+        "failed",
+        "crash",
+        "timeout",
+        "refused",
+        "denied",
     ]
     if any(term in failure_context.lower() for term in error_indicators):
         return {
@@ -109,19 +117,40 @@ def categorize_diagnosis(reproduction_details: str) -> dict:
     """
     details_lower = reproduction_details.lower()
 
-    if any(term in details_lower for term in [
-        "disk", "space", "memory", "permissions", "service", "restart",
-        "oom", "quota", "mount", "pid",
-    ]):
+    if any(
+        term in details_lower
+        for term in [
+            "disk",
+            "space",
+            "memory",
+            "permissions",
+            "service",
+            "restart",
+            "oom",
+            "quota",
+            "mount",
+            "pid",
+        ]
+    ):
         return {
             "category": "maintenance",
             "reasoning": "System resource or infrastructure issue requiring maintenance",
         }
 
-    if any(term in details_lower for term in [
-        "config", "parameter", "port", "invalid", "env", "setting",
-        "credential", "key", "path",
-    ]):
+    if any(
+        term in details_lower
+        for term in [
+            "config",
+            "parameter",
+            "port",
+            "invalid",
+            "env",
+            "setting",
+            "credential",
+            "key",
+            "path",
+        ]
+    ):
         return {
             "category": "config",
             "reasoning": "Configuration parameter or setting issue",
@@ -161,7 +190,9 @@ def _enrich_story_with_debug_context(state: StoryState) -> StoryState:
 
 # --- Core node functions ---
 
+
 def reproduce(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
+    state = dict(state)
     logger.info("Debug: REPRODUCE — attempting to reproduce failure")
     failure_context = state.get("failure_context", "")
     working_dir = state.get("working_directory")
@@ -171,9 +202,28 @@ def reproduce(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
     state["reproduction_method"] = outcome.get("method", "keyword_heuristic")
     logger.info(f"Debug: reproduction={outcome['status']} method={outcome.get('method', 'keyword_heuristic')}")
 
+    # Classify the failure for routing decisions
+    try:
+        from src.agents.failure_classifier import classify_failure
+
+        classification = classify_failure(
+            exit_code=1,
+            error_output=failure_context,
+            phase="REPRODUCE",
+        )
+        state["failure_classification"] = {
+            "failure_type": classification.failure_type.value,
+            "severity": classification.severity.value,
+            "category": classification.category,
+            "reasoning": classification.reasoning,
+        }
+    except Exception as e:
+        logger.debug(f"Failure classification failed: {e}")
+
     # Log reproduction event for daily digest monitoring
     try:
         from src.db.database_manager import DatabaseManager
+
         db = DatabaseManager()
         db.log_event(
             event_type="debug_reproduction",
@@ -190,6 +240,7 @@ def reproduce(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
 
 
 def diagnose(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
+    state = dict(state)
     logger.info("Debug: DIAGNOSE — categorizing issue")
     reproduction_details = state.get("reproduction_details", "")
     diagnosis = categorize_diagnosis(reproduction_details)
@@ -200,11 +251,13 @@ def diagnose(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
 
 
 def routing(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
+    state = dict(state)
     logger.info("Debug: ROUTING — preparing for sub-workflow dispatch")
     return _enrich_story_with_debug_context(state)
 
 
 # --- Outcome branch nodes ---
+
 
 def _run_sub_workflow(state: StoryState, workflow_cls, routing_engine: RoutingEngine) -> StoryState:
     """Instantiate and run a sub-workflow, returning the merged state."""
@@ -218,8 +271,7 @@ def _run_sub_workflow(state: StoryState, workflow_cls, routing_engine: RoutingEn
     except Exception as e:
         logger.error(f"Debug: sub-workflow {workflow_cls.__name__} failed: {e}")
         state["failure_context"] = (
-            state.get("failure_context", "") +
-            f"\nSub-workflow {workflow_cls.__name__} error: {e}"
+            state.get("failure_context", "") + f"\nSub-workflow {workflow_cls.__name__} error: {e}"
         )
     return state
 
@@ -228,6 +280,7 @@ def dev_workflow(state: StoryState, routing_engine: RoutingEngine) -> StoryState
     """Route to DevTDDWorkflow for code-level fixes."""
     logger.info("Debug: dispatching to DevTDDWorkflow")
     from src.workflows.dev_tdd_workflow import DevTDDWorkflow
+
     return _run_sub_workflow(state, DevTDDWorkflow, routing_engine)
 
 
@@ -235,6 +288,7 @@ def config_workflow(state: StoryState, routing_engine: RoutingEngine) -> StorySt
     """Route to ConfigTDDWorkflow for configuration fixes."""
     logger.info("Debug: dispatching to ConfigTDDWorkflow")
     from src.workflows.config_tdd_workflow import ConfigTDDWorkflow
+
     return _run_sub_workflow(state, ConfigTDDWorkflow, routing_engine)
 
 
@@ -242,6 +296,7 @@ def maint_workflow(state: StoryState, routing_engine: RoutingEngine) -> StorySta
     """Route to MaintenanceWorkflow for infrastructure fixes."""
     logger.info("Debug: dispatching to MaintenanceWorkflow")
     from src.workflows.maintenance_workflow import MaintenanceWorkflow
+
     return _run_sub_workflow(state, MaintenanceWorkflow, routing_engine)
 
 
@@ -249,7 +304,37 @@ def report_workflow(state: StoryState, routing_engine: RoutingEngine) -> StorySt
     """Route to ResearchWorkflow for non-reproducible issues (investigation)."""
     logger.info("Debug: dispatching to ResearchWorkflow for investigation")
     from src.workflows.research_workflow import ResearchWorkflow
+
     return _run_sub_workflow(state, ResearchWorkflow, routing_engine)
+
+
+def validate_fix(state: StoryState, routing_engine: RoutingEngine) -> StoryState:
+    """Re-run the original failing test to confirm the fix worked."""
+    state = dict(state)
+    logger.info("Debug: VALIDATE_FIX — confirming fix resolved the original failure")
+    failure_context = state.get("failure_context", "")
+    working_dir = state.get("working_directory")
+
+    if not working_dir:
+        state["verify_passed"] = True
+        return state
+
+    # Try to re-run the original test
+    outcome = simulate_reproduction(failure_context, working_directory=working_dir)
+
+    if outcome["status"] == "not_reproduced":
+        # Fix confirmed - original failure no longer reproduces
+        state["verify_passed"] = True
+        logger.info("VALIDATE_FIX: Fix confirmed — original failure no longer reproduces")
+    else:
+        state["verify_passed"] = False
+        state["failure_context"] = (
+            state.get("failure_context", "")
+            + f"\nVALIDATE_FIX: Original failure still reproduces after fix: {outcome['details'][:500]}"
+        )
+        logger.warning("VALIDATE_FIX: Original failure still reproduces after fix")
+
+    return state
 
 
 class DebugWorkflow(BaseWorkflow):
@@ -293,6 +378,7 @@ class DebugWorkflow(BaseWorkflow):
         workflow.add_node("config", lambda s: config_workflow(s, re))
         workflow.add_node("maint", lambda s: maint_workflow(s, re))
         workflow.add_node("report", lambda s: report_workflow(s, re))
+        workflow.add_node("validate_fix", lambda s: validate_fix(s, re))
 
         workflow.set_entry_point("reproduce")
         workflow.add_edge("reproduce", "diagnose")
@@ -304,9 +390,10 @@ class DebugWorkflow(BaseWorkflow):
             {"dev": "dev", "config": "config", "maint": "maint", "report": "report"},
         )
 
-        workflow.add_edge("dev", END)
-        workflow.add_edge("config", END)
-        workflow.add_edge("maint", END)
-        workflow.add_edge("report", END)
+        workflow.add_edge("dev", "validate_fix")
+        workflow.add_edge("config", "validate_fix")
+        workflow.add_edge("maint", "validate_fix")
+        workflow.add_edge("report", "validate_fix")
+        workflow.add_edge("validate_fix", END)
 
         return workflow
