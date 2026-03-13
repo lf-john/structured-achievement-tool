@@ -304,14 +304,13 @@ class RoutingEngine:
         """Attempt to restart Ollama service. Returns True if restart succeeded."""
         try:
             result = subprocess.run(
-                ["systemctl", "--user", "restart", "ollama"],
+                ["sudo", "systemctl", "restart", "ollama"],
                 capture_output=True,
                 text=True,
                 timeout=30,
             )
             if result.returncode == 0:
                 logger.info("Ollama service restarted via circuit breaker")
-                time.sleep(5)  # Wait for model loading
                 return True
             logger.warning(f"Ollama restart failed: {result.stderr}")
         except Exception as e:
