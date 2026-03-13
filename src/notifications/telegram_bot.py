@@ -41,6 +41,7 @@ def _get_telegram():
                 MessageHandler,
                 filters,
             )
+
             _telegram = {
                 "Update": Update,
                 "BotCommand": BotCommand,
@@ -51,9 +52,7 @@ def _get_telegram():
                 "filters": filters,
             }
         except ImportError:
-            raise ImportError(
-                "python-telegram-bot not installed. Run: pip install python-telegram-bot"
-            )
+            raise ImportError("python-telegram-bot not installed. Run: pip install python-telegram-bot")
     return _telegram
 
 
@@ -61,10 +60,12 @@ def _get_telegram():
 # Config
 # ---------------------------------------------------------------------------
 
+
 def _get_config():
     """Load paths and settings."""
     try:
         from src.core.paths import SAT_PROJECT_DIR, SAT_TASKS_DIR
+
         project_dir = str(SAT_PROJECT_DIR)
         tasks_dir = str(SAT_TASKS_DIR)
     except ImportError:
@@ -91,8 +92,10 @@ def _get_allowed_users() -> set:
 # Auth decorator
 # ---------------------------------------------------------------------------
 
+
 def authorized(func):
     """Decorator that restricts commands to allowed users."""
+
     async def wrapper(update, context):
         allowed = _get_allowed_users()
         if allowed and update.effective_user.id not in allowed:
@@ -100,12 +103,14 @@ def authorized(func):
             logger.warning(f"Telegram: unauthorized access attempt from user {update.effective_user.id}")
             return
         return await func(update, context)
+
     return wrapper
 
 
 # ---------------------------------------------------------------------------
 # Command handlers
 # ---------------------------------------------------------------------------
+
 
 @authorized
 async def cmd_status(update, context):
@@ -116,7 +121,9 @@ async def cmd_status(update, context):
     try:
         result = subprocess.run(
             ["systemctl", "--user", "is-active", "sat.service"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         sat_active = result.stdout.strip()
     except Exception:
@@ -125,7 +132,9 @@ async def cmd_status(update, context):
     try:
         result = subprocess.run(
             ["systemctl", "--user", "is-active", "sat-monitor.service"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         monitor_active = result.stdout.strip()
     except Exception:
@@ -139,7 +148,9 @@ async def cmd_status(update, context):
     try:
         result = subprocess.run(
             ["systemctl", "is-active", "ollama.service"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         ollama_active = result.stdout.strip()
     except Exception:
@@ -303,10 +314,7 @@ async def cmd_reject(update, context):
 async def cmd_create(update, context):
     """Create a new task file."""
     if not context.args:
-        await update.message.reply_text(
-            "Usage: /create <directory> <title>\n"
-            "Example: /create other fix-login-bug"
-        )
+        await update.message.reply_text("Usage: /create <directory> <title>\nExample: /create other fix-login-bug")
         return
 
     if len(context.args) < 2:
@@ -320,8 +328,7 @@ async def cmd_create(update, context):
     task_dir = os.path.join(cfg["tasks_dir"], directory)
     if not os.path.isdir(task_dir):
         await update.message.reply_text(
-            f"Directory '{directory}' not found.\n"
-            f"Available: {', '.join(_list_task_dirs(cfg['tasks_dir']))}"
+            f"Directory '{directory}' not found.\nAvailable: {', '.join(_list_task_dirs(cfg['tasks_dir']))}"
         )
         return
 
@@ -350,8 +357,7 @@ async def cmd_create(update, context):
         os.close(fd)
 
         await update.message.reply_text(
-            f"\u2705 Created: `{directory}/{filename}`\n"
-            f"Edit in Obsidian to add details before SAT picks it up.",
+            f"\u2705 Created: `{directory}/{filename}`\nEdit in Obsidian to add details before SAT picks it up.",
             parse_mode="Markdown",
         )
         logger.info(f"Telegram: created task {filepath} by user {update.effective_user.id}")
@@ -412,6 +418,7 @@ async def cmd_help(update, context):
 # Helper functions
 # ---------------------------------------------------------------------------
 
+
 def _count_tasks(tasks_dir: str) -> dict:
     """Count tasks by status across all subdirectories."""
     counts = {"pending": 0, "working": 0, "finished": 0, "failed": 0}
@@ -460,12 +467,14 @@ def _get_task_list(tasks_dir: str) -> list:
                 status = "Pending"
 
             rel_dir = md_file.parent.name
-            tasks.append({
-                "file": md_file.name,
-                "dir": rel_dir,
-                "path": str(md_file),
-                "status": status,
-            })
+            tasks.append(
+                {
+                    "file": md_file.name,
+                    "dir": rel_dir,
+                    "path": str(md_file),
+                    "status": status,
+                }
+            )
         except Exception:
             pass
     return tasks
@@ -500,6 +509,7 @@ def _list_task_dirs(tasks_dir: str) -> list:
 # ---------------------------------------------------------------------------
 # Bot startup
 # ---------------------------------------------------------------------------
+
 
 def create_bot():
     """Create and configure the Telegram bot application.

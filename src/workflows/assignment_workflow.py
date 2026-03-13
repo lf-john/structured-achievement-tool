@@ -58,6 +58,7 @@ class AssignmentWorkflow:
         config: ApprovalConfig = None,
     ):
         from src.llm.routing_engine import RoutingEngine
+
         self.routing_engine = routing_engine or RoutingEngine()
         self.notifier = notifier or Notifier()
         self.config = config or ApprovalConfig()
@@ -86,25 +87,37 @@ class AssignmentWorkflow:
         builder.add_edge("notify", "pause")
 
         # PAUSE → responded/follow_up/escalate
-        builder.add_conditional_edges("pause", pause_initial_decision, {
-            "responded": "validate",
-            "follow_up": "follow_up",
-            "escalate": "escalation",
-        })
+        builder.add_conditional_edges(
+            "pause",
+            pause_initial_decision,
+            {
+                "responded": "validate",
+                "follow_up": "follow_up",
+                "escalate": "escalation",
+            },
+        )
 
-        builder.add_conditional_edges("follow_up", follow_up_decision, {
-            "responded": "validate",
-            "escalate": "escalation",
-        })
+        builder.add_conditional_edges(
+            "follow_up",
+            follow_up_decision,
+            {
+                "responded": "validate",
+                "escalate": "escalation",
+            },
+        )
 
         # Escalation → validate (with whatever response we have)
         builder.add_edge("escalation", "validate")
 
         # VALIDATE → pass: integrate, fail: pause (retry)
-        builder.add_conditional_edges("validate", validate_decision, {
-            "pass": "integrate",
-            "fail": "pause",
-        })
+        builder.add_conditional_edges(
+            "validate",
+            validate_decision,
+            {
+                "pass": "integrate",
+                "fail": "pause",
+            },
+        )
 
         # INTEGRATE → LEARN → END
         builder.add_edge("integrate", "learn")

@@ -24,13 +24,11 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 DEFAULT_DB_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    ".memory", "geval_scores.db"
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".memory", "geval_scores.db"
 )
 
 EVENTS_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    ".memory", "events.jsonl"
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".memory", "events.jsonl"
 )
 
 # Scoring prompt sent to Nemotron
@@ -58,6 +56,7 @@ BATCH_SIZE = 5  # Score this many invocations per idle cycle
 @dataclass
 class InvocationScore:
     """Quality score for a single LLM invocation."""
+
     provider: str
     agent_type: str
     completeness: int
@@ -105,9 +104,7 @@ def _get_last_scored_offset(db_path: str) -> int:
     """Get the byte offset of the last scored event in events.jsonl."""
     try:
         with sqlite3.connect(db_path) as conn:
-            row = conn.execute(
-                "SELECT value FROM scoring_progress WHERE key = 'last_offset'"
-            ).fetchone()
+            row = conn.execute("SELECT value FROM scoring_progress WHERE key = 'last_offset'").fetchone()
             return int(row[0]) if row else 0
     except Exception:
         return 0
@@ -116,10 +113,7 @@ def _get_last_scored_offset(db_path: str) -> int:
 def _set_last_scored_offset(db_path: str, offset: int):
     """Save the byte offset of the last scored event."""
     with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO scoring_progress (key, value) VALUES ('last_offset', ?)",
-            (str(offset),)
-        )
+        conn.execute("INSERT OR REPLACE INTO scoring_progress (key, value) VALUES ('last_offset', ?)", (str(offset),))
 
 
 def _get_pending_invocations(
@@ -196,7 +190,9 @@ def score_pending_invocations(
                     except (ValueError, TypeError):
                         agent_confidence = None
                 _save_score(
-                    db_path, score, event.get("ts", ""),
+                    db_path,
+                    score,
+                    event.get("ts", ""),
                     agent_confidence=agent_confidence,
                     template_version=data.get("template_version"),
                 )
@@ -278,7 +274,7 @@ def _save_score(
                     event_ts,
                     agent_confidence,
                     template_version,
-                )
+                ),
             )
     except Exception as e:
         logger.warning(f"Failed to save G-Eval score: {e}")
@@ -329,8 +325,7 @@ def _get_score_distribution(conn, provider: str, agent_type: str) -> dict[str, d
     dist = {"completeness": {}, "correctness": {}, "format_compliance": {}}
     for dim in dist:
         rows = conn.execute(
-            f"SELECT {dim}, COUNT(*) FROM geval_scores "
-            f"WHERE provider = ? AND agent_type = ? GROUP BY {dim}",
+            f"SELECT {dim}, COUNT(*) FROM geval_scores WHERE provider = ? AND agent_type = ? GROUP BY {dim}",
             (provider, agent_type),
         ).fetchall()
         for score_val, count in rows:
@@ -363,14 +358,16 @@ def get_calibration_report(db_path: str = DEFAULT_DB_PATH) -> list[dict]:
                 ORDER BY ABS(AVG(agent_confidence - (completeness + correctness + format_compliance) / 3.0)) DESC
             """).fetchall()
             for row in rows:
-                results.append({
-                    "provider": row[0],
-                    "agent_type": row[1],
-                    "sample_count": row[2],
-                    "avg_confidence": round(row[3], 1),
-                    "avg_geval": round(row[4], 1),
-                    "avg_delta": round(row[5], 2),
-                })
+                results.append(
+                    {
+                        "provider": row[0],
+                        "agent_type": row[1],
+                        "sample_count": row[2],
+                        "avg_confidence": round(row[3], 1),
+                        "avg_geval": round(row[4], 1),
+                        "avg_delta": round(row[5], 2),
+                    }
+                )
     except Exception as e:
         logger.warning(f"Failed to get calibration report: {e}")
     return results
@@ -394,15 +391,17 @@ def get_low_scoring_details(db_path: str = DEFAULT_DB_PATH) -> list[dict]:
                 LIMIT 50
             """).fetchall()
             for row in rows:
-                results.append({
-                    "timestamp": row[0],
-                    "provider": row[1],
-                    "agent_type": row[2],
-                    "completeness": row[3],
-                    "correctness": row[4],
-                    "format_compliance": row[5],
-                    "notes": row[6],
-                })
+                results.append(
+                    {
+                        "timestamp": row[0],
+                        "provider": row[1],
+                        "agent_type": row[2],
+                        "completeness": row[3],
+                        "correctness": row[4],
+                        "format_compliance": row[5],
+                        "notes": row[6],
+                    }
+                )
     except Exception as e:
         logger.warning(f"Failed to get low scoring details: {e}")
     return results

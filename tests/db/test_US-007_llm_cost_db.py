@@ -24,6 +24,7 @@ Edge Cases:
   - test_should_handle_multiple_entries_different_days_same_month: Verifies correct monthly sum.
   - test_should_handle_db_connection_errors: Ensures graceful degradation on connection issues.
 """
+
 import os
 import sqlite3
 from datetime import datetime, timedelta
@@ -35,7 +36,6 @@ from src.db.llm_cost_db import LLMCostDB
 
 
 class TestLLMCostDB:
-
     @pytest.fixture
     def temp_db_path(self, tmp_path):
         # Create a temporary database file path for each test
@@ -71,7 +71,7 @@ class TestLLMCostDB:
 
     # AC 1: Claude API calls are logged with token count and estimated cost.
     def test_should_add_log_entry_to_db(self, db_instance):
-        now = datetime.now().replace(microsecond=0) # For precise comparison
+        now = datetime.now().replace(microsecond=0)  # For precise comparison
         db_instance.add_log_entry("claude-opus", 100, 50, 0.0525, timestamp=now)
 
         conn = sqlite3.connect(db_instance.db_path)
@@ -89,7 +89,7 @@ class TestLLMCostDB:
 
     # AC 2: Daily/monthly budget cap for Claude API usage is enforced.
     def test_should_get_daily_cost_correctly(self, db_instance):
-        today = datetime(2024, 1, 20, 10, 0, 0) # Fixed reference date
+        today = datetime(2024, 1, 20, 10, 0, 0)  # Fixed reference date
         yesterday = today - timedelta(days=1)
 
         db_instance.add_log_entry("claude-opus", 100, 50, 0.05, timestamp=today)
@@ -159,7 +159,7 @@ class TestLLMCostDB:
         # Simulate error on add_log_entry by trying to write to a non-existent path mid-operation.
         # This requires mocking the sqlite3 module, which is complex for a simple failing test.
         # Instead, we'll focus on the positive path and rely on integration tests for connection robustness.
-        pass # Placeholder for more advanced error handling tests if needed during implementation.
+        pass  # Placeholder for more advanced error handling tests if needed during implementation.
 
 
 # No explicit sys.exit needed, pytest handles exit codes.

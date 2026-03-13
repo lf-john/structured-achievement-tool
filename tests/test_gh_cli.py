@@ -31,9 +31,7 @@ class TestGHResult:
 class TestRunGH:
     @patch("src.github.gh_cli.subprocess.run")
     def test_successful_command(self, mock_run):
-        mock_run.return_value = MagicMock(
-            stdout="output", stderr="", returncode=0
-        )
+        mock_run.return_value = MagicMock(stdout="output", stderr="", returncode=0)
         result = run_gh(["issue", "list"])
         assert result.success
         assert result.stdout == "output"
@@ -41,9 +39,7 @@ class TestRunGH:
 
     @patch("src.github.gh_cli.subprocess.run")
     def test_failed_command(self, mock_run):
-        mock_run.return_value = MagicMock(
-            stdout="", stderr="error msg", returncode=1
-        )
+        mock_run.return_value = MagicMock(stdout="", stderr="error msg", returncode=1)
         result = run_gh(["issue", "create"])
         assert not result.success
         assert result.exit_code == 1
@@ -60,6 +56,7 @@ class TestRunGH:
     @patch("src.github.gh_cli.subprocess.run")
     def test_timeout_handling(self, mock_run):
         from subprocess import TimeoutExpired
+
         mock_run.side_effect = TimeoutExpired(cmd="gh", timeout=30)
         result = run_gh(["issue", "list"])
         assert not result.success
@@ -95,16 +92,12 @@ class TestCheckAuth:
 class TestGetRepoFromRemote:
     @patch("src.github.gh_cli.subprocess.run")
     def test_ssh_url(self, mock_run):
-        mock_run.return_value = MagicMock(
-            stdout="git@github.com:lf-john/sat.git\n", returncode=0
-        )
+        mock_run.return_value = MagicMock(stdout="git@github.com:lf-john/sat.git\n", returncode=0)
         assert get_repo_from_remote() == "lf-john/sat"
 
     @patch("src.github.gh_cli.subprocess.run")
     def test_https_url(self, mock_run):
-        mock_run.return_value = MagicMock(
-            stdout="https://github.com/lf-john/sat.git\n", returncode=0
-        )
+        mock_run.return_value = MagicMock(stdout="https://github.com/lf-john/sat.git\n", returncode=0)
         assert get_repo_from_remote() == "lf-john/sat"
 
     @patch("src.github.gh_cli.subprocess.run")
@@ -114,7 +107,5 @@ class TestGetRepoFromRemote:
 
     @patch("src.github.gh_cli.subprocess.run")
     def test_ssh_url_no_git_suffix(self, mock_run):
-        mock_run.return_value = MagicMock(
-            stdout="git@github.com:owner/repo\n", returncode=0
-        )
+        mock_run.return_value = MagicMock(stdout="git@github.com:owner/repo\n", returncode=0)
         assert get_repo_from_remote() == "owner/repo"

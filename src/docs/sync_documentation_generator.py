@@ -1,4 +1,3 @@
-
 def generate_initial_sync_doc() -> str:
     """
     Generates documentation for the initial full sync process.
@@ -16,6 +15,7 @@ def generate_initial_sync_doc() -> str:
         "5. **Enable Ongoing Sync**: Once the initial sync is complete and verified, enable real-time "
         "webhooks or scheduled incremental syncs.\n"
     )
+
 
 def generate_deduplication_strategy_doc() -> str:
     """

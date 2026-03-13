@@ -69,11 +69,13 @@ class TestHumanNotificationHelpers:
     def test_notify_human_action_required(self, mock_post):
         mock_post.return_value.status_code = 200
         notifier = Notifier(ntfy_topic="test", config={})
-        notifier.notify_human_action_required(
-            "US-050", "Configure DNS", "assignment", "/path/to/signal"
-        )
+        notifier.notify_human_action_required("US-050", "Configure DNS", "assignment", "/path/to/signal")
         mock_post.assert_called_once()
-        call_headers = mock_post.call_args[1].get("headers", {}) if mock_post.call_args[1] else mock_post.call_args.kwargs.get("headers", {})
+        call_headers = (
+            mock_post.call_args[1].get("headers", {})
+            if mock_post.call_args[1]
+            else mock_post.call_args.kwargs.get("headers", {})
+        )
         assert "Assignment" in call_headers.get("Title", "")
 
     @patch("src.notifications.notifier.requests.post")
@@ -106,7 +108,9 @@ class TestHumanNotificationHelpers:
             notify_email="admin@example.com",
         )
         notifier.notify_escalation(
-            "US-050", "DNS Config", "ImportError",
+            "US-050",
+            "DNS Config",
+            "ImportError",
             recipient="ops@example.com",
         )
         mock_server.sendmail.assert_called_once()

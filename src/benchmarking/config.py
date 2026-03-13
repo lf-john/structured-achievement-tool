@@ -1,9 +1,4 @@
-MODELS = [
-    "qwen3:8b",
-    "qwen2.5-coder:7b",
-    "deepseek-r1:8b",
-    "nemotron-mini"
-]
+MODELS = ["qwen3:8b", "qwen2.5-coder:7b", "deepseek-r1:8b", "nemotron-mini"]
 
 PROMPTS = [
     "Write a python function to calculate the fibonacci sequence.",

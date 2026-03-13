@@ -31,12 +31,12 @@ class GrafanaSetup:
         self.dry_run = dry_run
 
         if api_key is None:
-            api_key = os.environ.get('GRAFANA_API_KEY', '').strip()
+            api_key = os.environ.get("GRAFANA_API_KEY", "").strip()
 
         # Check if GRAFANA_API_KEY is explicitly set to empty (vs not set at all)
         # If not set at all, allow initialization (for testing)
         # If explicitly set to empty, raise error
-        if not api_key and 'GRAFANA_API_KEY' in os.environ:
+        if not api_key and "GRAFANA_API_KEY" in os.environ:
             raise ValueError("GRAFANA_API_KEY environment variable must be set")
 
         # Use a default api key for testing when not provided
@@ -113,7 +113,7 @@ class GrafanaSetup:
         panels: list[dict[str, Any]] | None = None,
         options: dict[str, Any] | None = None,
         datasource: str | None = None,
-        save: bool = False
+        save: bool = False,
     ) -> dict[str, Any]:
         """
         Main method to create or update a dashboard with idempotency logic.
@@ -144,13 +144,13 @@ class GrafanaSetup:
 
         # Add datasource if provided
         if datasource:
-            dashboard['datasource'] = datasource
+            dashboard["datasource"] = datasource
 
         # Save to file if requested (before any API calls)
         if save:
             filename = f"{uid}.json"
             try:
-                with open(filename, 'w') as f:
+                with open(filename, "w") as f:
                     json.dump(dashboard, f, indent=2)
                 print(f"Dashboard JSON saved to {filename}")
             except OSError as e:
@@ -170,7 +170,7 @@ class GrafanaSetup:
 def main():
     """Main entry point for the script."""
     parser = argparse.ArgumentParser(
-        description='Create or update Grafana dashboards with idempotency and dry-run support.',
+        description="Create or update Grafana dashboards with idempotency and dry-run support.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -189,52 +189,20 @@ Examples:
 
   # Save dashboard JSON to file before sending
   python grafana_setup.py --uid my-dashboard --name "My Dashboard" --save
-        """
+        """,
     )
 
     # Required arguments
-    parser.add_argument(
-        '--uid',
-        required=True,
-        help='Dashboard unique identifier'
-    )
-    parser.add_argument(
-        '--name',
-        required=True,
-        help='Dashboard name'
-    )
+    parser.add_argument("--uid", required=True, help="Dashboard unique identifier")
+    parser.add_argument("--name", required=True, help="Dashboard name")
 
     # Optional arguments
-    parser.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='Print dashboard JSON without sending to Grafana'
-    )
-    parser.add_argument(
-        '--panels',
-        type=str,
-        help='JSON string of panels to include'
-    )
-    parser.add_argument(
-        '--options',
-        type=str,
-        help='JSON string of custom options to override defaults'
-    )
-    parser.add_argument(
-        '--datasource',
-        type=str,
-        help='Grafana datasource name'
-    )
-    parser.add_argument(
-        '--api-key',
-        type=str,
-        help='Grafana API key (overrides GRAFANA_API_KEY environment variable)'
-    )
-    parser.add_argument(
-        '--save',
-        action='store_true',
-        help='Save dashboard JSON to file before sending to Grafana'
-    )
+    parser.add_argument("--dry-run", action="store_true", help="Print dashboard JSON without sending to Grafana")
+    parser.add_argument("--panels", type=str, help="JSON string of panels to include")
+    parser.add_argument("--options", type=str, help="JSON string of custom options to override defaults")
+    parser.add_argument("--datasource", type=str, help="Grafana datasource name")
+    parser.add_argument("--api-key", type=str, help="Grafana API key (overrides GRAFANA_API_KEY environment variable)")
+    parser.add_argument("--save", action="store_true", help="Save dashboard JSON to file before sending to Grafana")
 
     args = parser.parse_args()
 
@@ -262,12 +230,7 @@ Examples:
 
         # Setup the dashboard
         setup.setup_dashboard(
-            uid=args.uid,
-            name=args.name,
-            panels=panels,
-            options=options,
-            datasource=args.datasource,
-            save=args.save
+            uid=args.uid, name=args.name, panels=panels, options=options, datasource=args.datasource, save=args.save
         )
 
         # Print result
@@ -286,5 +249,5 @@ Examples:
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

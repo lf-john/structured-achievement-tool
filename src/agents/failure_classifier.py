@@ -39,9 +39,9 @@ class FailureType(str, Enum):
 
 
 class FailureSeverity(str, Enum):
-    TRANSIENT = "transient"    # Auto-retry
+    TRANSIENT = "transient"  # Auto-retry
     PERSISTENT = "persistent"  # Needs Debug story
-    FATAL = "fatal"            # Stop execution
+    FATAL = "fatal"  # Stop execution
 
 
 @dataclass
@@ -57,23 +57,31 @@ class FailureClassification:
 # Pattern matchers for transient failures
 TRANSIENT_PATTERNS: list[tuple[re.Pattern, FailureType, int]] = [
     # (pattern, type, retry_delay_seconds)
-    (re.compile(r'timeout|timed?\s*out|ETIMEDOUT', re.I), FailureType.TIMEOUT, 30),
-    (re.compile(r'rate.?limit|429|too many requests|quota', re.I), FailureType.RATE_LIMIT, 60),
-    (re.compile(r'ECONNREFUSED|ECONNRESET|ENETUNREACH|network|connection.*refused|socket', re.I), FailureType.NETWORK, 15),
-    (re.compile(r'out of memory|OOM|Cannot allocate|MemoryError|ENOMEM', re.I), FailureType.OOM, 30),
-    (re.compile(r'No space left|ENOSPC|disk full', re.I), FailureType.DISK_FULL, 60),
-    (re.compile(r'\block\b|EBUSY|resource busy|already locked', re.I), FailureType.LOCK_CONTENTION, 10),
-    (re.compile(r'API Error:\s*5\d{2}|500 Internal|502 Bad Gateway|503 Service', re.I), FailureType.API_ERROR, 30),
-    (re.compile(r'CONFLICT.*Merge conflict|merge conflict|Automatic merge failed', re.I), FailureType.MERGE_CONFLICT, 10),
+    (re.compile(r"timeout|timed?\s*out|ETIMEDOUT", re.I), FailureType.TIMEOUT, 30),
+    (re.compile(r"rate.?limit|429|too many requests|quota", re.I), FailureType.RATE_LIMIT, 60),
+    (
+        re.compile(r"ECONNREFUSED|ECONNRESET|ENETUNREACH|network|connection.*refused|socket", re.I),
+        FailureType.NETWORK,
+        15,
+    ),
+    (re.compile(r"out of memory|OOM|Cannot allocate|MemoryError|ENOMEM", re.I), FailureType.OOM, 30),
+    (re.compile(r"No space left|ENOSPC|disk full", re.I), FailureType.DISK_FULL, 60),
+    (re.compile(r"\block\b|EBUSY|resource busy|already locked", re.I), FailureType.LOCK_CONTENTION, 10),
+    (re.compile(r"API Error:\s*5\d{2}|500 Internal|502 Bad Gateway|503 Service", re.I), FailureType.API_ERROR, 30),
+    (
+        re.compile(r"CONFLICT.*Merge conflict|merge conflict|Automatic merge failed", re.I),
+        FailureType.MERGE_CONFLICT,
+        10,
+    ),
 ]
 
 # Pattern matchers for persistent failures
 PERSISTENT_PATTERNS: list[tuple[re.Pattern, FailureType]] = [
-    (re.compile(r'ImportError|ModuleNotFoundError|No module named', re.I), FailureType.IMPORT_ERROR),
-    (re.compile(r'SyntaxError|IndentationError|TabError', re.I), FailureType.SYNTAX_ERROR),
-    (re.compile(r'PermissionError|EACCES|Permission denied', re.I), FailureType.PERMISSION_ERROR),
-    (re.compile(r'FAILED|AssertionError|assert.*failed', re.I), FailureType.TEST_FAILURE),
-    (re.compile(r'<promise>BLOCKED</promise>', re.I), FailureType.BLOCKED),
+    (re.compile(r"ImportError|ModuleNotFoundError|No module named", re.I), FailureType.IMPORT_ERROR),
+    (re.compile(r"SyntaxError|IndentationError|TabError", re.I), FailureType.SYNTAX_ERROR),
+    (re.compile(r"PermissionError|EACCES|Permission denied", re.I), FailureType.PERMISSION_ERROR),
+    (re.compile(r"FAILED|AssertionError|assert.*failed", re.I), FailureType.TEST_FAILURE),
+    (re.compile(r"<promise>BLOCKED</promise>", re.I), FailureType.BLOCKED),
 ]
 
 

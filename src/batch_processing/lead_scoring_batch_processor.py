@@ -13,11 +13,7 @@ class LeadScoringBatchProcessor:
     """
 
     def __init__(
-        self,
-        data_source: LeadDataSource,
-        scorer: LeadScorer,
-        progress_tracker: ProgressTracker,
-        batch_size: int
+        self, data_source: LeadDataSource, scorer: LeadScorer, progress_tracker: ProgressTracker, batch_size: int
     ):
         self.data_source = data_source
         self.scorer = scorer
@@ -30,7 +26,7 @@ class LeadScoringBatchProcessor:
         """
         Executes the lead scoring batch processing pipeline.
         """
-        self.start_time = time.time() # Initialize start time
+        self.start_time = time.time()  # Initialize start time
         initial_progress = self.progress_tracker.get_progress()
         last_processed_id = initial_progress.get("last_processed_id")
         self.total_leads = self.data_source.get_total_leads()
@@ -38,7 +34,9 @@ class LeadScoringBatchProcessor:
         processed_count = self._calculate_processed_count(last_processed_id)
 
         while True:
-            leads_batch, current_last_id = self.data_source.fetch_leads_batch(last_id=last_processed_id, batch_size=self.batch_size)
+            leads_batch, current_last_id = self.data_source.fetch_leads_batch(
+                last_id=last_processed_id, batch_size=self.batch_size
+            )
 
             if not leads_batch:
                 # If total_leads was 0 from the start, we still called fetch_leads_batch once.
@@ -88,7 +86,7 @@ class LeadScoringBatchProcessor:
             last_processed_id=last_processed_id,
             percentage_complete=percentage_complete,
             total_leads=self.total_leads,
-            estimated_time_remaining=estimated_time_remaining
+            estimated_time_remaining=estimated_time_remaining,
         )
 
     def _format_time_remaining(self, seconds: float) -> str:

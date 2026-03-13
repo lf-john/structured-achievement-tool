@@ -120,13 +120,11 @@ def store_decision(state: StoryState) -> str:
 
 
 class ConversationWorkflow(BaseWorkflow):
-
     def build_graph(self) -> StateGraph:
         builder = StateGraph(StoryState)
         re = self.routing_engine
 
-        builder.add_node("execute", partial(
-            phase_node, phase_name="EXECUTE", agent_name="executor", routing_engine=re))
+        builder.add_node("execute", partial(phase_node, phase_name="EXECUTE", agent_name="executor", routing_engine=re))
         builder.add_node("persist", persist_conversation_node)
 
         builder.set_entry_point("execute")

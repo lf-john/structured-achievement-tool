@@ -15,14 +15,10 @@ from typing import Any
 # Mock ollama object for compatibility with tests (created at module level)
 class MockOllama:
     """Mock Ollama client for testing."""
+
     def embeddings(self, prompt: str) -> dict[str, Any]:
         """Mock embeddings endpoint."""
-        return {
-            "embedding": [0.1] * 768,
-            "duration_ms": 100,
-            "time_to_first_token_ms": 50,
-            "total_duration_ms": 150
-        }
+        return {"embedding": [0.1] * 768, "duration_ms": 100, "time_to_first_token_ms": 50, "total_duration_ms": 150}
 
 
 ollama = MockOllama()
@@ -31,6 +27,7 @@ ollama = MockOllama()
 # Standard text passage for consistent benchmarking
 class StandardTextPassage:
     """Standard text passage used for consistent benchmarking across runs."""
+
     text = """
 Artificial intelligence (AI) is intelligence demonstrated by machines, as opposed to the natural intelligence displayed by humans and animals. AI research has been defined as the field of study of intelligent agents, which refers to any system that perceives its environment and takes actions that maximize its chance of achieving its goals. Some popular accounts use the term "artificial intelligence" to describe machines that mimic "cognitive" functions that humans associate with the human mind, such as "learning" and "problem solving".
 """
@@ -39,6 +36,7 @@ Artificial intelligence (AI) is intelligence demonstrated by machines, as oppose
 @dataclass
 class BenchmarkRun:
     """Represents a single benchmark run result."""
+
     run_number: int
     tokens_per_second: float
     time_to_first_token: float
@@ -51,7 +49,7 @@ class BenchmarkRun:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> 'BenchmarkRun':
+    def from_dict(cls, data: dict[str, Any]) -> "BenchmarkRun":
         """Create BenchmarkRun from dictionary."""
         return cls(
             run_number=data.get("run_number", 1),
@@ -59,13 +57,14 @@ class BenchmarkRun:
             time_to_first_token=data.get("time_to_first_token", 0.0),
             total_latency=data.get("total_latency", 0.0),
             embedding_dimension=data.get("embedding_dimension", 768),
-            status=data.get("status", "success")
+            status=data.get("status", "success"),
         )
 
 
 @dataclass
 class BenchmarkResult:
     """Represents overall benchmark results."""
+
     model_name: str
     prompt: str
     tokens_per_sec: float
@@ -86,7 +85,7 @@ class BenchmarkResult:
             "total_response_time": self.total_response_time,
             "runs": [run.to_dict() for run in self.runs],
             "embedding_dimension": self.embedding_dimension,
-            "status": self.status
+            "status": self.status,
         }
 
 
@@ -128,7 +127,7 @@ def run_embedding_benchmark(model_name: str, output_file: str) -> dict[str, Any]
         prompt=StandardTextPassage.text,
         tokens_per_sec=0.0,
         time_to_first_token=0.0,
-        total_response_time=0.0
+        total_response_time=0.0,
     )
 
     try:
@@ -165,7 +164,7 @@ def run_embedding_benchmark(model_name: str, output_file: str) -> dict[str, Any]
                     time_to_first_token=time_to_first_token_ms / 1000.0,  # Convert to seconds
                     total_latency=total_duration_ms / 1000.0,  # Convert to seconds
                     embedding_dimension=embedding_dimension,
-                    status="success"
+                    status="success",
                 )
 
                 result.runs.append(run)
@@ -183,7 +182,7 @@ def run_embedding_benchmark(model_name: str, output_file: str) -> dict[str, Any]
                         tokens_per_second=0.0,
                         time_to_first_token=0.0,
                         total_latency=0.0,
-                        status="error"
+                        status="error",
                     )
                 )
 
@@ -201,7 +200,7 @@ def run_embedding_benchmark(model_name: str, output_file: str) -> dict[str, Any]
         os.makedirs(os.path.dirname(output_file) if os.path.dirname(output_file) else ".", exist_ok=True)
 
         # Persist results
-        with open(output_file, 'w') as f:
+        with open(output_file, "w") as f:
             json.dump(result.to_dict(), f, indent=2)
 
     except Exception as e:
@@ -210,13 +209,17 @@ def run_embedding_benchmark(model_name: str, output_file: str) -> dict[str, Any]
         os.makedirs(os.path.dirname(output_file) if os.path.dirname(output_file) else ".", exist_ok=True)
 
         # Save error state
-        with open(output_file, 'w') as f:
-            json.dump({
-                "model_name": model_name,
-                "prompt": StandardTextPassage.text,
-                "status": "error",
-                "error_message": str(e)
-            }, f, indent=2)
+        with open(output_file, "w") as f:
+            json.dump(
+                {
+                    "model_name": model_name,
+                    "prompt": StandardTextPassage.text,
+                    "status": "error",
+                    "error_message": str(e),
+                },
+                f,
+                indent=2,
+            )
 
     return result.to_dict()
 

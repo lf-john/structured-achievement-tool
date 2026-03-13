@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PRResult:
     """Result of a PR operation."""
+
     success: bool
     pr_number: int | None = None
     pr_url: str | None = None
@@ -105,11 +106,16 @@ class PRManager:
         body = self._build_pr_body(story, working_directory, issue_number)
 
         args = [
-            "pr", "create",
-            "--title", title,
-            "--body", body,
-            "--base", base_branch,
-            "--head", branch_name,
+            "pr",
+            "create",
+            "--title",
+            title,
+            "--body",
+            body,
+            "--base",
+            base_branch,
+            "--head",
+            branch_name,
         ]
 
         if draft:
@@ -137,12 +143,14 @@ class PRManager:
         """
         result = run_gh(
             ["pr", "list", "--head", branch_name, "--json", "number", "--limit", "1"],
-            repo=self.repo, cwd=self.cwd,
+            repo=self.repo,
+            cwd=self.cwd,
         )
 
         if result.success:
             try:
                 import json
+
                 prs = json.loads(result.stdout)
                 if prs:
                     return prs[0]["number"]
@@ -188,14 +196,15 @@ class PRManager:
             None if lookup fails.
         """
         result = run_gh(
-            ["pr", "view", str(pr_number), "--json",
-             "state,reviewDecision,mergeable,statusCheckRollup,title,number"],
-            repo=self.repo, cwd=self.cwd,
+            ["pr", "view", str(pr_number), "--json", "state,reviewDecision,mergeable,statusCheckRollup,title,number"],
+            repo=self.repo,
+            cwd=self.cwd,
         )
 
         if result.success:
             try:
                 import json
+
                 return json.loads(result.stdout)
             except Exception:
                 pass
@@ -206,7 +215,8 @@ class PRManager:
         """Add a comment to a PR."""
         result = run_gh(
             ["pr", "comment", str(pr_number), "--body", body],
-            repo=self.repo, cwd=self.cwd,
+            repo=self.repo,
+            cwd=self.cwd,
         )
         return result.success
 
@@ -217,14 +227,20 @@ class PRManager:
             List of comment dicts with body, author, path, line fields.
         """
         result = run_gh(
-            ["api", f"repos/:owner/:repo/pulls/{pr_number}/comments",
-             "--jq", ".[].{body: .body, author: .user.login, path: .path, line: .line}"],
-            repo=self.repo, cwd=self.cwd,
+            [
+                "api",
+                f"repos/:owner/:repo/pulls/{pr_number}/comments",
+                "--jq",
+                ".[].{body: .body, author: .user.login, path: .path, line: .line}",
+            ],
+            repo=self.repo,
+            cwd=self.cwd,
         )
 
         if result.success and result.stdout.strip():
             try:
                 import json
+
                 return json.loads(f"[{result.stdout.strip().replace(chr(10), ',')}]")
             except Exception:
                 # Try line-by-line JSON objects
@@ -270,21 +286,25 @@ class PRManager:
             try:
                 diff_stat = get_diff_stat(working_directory)
                 if diff_stat:
-                    lines.extend([
-                        "## Changes",
-                        "",
-                        "```",
-                        diff_stat,
-                        "```",
-                        "",
-                    ])
+                    lines.extend(
+                        [
+                            "## Changes",
+                            "",
+                            "```",
+                            diff_stat,
+                            "```",
+                            "",
+                        ]
+                    )
 
                 modified = get_modified_files(working_directory)
                 if modified:
-                    lines.extend([
-                        "## Files Modified",
-                        "",
-                    ])
+                    lines.extend(
+                        [
+                            "## Files Modified",
+                            "",
+                        ]
+                    )
                     for f in modified[:20]:  # Cap at 20 files
                         lines.append(f"- `{f}`")
                     if len(modified) > 20:
@@ -294,24 +314,28 @@ class PRManager:
                 pass
 
         if criteria:
-            lines.extend([
-                "## Acceptance Criteria",
-                "",
-            ])
+            lines.extend(
+                [
+                    "## Acceptance Criteria",
+                    "",
+                ]
+            )
             for criterion in criteria:
                 lines.append(f"- [ ] {criterion}")
             lines.append("")
 
-        lines.extend([
-            "---",
-            "*Created by SAT (Structured Achievement Tool)*",
-        ])
+        lines.extend(
+            [
+                "---",
+                "*Created by SAT (Structured Achievement Tool)*",
+            ]
+        )
 
         return "\n".join(lines)
 
     def _extract_pr_number(self, url: str) -> int | None:
         """Extract PR number from GitHub URL."""
-        match = re.search(r'/pull/(\d+)', url)
+        match = re.search(r"/pull/(\d+)", url)
         if match:
             return int(match.group(1))
         return None

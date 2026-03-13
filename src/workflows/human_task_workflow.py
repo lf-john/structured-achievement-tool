@@ -63,6 +63,7 @@ PAUSED_FOR_HUMAN = "paused_for_human"
 
 # --- Node Functions ---
 
+
 def detect_node(
     state: StoryState,
     routing_engine: RoutingEngine,
@@ -111,9 +112,7 @@ def detect_node(
         )
     else:
         state["verify_passed"] = True
-        logger.info(
-            f"DETECT_HUMAN_NEEDS: No human intervention needed for {story.get('id', '?')}"
-        )
+        logger.info(f"DETECT_HUMAN_NEEDS: No human intervention needed for {story.get('id', '?')}")
 
     phase_output = PhaseOutput(
         phase="DETECT_HUMAN_NEEDS",
@@ -127,12 +126,17 @@ def detect_node(
 
 def generate_instructions_node(
     state: StoryState,
+    _db_manager=None,
 ) -> StoryState:
     """Format the human task instructions into a user-friendly document.
 
     Takes the raw HumanTaskResponse and formats it into a structured
     markdown document with clear sections for instructions, required
     inputs, and verification steps.
+
+    Also creates an approval record in the database (type="human_action")
+    with form fields for completion tracking via the web dashboard.
+    Falls back gracefully if the database is unavailable.
     """
     state = dict(state)
     state["current_phase"] = "GENERATE_INSTRUCTIONS"
@@ -201,28 +205,51 @@ def generate_instructions_node(
         parts.append("")
 
     # Response instructions — explain the verification process
-    parts.extend([
-        "---",
-        "",
-        "## How to Respond",
-        "",
-        "1. Complete the steps above",
-        "2. Write your response (credentials, confirmation, etc.) below the `---` separator",
-        "3. Remove the `#` from `# <Pending>` at the bottom to signal completion",
-        "",
-        "## What Happens Next",
-        "",
-        "After you signal completion, the system will:",
-        "1. **Verify immediately** — You'll receive a notification saying \"Verifying, please wait...\"",
-        "2. **Quick Check** — The system runs immediate verification checks to confirm your work",
-        "3. If checks **pass**, the system proceeds (you'll be notified of success)",
-        "4. If checks **fail**, you'll be notified of what failed and asked to try again",
-        "5. **Final Check** — For items that take time (DNS propagation, SSL, etc.), the system runs delayed checks with automatic retries",
-        "",
-    ])
+    parts.extend(
+        [
+            "---",
+            "",
+            "## How to Respond",
+            "",
+            "You can respond via the web dashboard or the signal file:",
+            "- **Web dashboard:** http://localhost:8765/approvals",
+            "- **Signal file:** Write your response below the `---` separator and remove the `#` from `# <Pending>`",
+            "",
+            "## What Happens Next",
+            "",
+            "After you signal completion, the system will:",
+            '1. **Verify immediately** — You\'ll receive a notification saying "Verifying, please wait..."',
+            "2. **Quick Check** — The system runs immediate verification checks to confirm your work",
+            "3. If checks **pass**, the system proceeds (you'll be notified of success)",
+            "4. If checks **fail**, you'll be notified of what failed and asked to try again",
+            "5. **Final Check** — For items that take time (DNS propagation, SSL, etc.), the system runs delayed checks with automatic retries",
+            "",
+        ]
+    )
 
     formatted_instructions = "\n".join(parts)
     state["human_summary"] = formatted_instructions
+
+    # Create database approval record for the web dashboard
+    form_fields = [
+        {"name": "completed", "type": "checkbox", "label": "I have completed all steps", "required": True},
+        {"name": "notes", "type": "textarea", "label": "Notes (optional)", "required": False},
+    ]
+
+    try:
+        from src.workflows.approval_workflow import _create_db_approval
+
+        approval_id = _create_db_approval(
+            state,
+            approval_type="human_action",
+            form_fields=form_fields,
+            db_manager=_db_manager,
+        )
+        if approval_id:
+            state["approval_db_id"] = approval_id
+            logger.info(f"GENERATE_INSTRUCTIONS: DB approval created: {approval_id}")
+    except Exception as e:
+        logger.debug(f"GENERATE_INSTRUCTIONS: DB approval creation failed (fallback to signal files): {e}")
 
     phase_output = PhaseOutput(
         phase="GENERATE_INSTRUCTIONS",
@@ -256,12 +283,15 @@ def write_instructions_node(
     state.get("human_summary", "")
     provider = state.get("human_task_response", {}).get("provider", "")
 
-    # Send notification
+    # Send notification with dashboard URL
+    dashboard_url = "http://localhost:8765/approvals"
     try:
         prefix = f"[{provider}] " if provider else ""
         notifier.send_ntfy(
             title=f"SAT: {prefix}Human Action Required ({story_id})",
-            message=f"Story: {story_title}\nAction required — check your task file for instructions.",
+            message=(
+                f"Story: {story_title}\nAction required: {dashboard_url}\nOr check your task file for instructions."
+            ),
             priority="high",
             tags="hand,clipboard",
         )
@@ -285,10 +315,15 @@ def _run_verification_check(check: dict, working_dir: str) -> VerifyResult:
 
     if check_type == "command":
         import subprocess
+
         try:
             result = subprocess.run(
-                check.get("command", "true"), shell=True,
-                capture_output=True, text=True, timeout=30, cwd=working_dir,
+                check.get("command", "true"),
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=working_dir,
             )
             return VerifyResult(
                 passed=result.returncode == 0,
@@ -306,14 +341,16 @@ def _run_verification_check(check: dict, working_dir: str) -> VerifyResult:
 
     elif check_type == "dns":
         import socket
+
         hostname = check.get("hostname", "")
         expected = check.get("expected_value", "")
         try:
             answers = socket.getaddrinfo(hostname, None)
             resolved = [a[4][0] for a in answers]
             passed = expected in resolved if expected else len(resolved) > 0
-            return VerifyResult(passed=passed, checker="human_tdd", target=hostname,
-                                message=f"resolves to {', '.join(set(resolved))}")
+            return VerifyResult(
+                passed=passed, checker="human_tdd", target=hostname, message=f"resolves to {', '.join(set(resolved))}"
+            )
         except socket.gaierror as e:
             return VerifyResult(passed=False, checker="human_tdd", target=hostname, message=f"DNS failed: {e}")
 
@@ -333,7 +370,9 @@ def _run_verification_check(check: dict, working_dir: str) -> VerifyResult:
         return sc.check_systemd(check.get("service", ""), user=check.get("user", True))
 
     else:
-        return VerifyResult(passed=False, checker="human_tdd", target=check_type, message=f"unknown check type: {check_type}")
+        return VerifyResult(
+            passed=False, checker="human_tdd", target=check_type, message=f"unknown check type: {check_type}"
+        )
 
 
 def pre_verify_node(state: StoryState) -> StoryState:
@@ -353,7 +392,8 @@ def pre_verify_node(state: StoryState) -> StoryState:
         # No verification checks defined — skip pre-verify
         state["validation_result"] = {"passed": False, "reason": "no_checks_defined", "pre_verify": True}
         phase_output = PhaseOutput(
-            phase="PRE_VERIFY", status=PhaseStatus.COMPLETE,
+            phase="PRE_VERIFY",
+            status=PhaseStatus.COMPLETE,
             output="No verification checks defined, skipping pre-verify",
         )
         state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
@@ -369,14 +409,20 @@ def pre_verify_node(state: StoryState) -> StoryState:
 
     if all_failed:
         logger.info(f"PRE_VERIFY: All {len(results)} checks failed as expected (TDD Red confirmed)")
-        state["validation_result"] = {"passed": False, "reason": "pre_verify_confirmed", "pre_verify": True, "results": results}
+        state["validation_result"] = {
+            "passed": False,
+            "reason": "pre_verify_confirmed",
+            "pre_verify": True,
+            "results": results,
+        }
     elif any_passed:
         passed_checks = [r for r in results if r["passed"]]
         logger.info(f"PRE_VERIFY: {len(passed_checks)}/{len(results)} checks already pass — work may be partially done")
         state["validation_result"] = {"passed": True, "reason": "already_done", "pre_verify": True, "results": results}
 
     phase_output = PhaseOutput(
-        phase="PRE_VERIFY", status=PhaseStatus.COMPLETE,
+        phase="PRE_VERIFY",
+        status=PhaseStatus.COMPLETE,
         output=f"Pre-verify: {len(results)} checks, {sum(1 for r in results if not r['passed'])} failed as expected",
     )
     state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
@@ -415,7 +461,8 @@ def quick_check_node(
     if not quick_checks:
         state["validation_result"] = {"passed": True, "reason": "no_quick_checks", "quick_check": True}
         phase_output = PhaseOutput(
-            phase="QUICK_CHECK", status=PhaseStatus.COMPLETE,
+            phase="QUICK_CHECK",
+            status=PhaseStatus.COMPLETE,
             output="No quick checks defined, passing",
         )
         state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
@@ -468,19 +515,29 @@ def quick_check_node(
     state["validation_result"] = {"passed": all_passed, "reason": "quick_check", "results": results}
     state["verify_passed"] = all_passed
 
+    # Track quick_check retry count for loop protection
+    if not all_passed:
+        state["quick_check_retry_count"] = state.get("quick_check_retry_count", 0) + 1
+
     status = PhaseStatus.COMPLETE if all_passed else PhaseStatus.FAILED
     phase_output = PhaseOutput(
-        phase="QUICK_CHECK", status=status,
-        output=f"Quick check: {sum(1 for r in results if r['passed'])}/{len(results)} passed",
+        phase="QUICK_CHECK",
+        status=status,
+        output=f"Quick check: {sum(1 for r in results if r['passed'])}/{len(results)} passed (retry {state.get('quick_check_retry_count', 0)})",
     )
     state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
     return state
 
 
-def quick_check_decision(state: StoryState) -> Literal["passed", "failed"]:
-    """Route after QUICK_CHECK."""
+def quick_check_decision(state: StoryState) -> Literal["passed", "failed", "max_retries"]:
+    """Route after QUICK_CHECK. Fail-forward after 3 retries to prevent infinite loops."""
     vr = state.get("validation_result", {})
-    return "passed" if vr.get("passed") else "failed"
+    if vr.get("passed"):
+        return "passed"
+    if state.get("quick_check_retry_count", 0) >= 3:
+        logger.warning("QUICK_CHECK: Max retries (3) reached, failing forward to learn")
+        return "max_retries"
+    return "failed"
 
 
 def final_check_node(state: StoryState) -> StoryState:
@@ -501,7 +558,8 @@ def final_check_node(state: StoryState) -> StoryState:
         state["validation_result"] = {"passed": True, "reason": "no_delayed_checks", "final_check": True}
         state["verify_passed"] = True
         phase_output = PhaseOutput(
-            phase="FINAL_CHECK", status=PhaseStatus.COMPLETE,
+            phase="FINAL_CHECK",
+            status=PhaseStatus.COMPLETE,
             output="No delayed checks defined, passing",
         )
         state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
@@ -534,7 +592,8 @@ def final_check_node(state: StoryState) -> StoryState:
 
     status = PhaseStatus.COMPLETE if all_passed else PhaseStatus.FAILED
     phase_output = PhaseOutput(
-        phase="FINAL_CHECK", status=status,
+        phase="FINAL_CHECK",
+        status=status,
         output=f"Final check: {sum(1 for r in results if r['passed'])}/{len(results)} passed",
     )
     state["phase_outputs"] = state.get("phase_outputs", []) + [phase_output.model_dump()]
@@ -550,6 +609,7 @@ def detect_decision(state: StoryState) -> Literal["human_needed", "not_needed"]:
 
 
 # --- Workflow Class ---
+
 
 class HumanTaskWorkflow(BaseWorkflow):
     """TDD-style workflow for stories that require human intervention.
@@ -598,24 +658,38 @@ class HumanTaskWorkflow(BaseWorkflow):
         builder.add_node("approval_escalation", partial(approval_escalation_node, notifier=ntf, config=cfg))
         builder.add_node("quick_check", partial(quick_check_node, notifier=ntf))
         builder.add_node("final_check", final_check_node)
-        builder.add_node("learn", partial(
-            phase_node, phase_name="LEARN", agent_name="learner", routing_engine=re,
-        ))
+        builder.add_node(
+            "learn",
+            partial(
+                phase_node,
+                phase_name="LEARN",
+                agent_name="learner",
+                routing_engine=re,
+            ),
+        )
 
         # Entry
         builder.set_entry_point("detect")
 
         # DETECT → human_needed: pre_verify, not_needed: END
-        builder.add_conditional_edges("detect", detect_decision, {
-            "human_needed": "pre_verify",
-            "not_needed": END,
-        })
+        builder.add_conditional_edges(
+            "detect",
+            detect_decision,
+            {
+                "human_needed": "pre_verify",
+                "not_needed": END,
+            },
+        )
 
         # PRE_VERIFY → needs_work: generate instructions, already_done: learn
-        builder.add_conditional_edges("pre_verify", pre_verify_decision, {
-            "needs_work": "generate_instructions",
-            "already_done": "learn",
-        })
+        builder.add_conditional_edges(
+            "pre_verify",
+            pre_verify_decision,
+            {
+                "needs_work": "generate_instructions",
+                "already_done": "learn",
+            },
+        )
 
         # GENERATE → WRITE → NOTIFY → APPROVAL
         builder.add_edge("generate_instructions", "write_instructions")
@@ -623,22 +697,35 @@ class HumanTaskWorkflow(BaseWorkflow):
         builder.add_edge("notify", "approval")
 
         # APPROVAL → responded: quick_check, follow_up/escalate
-        builder.add_conditional_edges("approval", pause_initial_decision, {
-            "responded": "quick_check",
-            "follow_up": "approval_follow_up",
-            "escalate": "approval_escalation",
-        })
+        builder.add_conditional_edges(
+            "approval",
+            pause_initial_decision,
+            {
+                "responded": "quick_check",
+                "follow_up": "approval_follow_up",
+                "escalate": "approval_escalation",
+            },
+        )
 
-        builder.add_conditional_edges("approval_follow_up", follow_up_decision, {
-            "responded": "quick_check",
-            "escalate": "approval_escalation",
-        })
+        builder.add_conditional_edges(
+            "approval_follow_up",
+            follow_up_decision,
+            {
+                "responded": "quick_check",
+                "escalate": "approval_escalation",
+            },
+        )
 
-        # QUICK_CHECK → passed: final_check, failed: approval (try again)
-        builder.add_conditional_edges("quick_check", quick_check_decision, {
-            "passed": "final_check",
-            "failed": "approval",
-        })
+        # QUICK_CHECK → passed: final_check, failed: approval (try again), max_retries: learn (fail-forward)
+        builder.add_conditional_edges(
+            "quick_check",
+            quick_check_decision,
+            {
+                "passed": "final_check",
+                "failed": "approval",
+                "max_retries": "learn",
+            },
+        )
 
         # FINAL_CHECK → LEARN
         builder.add_edge("final_check", "learn")

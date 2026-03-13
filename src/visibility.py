@@ -30,9 +30,7 @@ class TaskVisibility:
         recent_events = self.db.get_recent_events(task_id=task_id, limit=20)
 
         # Build phase history from events
-        phase_history = [
-            e for e in recent_events if e.get("event_type") == "phase_change"
-        ]
+        phase_history = [e for e in recent_events if e.get("event_type") == "phase_change"]
 
         return {
             **task,
@@ -49,10 +47,12 @@ class TaskVisibility:
         result = []
         for task in active_tasks:
             stories = self.db.get_stories_for_task(task["id"])
-            result.append({
-                **task,
-                "stories": stories,
-            })
+            result.append(
+                {
+                    **task,
+                    "stories": stories,
+                }
+            )
 
         return {
             **status,
@@ -72,9 +72,7 @@ class TaskVisibility:
                 elif s["status"] == "pending" and s.get("depends_on"):
                     # Check if dependencies are complete
                     deps = s.get("depends_on", [])
-                    dep_statuses = {
-                        st["id"]: st["status"] for st in stories if st["id"] in deps
-                    }
+                    dep_statuses = {st["id"]: st["status"] for st in stories if st["id"] in deps}
                     if any(v != "complete" for v in dep_statuses.values()):
                         blocked.append(s)
 
@@ -106,10 +104,7 @@ class TaskVisibility:
                 lines.append(f"  {t}: {c}")
 
         # Debug reproduction stats
-        repro_events = [
-            e for e in events
-            if e.get("event_type") == "debug_reproduction"
-        ]
+        repro_events = [e for e in events if e.get("event_type") == "debug_reproduction"]
         if repro_events:
             methods = {}
             for e in repro_events:
@@ -123,6 +118,7 @@ class TaskVisibility:
         # G-Eval provider performance (Enhancement #11)
         try:
             from src.evaluation.geval_scorer import get_low_scoring_details, get_provider_performance
+
             perf = get_provider_performance()
             if perf:
                 lines.append("")
@@ -133,19 +129,14 @@ class TaskVisibility:
                         count = scores["sample_count"]
                         low = scores["low_scores"]
                         flag = " *** LOW ***" if avg <= 2.0 else ""
-                        lines.append(
-                            f"  {provider}/{agent_type}: avg={avg}/5 "
-                            f"(n={count}, low_scores={low}){flag}"
-                        )
+                        lines.append(f"  {provider}/{agent_type}: avg={avg}/5 (n={count}, low_scores={low}){flag}")
                         # Show per-score counts for providers with any score < 2
                         dist = scores.get("score_distribution")
                         if dist:
                             for dim in ("completeness", "correctness", "format_compliance"):
                                 dim_counts = dist.get(dim, {})
                                 if dim_counts:
-                                    counts_str = " ".join(
-                                        f"{s}:{c}" for s, c in sorted(dim_counts.items())
-                                    )
+                                    counts_str = " ".join(f"{s}:{c}" for s, c in sorted(dim_counts.items()))
                                     lines.append(f"    {dim}: {counts_str}")
 
             # Detailed low-score invocations (available via monitoring tool: `python -m src.visibility summary`)
@@ -231,6 +222,7 @@ def main():
     elif args.command == "quality":
         try:
             from src.evaluation.geval_scorer import get_low_scoring_details, get_provider_performance
+
             perf = get_provider_performance()
             if perf:
                 print("Provider Quality Scores (G-Eval)\n")
@@ -262,10 +254,13 @@ def main():
     elif args.command == "calibration":
         try:
             from src.evaluation.geval_scorer import get_calibration_report
+
             report = get_calibration_report()
             if report:
                 print("Agent Self-Assessment Calibration\n")
-                print(f"{'Provider':<20} {'Agent Type':<15} {'Samples':>7} {'Confidence':>10} {'G-Eval':>7} {'Delta':>7}")
+                print(
+                    f"{'Provider':<20} {'Agent Type':<15} {'Samples':>7} {'Confidence':>10} {'G-Eval':>7} {'Delta':>7}"
+                )
                 print("-" * 70)
                 for r in report:
                     delta_str = f"{r['avg_delta']:+.2f}"
@@ -288,9 +283,9 @@ def main():
             print("G-Eval scorer module not available.")
     elif args.command == "enhancements":
         import os as _os
+
         enh_file = _os.path.join(
-            _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-            ".memory", "enhancements.jsonl"
+            _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), ".memory", "enhancements.jsonl"
         )
         if _os.path.exists(enh_file):
             with open(enh_file) as f:

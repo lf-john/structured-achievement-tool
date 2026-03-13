@@ -11,6 +11,7 @@ from src.execution.stability_timeout import StabilityTimeout
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _write_file(path, content: str) -> None:
     """Write content to a file."""
     with open(path, "w", encoding="utf-8") as f:
@@ -25,6 +26,7 @@ def _touch(path, mtime: float) -> None:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestStabilityTimeout:
     """Core behaviour of StabilityTimeout."""
@@ -41,8 +43,7 @@ class TestStabilityTimeout:
         # Set file mtime to a known value
         _touch(file_path, base_time)
 
-        with patch("time.time") as mock_time, \
-             patch("os.path.getmtime") as mock_getmtime:
+        with patch("time.time") as mock_time, patch("os.path.getmtime") as mock_getmtime:
             mock_getmtime.return_value = base_time
 
             # First check — starts tracking
@@ -91,8 +92,7 @@ class TestStabilityTimeout:
         st = StabilityTimeout(timeout_seconds=300)
         base_time = 1000000.0
 
-        with patch("time.time", return_value=base_time), \
-             patch("os.path.getmtime", return_value=base_time):
+        with patch("time.time", return_value=base_time), patch("os.path.getmtime", return_value=base_time):
             st.check_file(file_path)
             assert st.is_tracking(file_path)
 
@@ -112,9 +112,7 @@ class TestStabilityTimeout:
         st = StabilityTimeout(timeout_seconds=300)
         base_time = 1000000.0
 
-        with patch("time.time") as mock_time, \
-             patch("os.path.getmtime") as mock_getmtime:
-
+        with patch("time.time") as mock_time, patch("os.path.getmtime") as mock_getmtime:
             # Start tracking
             mock_getmtime.return_value = base_time
             mock_time.return_value = base_time
@@ -144,8 +142,7 @@ class TestStabilityTimeout:
         st = StabilityTimeout(timeout_seconds=300)
         base_time = 1000000.0
 
-        with patch("time.time", return_value=base_time), \
-             patch("os.path.getmtime", return_value=base_time):
+        with patch("time.time", return_value=base_time), patch("os.path.getmtime", return_value=base_time):
             st.check_file(file_path)
             assert st.is_tracking(file_path)
 
@@ -166,8 +163,7 @@ class TestStabilityTimeout:
         st = StabilityTimeout(timeout_seconds=60)
         base_time = 1000000.0
 
-        with patch("time.time") as mock_time, \
-             patch("os.path.getmtime") as mock_getmtime:
+        with patch("time.time") as mock_time, patch("os.path.getmtime") as mock_getmtime:
             mock_getmtime.return_value = base_time
 
             mock_time.return_value = base_time
@@ -193,8 +189,7 @@ class TestStabilityTimeout:
         st = StabilityTimeout(timeout_seconds=300)
         base_time = 1000000.0
 
-        with patch("time.time") as mock_time, \
-             patch("os.path.getmtime") as mock_getmtime:
+        with patch("time.time") as mock_time, patch("os.path.getmtime") as mock_getmtime:
             mock_getmtime.return_value = base_time
 
             # Start tracking both at base_time
@@ -219,8 +214,7 @@ class TestStabilityTimeout:
         st = StabilityTimeout(timeout_seconds=300)
         base_time = 1000000.0
 
-        with patch("time.time") as mock_time, \
-             patch("os.path.getmtime") as mock_getmtime:
+        with patch("time.time") as mock_time, patch("os.path.getmtime") as mock_getmtime:
             mock_getmtime.return_value = base_time
             mock_time.return_value = base_time
             st.check_file(file_path)
@@ -244,8 +238,7 @@ class TestStabilityTimeout:
         st = StabilityTimeout(timeout_seconds=300)
         base_time = 1000000.0
 
-        with patch("time.time", return_value=base_time), \
-             patch("os.path.getmtime", return_value=base_time):
+        with patch("time.time", return_value=base_time), patch("os.path.getmtime", return_value=base_time):
             st.check_file(file_path)
             assert st.is_tracking(file_path)
 

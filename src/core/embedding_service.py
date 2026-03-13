@@ -54,7 +54,7 @@ class EmbeddingService:
         for sep in ("\n\n", "\n", ". ", "! ", "? "):
             idx = truncated.rfind(sep)
             if idx > max_chars // 2:
-                return truncated[:idx + len(sep)].rstrip()
+                return truncated[: idx + len(sep)].rstrip()
         return truncated
 
     @staticmethod
@@ -78,13 +78,11 @@ class EmbeddingService:
             True if restart succeeded, False otherwise.
         """
         try:
-            result = subprocess.run(
-                ["sudo", "systemctl", "restart", "ollama"],
-                capture_output=True, timeout=30
-            )
+            result = subprocess.run(["sudo", "systemctl", "restart", "ollama"], capture_output=True, timeout=30)
             if result.returncode == 0:
                 # Wait for service to become ready
                 import time
+
                 for _ in range(10):
                     time.sleep(1)
                     if EmbeddingService.check_ollama_health():
@@ -131,7 +129,7 @@ class EmbeddingService:
             Exception: If the Ollama command fails or returns an error.
         """
         response = self._call_ollama(text)
-        return response.get('embedding', [])
+        return response.get("embedding", [])
 
     def generate_embedding(self, text: str) -> list[float]:
         """
@@ -157,19 +155,17 @@ class EmbeddingService:
             response = self._call_ollama(text)
 
             # Extract embedding from response
-            if 'embedding' not in response:
+            if "embedding" not in response:
                 raise KeyError("Response from Ollama API missing 'embedding' key")
 
-            embedding = response['embedding']
+            embedding = response["embedding"]
 
             # Convert all values to float
             embedding_floats = [float(x) for x in embedding]
 
             # Validate dimension count
             if len(embedding_floats) != 768:
-                raise ValueError(
-                    f"Expected 768-dimensional embedding, but got {len(embedding_floats)} dimensions"
-                )
+                raise ValueError(f"Expected 768-dimensional embedding, but got {len(embedding_floats)} dimensions")
 
             return embedding_floats
 

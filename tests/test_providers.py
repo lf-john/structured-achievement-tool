@@ -16,9 +16,19 @@ from src.llm.providers import (
 class TestProviderRegistry:
     def test_all_13_providers_registered(self):
         expected = {
-            "opus", "sonnet", "haiku",
-            "gemini_31_pro", "gemini_pro", "glm5", "gemini_flash", "gemini_25_flash", "glm_flash",
-            "qwen3_8b", "deepseek_r1", "qwen25_coder", "nemotron",
+            "opus",
+            "sonnet",
+            "haiku",
+            "gemini_31_pro",
+            "gemini_pro",
+            "glm5",
+            "gemini_flash",
+            "gemini_25_flash",
+            "glm_flash",
+            "qwen3_8b",
+            "deepseek_r1",
+            "qwen25_coder",
+            "nemotron",
         }
         assert set(PROVIDERS.keys()) == expected
 

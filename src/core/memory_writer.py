@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Token budgets per level (chars ≈ tokens * 3.5)
 LEVEL_BUDGETS = {
-    "global": 2000,      # tokens
+    "global": 2000,  # tokens
     "tech_stack": 1000,
     "project": 2000,
 }

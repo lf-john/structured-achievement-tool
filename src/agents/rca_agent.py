@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RCAReport:
     """Root cause analysis report."""
+
     story_id: str
     task_file: str
     failure_count: int
@@ -113,11 +114,13 @@ def analyze_failure_patterns(
     timeline = []
     error_texts = []
     for record in failures:
-        timeline.append({
-            "timestamp": record.timestamp,
-            "exit_code": record.exit_code,
-            "error_summary": record.error_summary or "",
-        })
+        timeline.append(
+            {
+                "timestamp": record.timestamp,
+                "exit_code": record.exit_code,
+                "error_summary": record.error_summary or "",
+            }
+        )
         if record.error_summary:
             error_texts.append(record.error_summary.lower())
 
@@ -242,10 +245,8 @@ def generate_escalation_story(report: RCAReport, task_name: str) -> dict:
             f"Root cause analysis identified {report.failure_count} consecutive failures.\n\n"
             f"**Category:** {report.root_cause_category}\n"
             f"**Summary:** {report.root_cause_summary}\n\n"
-            f"**Patterns:**\n" +
-            "\n".join(f"- {p}" for p in report.common_patterns) + "\n\n"
-            "**Recommendations:**\n" +
-            "\n".join(f"- {r}" for r in report.recommendations)
+            f"**Patterns:**\n" + "\n".join(f"- {p}" for p in report.common_patterns) + "\n\n"
+            "**Recommendations:**\n" + "\n".join(f"- {r}" for r in report.recommendations)
         ),
         "type": report.suggested_story_type,
         "status": "pending",

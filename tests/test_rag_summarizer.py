@@ -15,6 +15,7 @@ from src.core.rag_summarizer import _MAX_CHARS_PER_RESULT, RAGSummarizer
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def summarizer():
     """Create a RAGSummarizer with default settings."""
@@ -33,7 +34,7 @@ def single_result():
     return [
         {
             "text": "Task 001: Configured SuiteCRM email with SES SMTP relay. "
-                    "Verified DKIM signatures and SPF records.",
+            "Verified DKIM signatures and SPF records.",
             "score": 0.92,
             "id": 1,
             "metadata": {"task": "001"},
@@ -46,22 +47,21 @@ def multiple_results():
     """Multiple RAG search results with varying scores."""
     return [
         {
-            "text": "Task 001: Set up SuiteCRM Docker container with MariaDB. "
-                    "Configured reverse proxy on port 8088.",
+            "text": "Task 001: Set up SuiteCRM Docker container with MariaDB. Configured reverse proxy on port 8088.",
             "score": 0.95,
             "id": 1,
             "metadata": {"task": "001"},
         },
         {
             "text": "Task 003: Integrated Mautic with SuiteCRM via API sync. "
-                    "Contacts flow bidirectionally every 15 minutes.",
+            "Contacts flow bidirectionally every 15 minutes.",
             "score": 0.88,
             "id": 3,
             "metadata": {"task": "003"},
         },
         {
             "text": "Task 005: Configured N8N LLM routing for lead enrichment. "
-                    "Uses Qwen3 for classification, Claude for complex tasks.",
+            "Uses Qwen3 for classification, Claude for complex tasks.",
             "score": 0.72,
             "id": 5,
             "metadata": {"task": "005"},
@@ -81,6 +81,7 @@ def _mock_ollama_success(summary_text="This is a summary of the RAG results."):
 # ---------------------------------------------------------------------------
 # Normal Summarization Flow
 # ---------------------------------------------------------------------------
+
 
 class TestSummarizeNormal:
     def test_summarize_returns_context_brief(self, summarizer, multiple_results):
@@ -116,8 +117,8 @@ class TestSummarizeNormal:
 
         call_args = mock_run.call_args
         cmd = call_args[0][0]
-        # Command should be just ["ollama", "run", "qwen3:8b"] without prompt in args
-        assert cmd == ["ollama", "run", "qwen3:8b"]
+        # Command should be just ["ollama", "run", "qwen3:0.6b"] without prompt in args
+        assert cmd == ["ollama", "run", "qwen3:0.6b"]
         # Prompt is passed via input kwarg
         assert "input" in call_args.kwargs or "input" in (call_args[1] if len(call_args) > 1 else {})
 
@@ -133,6 +134,7 @@ class TestSummarizeNormal:
 # ---------------------------------------------------------------------------
 # Empty Results Handling
 # ---------------------------------------------------------------------------
+
 
 class TestSummarizeEmpty:
     def test_empty_results_returns_empty_string(self, summarizer):
@@ -157,6 +159,7 @@ class TestSummarizeEmpty:
 # ---------------------------------------------------------------------------
 # Ollama Failure Fallback
 # ---------------------------------------------------------------------------
+
 
 class TestOllamaFallback:
     def test_nonzero_exit_code_uses_fallback(self, summarizer, single_result):
@@ -210,6 +213,7 @@ class TestOllamaFallback:
 # Prompt Building
 # ---------------------------------------------------------------------------
 
+
 class TestBuildPrompt:
     def test_prompt_contains_query(self, summarizer):
         """Prompt includes the original search query."""
@@ -262,6 +266,7 @@ class TestBuildPrompt:
 # Context Brief Formatting
 # ---------------------------------------------------------------------------
 
+
 class TestFormatContextBrief:
     def test_format_single_task(self, summarizer):
         """Singular 'task' for result_count=1."""
@@ -285,16 +290,13 @@ class TestFormatContextBrief:
 # Think Tag Stripping
 # ---------------------------------------------------------------------------
 
+
 class TestStripThinkTags:
     def test_strips_think_blocks(self, summarizer):
         """Removes <think>...</think> blocks from model output."""
         raw = "<think>Let me reason about this...</think>Here is the summary."
-        with patch("subprocess.run", return_value=MagicMock(
-            returncode=0, stdout=raw, stderr=""
-        )):
-            result = summarizer.summarize(
-                [{"text": "test", "score": 0.5}], "query"
-            )
+        with patch("subprocess.run", return_value=MagicMock(returncode=0, stdout=raw, stderr="")):
+            result = summarizer.summarize([{"text": "test", "score": 0.5}], "query")
         assert "<think>" not in result
         assert "Let me reason" not in result
         assert "Here is the summary" in result
@@ -315,6 +317,7 @@ class TestStripThinkTags:
 # ---------------------------------------------------------------------------
 # Timeout Configuration
 # ---------------------------------------------------------------------------
+
 
 class TestTimeoutHandling:
     def test_subprocess_called_with_30s_timeout(self, summarizer, single_result):

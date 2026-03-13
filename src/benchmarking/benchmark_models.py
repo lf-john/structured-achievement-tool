@@ -17,6 +17,7 @@ OLLAMA_API_URL = "http://localhost:11434/api/generate"
 OUTPUT_DIR = "output"
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "benchmark_results.json")
 
+
 async def run_benchmark_for_model_prompt(client, model, prompt):
     """Runs warmup and timed benchmarks for a single model-prompt pair."""
     results = {
@@ -26,7 +27,7 @@ async def run_benchmark_for_model_prompt(client, model, prompt):
         "avg_tokens_per_second": None,
         "avg_time_to_first_token": None,
         "avg_total_response_time": None,
-        "status": "pending"
+        "status": "pending",
     }
 
     request_data = {"model": model, "prompt": prompt, "stream": False}
@@ -44,7 +45,7 @@ async def run_benchmark_for_model_prompt(client, model, prompt):
         successful_runs = 0
 
         for i in range(NUM_TIMED_RUNS):
-            print(f"  Running timed run {i+1}/{NUM_TIMED_RUNS} for {model}...")
+            print(f"  Running timed run {i + 1}/{NUM_TIMED_RUNS} for {model}...")
             start_time = time.time()
             try:
                 response = await client.post(OLLAMA_API_URL, json=request_data, timeout=TIMEOUT_SECONDS)
@@ -54,7 +55,7 @@ async def run_benchmark_for_model_prompt(client, model, prompt):
                 data = response.json()
 
                 eval_count = data.get("eval_count", 0)
-                eval_duration = data.get("eval_duration", 1) # Avoid division by zero
+                eval_duration = data.get("eval_duration", 1)  # Avoid division by zero
                 prompt_eval_duration = data.get("prompt_eval_duration", 0)
 
                 run_total_time = end_time - start_time
@@ -66,7 +67,7 @@ async def run_benchmark_for_model_prompt(client, model, prompt):
                     "tokens_per_second": tokens_per_sec,
                     "time_to_first_token": time_to_first,
                     "total_response_time": run_total_time,
-                    "status": "success"
+                    "status": "success",
                 }
                 results["runs"].append(run_result)
 
@@ -76,13 +77,13 @@ async def run_benchmark_for_model_prompt(client, model, prompt):
                 successful_runs += 1
 
             except httpx.TimeoutException:
-                print(f"    Timeout for {model} on run {i+1}")
+                print(f"    Timeout for {model} on run {i + 1}")
                 results["runs"].append({"run": i + 1, "status": "timeout"})
             except httpx.RequestError as e:
-                print(f"    Request error for {model} on run {i+1}: {e}")
+                print(f"    Request error for {model} on run {i + 1}: {e}")
                 results["runs"].append({"run": i + 1, "status": "error", "reason": str(e)})
             except Exception as e:
-                print(f"    An unexpected error for {model} on run {i+1}: {e}")
+                print(f"    An unexpected error for {model} on run {i + 1}: {e}")
                 results["runs"].append({"run": i + 1, "status": "error", "reason": str(e)})
 
         if successful_runs > 0:
@@ -103,6 +104,7 @@ async def run_benchmark_for_model_prompt(client, model, prompt):
 
     return results
 
+
 async def main():
     """Main function to orchestrate the benchmarking."""
     all_results = []
@@ -121,6 +123,7 @@ async def main():
         json.dump(all_results, f, indent=2)
 
     print(f"Benchmarking complete. Results saved to {OUTPUT_FILE}")
+
 
 if __name__ == "__main__":
     # Create src/benchmarking directory if it does not exist

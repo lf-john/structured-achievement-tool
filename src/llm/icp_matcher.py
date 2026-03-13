@@ -6,6 +6,7 @@ from src.core.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
+
 class OllamaICPMatcher:
     def __init__(self, embedding_service: EmbeddingService, vector_store: VectorStore):
         self.embedding_service = embedding_service
@@ -19,7 +20,7 @@ class OllamaICPMatcher:
             self.vector_store.get_collection(self.collection_name)
         except ValueError:
             # If it doesn't exist, create it
-            self.vector_store.create_collection(self.collection_name, 768) # 768 is the dimension for nomic-embed-text
+            self.vector_store.create_collection(self.collection_name, 768)  # 768 is the dimension for nomic-embed-text
 
     def add_icp_profile(self, profile_id: str, profile_data: dict[str, Any]) -> bool:
         """
@@ -55,7 +56,7 @@ class OllamaICPMatcher:
 
             # The VectorStore's search method expects a query_text, not an embedding directly.
             # We'll pass the serialized input_text for searching.
-            results = self.vector_store.search(input_text, k=top_k * 5) # Fetch more to filter down
+            results = self.vector_store.search(input_text, k=top_k * 5)  # Fetch more to filter down
 
             icp_results = [res for res in results if res.get("metadata", {}).get("type") == "icp_profile"]
 

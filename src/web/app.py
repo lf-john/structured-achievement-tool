@@ -34,6 +34,7 @@ PROMETHEUS_URL = "http://localhost:9101/metrics"
 try:
     from jose import JWTError as JWTError
     from jose import jwt as jose_jwt
+
     JOSE_AVAILABLE = True
 except ImportError:
     JOSE_AVAILABLE = False
@@ -56,6 +57,7 @@ def _get_cf_public_keys():
         return _cf_public_keys
     try:
         import urllib.request
+
         resp = urllib.request.urlopen(CF_CERTS_URL, timeout=5)
         _cf_public_keys = json.loads(resp.read())
         return _cf_public_keys
@@ -95,6 +97,7 @@ async def cf_access_middleware(request: Request, call_next):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def read_audit_journal(limit: int = 100) -> list[dict]:
     """Read the most recent entries from the audit journal."""
@@ -143,17 +146,19 @@ def get_task_files() -> list[dict]:
         # Extract directory (category)
         parts = rel_path.parts
         category = parts[0] if len(parts) > 1 else "root"
-        tasks.append({
-            "file": str(rel_path),
-            "name": md_file.stem,
-            "state": state,
-            "has_approval": has_approval,
-            "category": category,
-            "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
-            "mtime_iso": datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds"),
-            "size": stat.st_size,
-            "abs_path": str(md_file),
-        })
+        tasks.append(
+            {
+                "file": str(rel_path),
+                "name": md_file.stem,
+                "state": state,
+                "has_approval": has_approval,
+                "category": category,
+                "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                "mtime_iso": datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds"),
+                "size": stat.st_size,
+                "abs_path": str(md_file),
+            }
+        )
     return tasks
 
 
@@ -170,18 +175,19 @@ def get_pending_approvals() -> list[dict]:
         except Exception:
             continue
         for match in re.finditer(
-            r'<Approval\s+id="([^"]+)"\s+status="pending"[^>]*>(.*?)</Approval>',
-            content, re.DOTALL | re.IGNORECASE
+            r'<Approval\s+id="([^"]+)"\s+status="pending"[^>]*>(.*?)</Approval>', content, re.DOTALL | re.IGNORECASE
         ):
             approval_id = match.group(1)
             body = match.group(2).strip()
             rel_path = md_file.relative_to(SAT_TASKS_DIR)
-            approvals.append({
-                "id": approval_id,
-                "file": str(rel_path),
-                "body": body[:500],
-                "abs_path": str(md_file),
-            })
+            approvals.append(
+                {
+                    "id": approval_id,
+                    "file": str(rel_path),
+                    "body": body[:500],
+                    "abs_path": str(md_file),
+                }
+            )
     return approvals
 
 
@@ -193,7 +199,7 @@ def parse_prometheus_metrics(text: str) -> dict:
             continue
         # e.g.: sat_stories_total{status="succeeded"} 7
         # or: sat_system_healthy 1
-        match = re.match(r'^(\S+?)(?:\{([^}]*)\})?\s+(.+)$', line)
+        match = re.match(r"^(\S+?)(?:\{([^}]*)\})?\s+(.+)$", line)
         if match:
             name = match.group(1)
             labels = match.group(2) or ""
@@ -222,8 +228,7 @@ def get_service_status(service_name: str) -> dict:
     """Get systemd user service status."""
     try:
         result = subprocess.run(
-            ["systemctl", "--user", "is-active", service_name],
-            capture_output=True, text=True, timeout=5
+            ["systemctl", "--user", "is-active", service_name], capture_output=True, text=True, timeout=5
         )
         is_active = result.stdout.strip()
     except Exception:
@@ -231,9 +236,10 @@ def get_service_status(service_name: str) -> dict:
 
     try:
         result = subprocess.run(
-            ["systemctl", "--user", "show", service_name,
-             "--property=ActiveEnterTimestamp,MainPID,MemoryCurrent"],
-            capture_output=True, text=True, timeout=5
+            ["systemctl", "--user", "show", service_name, "--property=ActiveEnterTimestamp,MainPID,MemoryCurrent"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         props = {}
         for line in result.stdout.strip().splitlines():
@@ -436,6 +442,7 @@ COMMON_CSS = """
 
 jinja_env = Environment(loader=BaseLoader(), autoescape=True)
 
+
 def _nav(active: str) -> str:
     """Generate nav HTML with active highlighting."""
     links = [
@@ -452,18 +459,23 @@ def _nav(active: str) -> str:
     return "\n    ".join(parts)
 
 
-DASHBOARD_TEMPLATE = jinja_env.from_string(r"""<!DOCTYPE html>
+DASHBOARD_TEMPLATE = jinja_env.from_string(
+    r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SAT Dashboard</title>
-<style>""" + COMMON_CSS + r"""</style>
+<style>"""
+    + COMMON_CSS
+    + r"""</style>
 </head>
 <body>
 <div class="header">
   <div class="logo"><span>SAT</span> Dashboard</div>
-  <nav>""" + _nav("/") + r"""</nav>
+  <nav>"""
+    + _nav("/")
+    + r"""</nav>
 </div>
 <div class="container">
 
@@ -575,21 +587,27 @@ DASHBOARD_TEMPLATE = jinja_env.from_string(r"""<!DOCTYPE html>
 <div class="footer">SAT Web Dashboard &mdash; served via Cloudflare Tunnel &mdash; auto-refreshes data on each page load</div>
 </div>
 </body>
-</html>""")
+</html>"""
+)
 
 
-TASKS_TEMPLATE = jinja_env.from_string(r"""<!DOCTYPE html>
+TASKS_TEMPLATE = jinja_env.from_string(
+    r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SAT Tasks</title>
-<style>""" + COMMON_CSS + r"""</style>
+<style>"""
+    + COMMON_CSS
+    + r"""</style>
 </head>
 <body>
 <div class="header">
   <div class="logo"><span>SAT</span> Dashboard</div>
-  <nav>""" + _nav("/tasks") + r"""</nav>
+  <nav>"""
+    + _nav("/tasks")
+    + r"""</nav>
 </div>
 <div class="container">
 <h1>All Tasks</h1>
@@ -641,21 +659,27 @@ TASKS_TEMPLATE = jinja_env.from_string(r"""<!DOCTYPE html>
 <div class="footer">SAT Web Dashboard</div>
 </div>
 </body>
-</html>""")
+</html>"""
+)
 
 
-TASK_VIEW_TEMPLATE = jinja_env.from_string(r"""<!DOCTYPE html>
+TASK_VIEW_TEMPLATE = jinja_env.from_string(
+    r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ file_path }} - SAT</title>
-<style>""" + COMMON_CSS + r"""</style>
+<style>"""
+    + COMMON_CSS
+    + r"""</style>
 </head>
 <body>
 <div class="header">
   <div class="logo"><span>SAT</span> Dashboard</div>
-  <nav>""" + _nav("") + r"""</nav>
+  <nav>"""
+    + _nav("")
+    + r"""</nav>
 </div>
 <div class="container">
 <div class="breadcrumb"><a href="/">Dashboard</a> / <a href="/tasks">Tasks</a> / {{ file_path }}</div>
@@ -669,16 +693,20 @@ TASK_VIEW_TEMPLATE = jinja_env.from_string(r"""<!DOCTYPE html>
 <div class="footer">SAT Web Dashboard</div>
 </div>
 </body>
-</html>""")
+</html>"""
+)
 
 
-APPROVALS_TEMPLATE = jinja_env.from_string(r"""<!DOCTYPE html>
+APPROVALS_TEMPLATE = jinja_env.from_string(
+    r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SAT Approvals</title>
-<style>""" + COMMON_CSS + r"""</style>
+<style>"""
+    + COMMON_CSS
+    + r"""</style>
 <script>
 async function respond(id, action) {
   const res = await fetch(`/approvals/${id}/respond`, {
@@ -694,7 +722,9 @@ async function respond(id, action) {
 <body>
 <div class="header">
   <div class="logo"><span>SAT</span> Dashboard</div>
-  <nav>""" + _nav("/approvals") + r"""</nav>
+  <nav>"""
+    + _nav("/approvals")
+    + r"""</nav>
 </div>
 <div class="container">
 <h1>Pending Approvals</h1>
@@ -714,12 +744,14 @@ async function respond(id, action) {
 <div class="footer">SAT Web Dashboard</div>
 </div>
 </body>
-</html>""")
+</html>"""
+)
 
 
 # ---------------------------------------------------------------------------
 # Template helpers (registered as globals)
 # ---------------------------------------------------------------------------
+
 
 def _format_size(n: int) -> str:
     if n >= 1024 * 1024:
@@ -728,13 +760,15 @@ def _format_size(n: int) -> str:
         return f"{n / 1024:.1f} KB"
     return f"{n} B"
 
-jinja_env.globals['format_dur'] = _format_duration
-jinja_env.globals['format_size'] = _format_size
+
+jinja_env.globals["format_dur"] = _format_duration
+jinja_env.globals["format_size"] = _format_size
 
 
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
@@ -744,8 +778,8 @@ async def dashboard():
     prom = await fetch_prometheus_metrics()
 
     # Pull Prometheus metrics for supplementary data (avg duration, system health)
-    system_healthy = bool(prom.get('sat_system_healthy', 1))
-    avg_dur_secs = prom.get('sat_stories_avg_duration_seconds', 0)
+    system_healthy = bool(prom.get("sat_system_healthy", 1))
+    avg_dur_secs = prom.get("sat_stories_avg_duration_seconds", 0)
 
     # Headline cards: use task file scan (accurate) instead of audit journal counters
     task_state_counts = {}
@@ -826,7 +860,7 @@ async def status():
         "tasks_working": task_state_counts.get("Working", 0),
         "tasks_pending": task_state_counts.get("Pending", 0),
         "queue_depth": task_state_counts.get("Pending", 0) + task_state_counts.get("Working", 0),
-        "system_healthy": bool(prom.get('sat_system_healthy', 1)),
+        "system_healthy": bool(prom.get("sat_system_healthy", 1)),
         "total_task_files": len(tasks),
         "task_state_counts": task_state_counts,
         "pending_approvals": len(approvals),
@@ -928,7 +962,7 @@ async def approval_respond(approval_id: str, request: Request):
         new_status = "approved" if action == "approve" else "rejected"
         updated = re.sub(
             rf'(<Approval\s+id="{re.escape(approval_id)}"\s+status=")pending(")',
-            rf'\g<1>{new_status}\2',
+            rf"\g<1>{new_status}\2",
             content,
         )
         if updated == content:
@@ -952,4 +986,5 @@ async def metrics():
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8765)

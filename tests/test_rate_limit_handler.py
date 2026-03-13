@@ -213,9 +213,7 @@ class TestCalculateBackoff:
             high = base * (1 + JITTER_FACTOR)
             for _ in range(50):
                 result = handler.calculate_backoff(attempt)
-                assert low <= result <= high, (
-                    f"attempt={attempt}, result={result}, expected [{low}, {high}]"
-                )
+                assert low <= result <= high, f"attempt={attempt}, result={result}, expected [{low}, {high}]"
 
 
 class TestStatePersistence:

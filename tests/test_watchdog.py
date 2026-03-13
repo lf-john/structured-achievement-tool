@@ -17,6 +17,7 @@ from src.execution.watchdog import Watchdog
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def watchdog(tmp_path):
     """Create a Watchdog with a temp audit directory."""
@@ -57,6 +58,7 @@ def stale_audit_file(tmp_path):
 # Service Check
 # ---------------------------------------------------------------------------
 
+
 class TestCheckService:
     def test_active_service(self, watchdog):
         """Returns True for active services."""
@@ -79,6 +81,7 @@ class TestCheckService:
     def test_service_check_timeout(self, watchdog):
         """Returns False on subprocess timeout."""
         import subprocess as sp
+
         with patch("subprocess.run", side_effect=sp.TimeoutExpired("systemctl", 5)):
             assert watchdog.check_service("sat.service") is False
 
@@ -91,6 +94,7 @@ class TestCheckService:
 # ---------------------------------------------------------------------------
 # Audit Freshness
 # ---------------------------------------------------------------------------
+
 
 class TestCheckAuditFreshness:
     def test_fresh_audit(self, watchdog, fresh_audit_file):
@@ -135,6 +139,7 @@ class TestCheckAuditFreshness:
 # Alert Sending
 # ---------------------------------------------------------------------------
 
+
 class TestSendAlert:
     def test_sends_curl_command(self, watchdog):
         """send_alert invokes curl with correct args."""
@@ -150,6 +155,7 @@ class TestSendAlert:
     def test_alert_handles_timeout(self, watchdog):
         """send_alert does not raise on timeout."""
         import subprocess as sp
+
         with patch("subprocess.run", side_effect=sp.TimeoutExpired("curl", 10)):
             # Should not raise
             watchdog.send_alert("test alert")
@@ -164,6 +170,7 @@ class TestSendAlert:
 # ---------------------------------------------------------------------------
 # Full Check Run
 # ---------------------------------------------------------------------------
+
 
 class TestRunChecks:
     def test_all_healthy(self, watchdog, fresh_audit_file):
@@ -196,8 +203,7 @@ class TestRunChecks:
             # curl for alert
             return MagicMock(returncode=0)
 
-        with patch("subprocess.run", side_effect=mock_run), \
-             patch("time.sleep"):
+        with patch("subprocess.run", side_effect=mock_run), patch("time.sleep"):
             results = watchdog.run_checks()
 
         assert "sat.service is not active" in results["alerts"]
@@ -205,6 +211,7 @@ class TestRunChecks:
 
     def test_monitor_down_restart_fails(self, watchdog, fresh_audit_file):
         """Detects down monitor, restart fails, alert sent."""
+
         def mock_run(cmd, **kwargs):
             if "is-active" in cmd:
                 svc = cmd[-1]
@@ -216,8 +223,7 @@ class TestRunChecks:
             # curl for alert
             return MagicMock(returncode=0)
 
-        with patch("subprocess.run", side_effect=mock_run), \
-             patch("time.sleep"):
+        with patch("subprocess.run", side_effect=mock_run), patch("time.sleep"):
             results = watchdog.run_checks()
 
         assert "sat-monitor.service is not active" in results["alerts"]
@@ -261,6 +267,7 @@ class TestRunChecks:
 # Restart Attempt
 # ---------------------------------------------------------------------------
 
+
 class TestAttemptRestart:
     def test_restart_success(self, watchdog):
         """Returns True when service comes back active after restart."""
@@ -274,12 +281,12 @@ class TestAttemptRestart:
                 return MagicMock(stdout="active\n")
             return MagicMock()
 
-        with patch("subprocess.run", side_effect=mock_run), \
-             patch("time.sleep"):
+        with patch("subprocess.run", side_effect=mock_run), patch("time.sleep"):
             assert watchdog.attempt_restart("sat.service") is True
 
     def test_restart_failure(self, watchdog):
         """Returns False when service stays inactive after restart."""
+
         def mock_run(cmd, **kwargs):
             if "restart" in cmd:
                 return MagicMock(returncode=0)
@@ -287,13 +294,13 @@ class TestAttemptRestart:
                 return MagicMock(stdout="inactive\n")
             return MagicMock()
 
-        with patch("subprocess.run", side_effect=mock_run), \
-             patch("time.sleep"):
+        with patch("subprocess.run", side_effect=mock_run), patch("time.sleep"):
             assert watchdog.attempt_restart("sat.service") is False
 
     def test_restart_timeout(self, watchdog):
         """Returns False when restart command times out."""
         import subprocess as sp
+
         with patch("subprocess.run", side_effect=sp.TimeoutExpired("systemctl", 15)):
             assert watchdog.attempt_restart("sat.service") is False
 

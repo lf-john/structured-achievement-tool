@@ -40,7 +40,9 @@ class Watchdog:
         try:
             res = subprocess.run(
                 ["systemctl", "--user", "is-active", service_name],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             return res.stdout.strip() == "active"
         except (subprocess.TimeoutExpired, OSError):
@@ -111,18 +113,13 @@ class Watchdog:
             if last_audit is None:
                 results["alerts"].append("No audit results found")
             else:
-                results["alerts"].append("Audit results are stale (older than "
-                                         f"{self.audit_max_age}s)")
+                results["alerts"].append(f"Audit results are stale (older than {self.audit_max_age}s)")
 
         # Send alerts if any
         if results["alerts"]:
-            alert_msg = "Watchdog Alerts:\n" + "\n".join(
-                f"  - {a}" for a in results["alerts"]
-            )
+            alert_msg = "Watchdog Alerts:\n" + "\n".join(f"  - {a}" for a in results["alerts"])
             if results["restarts"]:
-                alert_msg += "\n\nActions:\n" + "\n".join(
-                    f"  - {r}" for r in results["restarts"]
-                )
+                alert_msg += "\n\nActions:\n" + "\n".join(f"  - {r}" for r in results["restarts"])
             self.send_alert(alert_msg)
 
         return results
@@ -132,14 +129,20 @@ class Watchdog:
         try:
             subprocess.run(
                 [
-                    "curl", "-s",
-                    "-H", "Title: SAT Watchdog Alert",
-                    "-H", "Priority: high",
-                    "-H", "Tags: warning,dog",
-                    "-d", message,
+                    "curl",
+                    "-s",
+                    "-H",
+                    "Title: SAT Watchdog Alert",
+                    "-H",
+                    "Priority: high",
+                    "-H",
+                    "Tags: warning,dog",
+                    "-d",
+                    message,
                     f"{NTFY_SERVER}/{NTFY_TOPIC}",
                 ],
-                capture_output=True, timeout=10,
+                capture_output=True,
+                timeout=10,
             )
         except (subprocess.TimeoutExpired, OSError):
             logger.error("Failed to send watchdog ntfy alert")
@@ -149,7 +152,9 @@ class Watchdog:
         try:
             subprocess.run(
                 ["systemctl", "--user", "restart", service_name],
-                capture_output=True, text=True, timeout=15,
+                capture_output=True,
+                text=True,
+                timeout=15,
             )
             # Wait briefly for service to come up
             time.sleep(3)
@@ -182,4 +187,5 @@ def main():
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(main())

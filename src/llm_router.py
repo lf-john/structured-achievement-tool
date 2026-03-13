@@ -1,9 +1,9 @@
-
 import logging
 
 from src.core.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
+
 
 class LLMRouter:
     def __init__(self):
@@ -12,12 +12,20 @@ class LLMRouter:
     def _is_ollama_task(self, task_description: str) -> bool:
         """Determines if a task should be routed to Ollama based on keywords."""
         ollama_keywords = [
-            "lead scoring", "industry classification", "classify industries",
-            "company size estimation", "estimate company sizes",
-            "email subject line", "a/b testing", "subject line variant selection",
+            "lead scoring",
+            "industry classification",
+            "classify industries",
+            "company size estimation",
+            "estimate company sizes",
+            "email subject line",
+            "a/b testing",
+            "subject line variant selection",
             "sentiment analysis",
-            "contact deduplication", "deduplicate contact lists",
-            "simple text summarization", "summarize", "summarization"
+            "contact deduplication",
+            "deduplicate contact lists",
+            "simple text summarization",
+            "summarize",
+            "summarization",
         ]
         task_description_lower = task_description.lower()
         return any(keyword in task_description_lower for keyword in ollama_keywords)
@@ -25,8 +33,10 @@ class LLMRouter:
     def _is_claude_task(self, task_description: str) -> bool:
         """Determines if a task should be routed to Claude based on keywords."""
         claude_keywords = [
-            "personalized email body generation", "multi-paragraph outreach sequences",
-            "complex analysis", "prospect-facing content"
+            "personalized email body generation",
+            "multi-paragraph outreach sequences",
+            "complex analysis",
+            "prospect-facing content",
         ]
         task_description_lower = task_description.lower()
         return any(keyword in task_description_lower for keyword in claude_keywords)

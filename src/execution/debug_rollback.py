@@ -74,9 +74,7 @@ class DebugRollback:
             self.working_directory,
         )
         if result.returncode != 0:
-            raise DebugRollbackError(
-                f"Failed to create tag '{tag_name}': {result.stderr.strip()}"
-            )
+            raise DebugRollbackError(f"Failed to create tag '{tag_name}': {result.stderr.strip()}")
         logger.info("Created tag %s", tag_name)
         return tag_name
 
@@ -84,9 +82,7 @@ class DebugRollback:
         """Delete a local tag. Returns True on success."""
         result = _run_git(["tag", "-d", tag_name], self.working_directory)
         if result.returncode != 0:
-            logger.warning(
-                "Failed to delete tag '%s': %s", tag_name, result.stderr.strip()
-            )
+            logger.warning("Failed to delete tag '%s': %s", tag_name, result.stderr.strip())
             return False
         return True
 
@@ -98,9 +94,7 @@ class DebugRollback:
         """Check for uncommitted changes (staged or unstaged) in the working directory."""
         result = _run_git(["status", "--porcelain"], self.working_directory)
         if result.returncode != 0:
-            logger.error(
-                "git status failed: %s", result.stderr.strip()
-            )
+            logger.error("git status failed: %s", result.stderr.strip())
             # Conservative: treat errors as "yes, there are changes"
             return True
         return bool(result.stdout.strip())
@@ -151,17 +145,12 @@ class DebugRollback:
         Returns the tag name.
         """
         if self.has_uncommitted_changes():
-            raise DebugRollbackError(
-                "Uncommitted changes detected. Stash or commit before "
-                "creating a pre-fix tag."
-            )
+            raise DebugRollbackError("Uncommitted changes detected. Stash or commit before creating a pre-fix tag.")
 
         tag_name = self._tag_name(task_id, attempt, "pre")
 
         if self._tag_exists(tag_name):
-            logger.warning(
-                "Tag '%s' already exists — deleting and re-creating.", tag_name
-            )
+            logger.warning("Tag '%s' already exists — deleting and re-creating.", tag_name)
             self._delete_tag(tag_name)
 
         commit = get_current_commit(self.working_directory)
@@ -184,9 +173,7 @@ class DebugRollback:
         tag_name = self._tag_name(task_id, attempt, "post")
 
         if self._tag_exists(tag_name):
-            logger.warning(
-                "Tag '%s' already exists — deleting and re-creating.", tag_name
-            )
+            logger.warning("Tag '%s' already exists — deleting and re-creating.", tag_name)
             self._delete_tag(tag_name)
 
         commit = get_current_commit(self.working_directory)
@@ -210,9 +197,7 @@ class DebugRollback:
         Returns True on success, False on failure.
         """
         if not self._tag_exists(tag_name):
-            logger.error(
-                "Cannot rollback: tag '%s' does not exist.", tag_name
-            )
+            logger.error("Cannot rollback: tag '%s' does not exist.", tag_name)
             return False
 
         # Resolve tag to commit hash
@@ -229,9 +214,7 @@ class DebugRollback:
             return False
 
         commit_hash = result.stdout.strip()
-        logger.info(
-            "Rolling back to tag '%s' (commit %s).", tag_name, commit_hash
-        )
+        logger.info("Rolling back to tag '%s' (commit %s).", tag_name, commit_hash)
 
         success = reset_to_commit(self.working_directory, commit_hash)
         if success:
@@ -299,9 +282,7 @@ class DebugRollback:
 
         if valid:
             self.create_post_fix_tag(task_id, attempt)
-            logger.info(
-                "Attempt %d for task %s PASSED validation.", attempt, task_id
-            )
+            logger.info("Attempt %d for task %s PASSED validation.", attempt, task_id)
             return True
 
         # 6. Rollback on failure

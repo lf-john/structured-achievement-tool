@@ -16,7 +16,9 @@ class ProgressTracker(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def update_progress(self, last_processed_id: int | None, percentage_complete: float, total_leads: int, estimated_time_remaining: str) -> None:
+    def update_progress(
+        self, last_processed_id: int | None, percentage_complete: float, total_leads: int, estimated_time_remaining: str
+    ) -> None:
         """
         Updates and persists the current progress state.
 

@@ -14,9 +14,7 @@ class OllamaClient:
         prompt = self._build_prompt(contact)
         try:
             response = requests.post(
-                self.api_url,
-                json={"model": self.model, "prompt": prompt, "stream": False},
-                timeout=60
+                self.api_url, json={"model": self.model, "prompt": prompt, "stream": False}, timeout=60
             )
             response.raise_for_status()
             response_json = response.json()
@@ -39,12 +37,12 @@ class OllamaClient:
         - Geography: North America, Europe.
 
         Contact Details:
-        - Name: {contact.get('name', 'N/A')}
-        - Title: {contact.get('title', 'N/A')}
-        - Company: {contact.get('company', 'N/A')}
-        - Industry: {contact.get('industry', 'N/A')}
-        - Company Size: {contact.get('company_size', 'N/A')}
-        - Location: {contact.get('location', 'N/A')}
+        - Name: {contact.get("name", "N/A")}
+        - Title: {contact.get("title", "N/A")}
+        - Company: {contact.get("company", "N/A")}
+        - Industry: {contact.get("industry", "N/A")}
+        - Company Size: {contact.get("company_size", "N/A")}
+        - Location: {contact.get("location", "N/A")}
 
         Output your response as a JSON object with two keys: "score" (an integer from 1 to 100) and "confidence" (a string: "high", "medium", or "low").
         Do not include any other text or explanation.
@@ -58,8 +56,8 @@ class OllamaClient:
     def _parse_response(self, response_text: str) -> dict[str, Any]:
         try:
             # Find the JSON part of the response
-            json_start = response_text.find('{')
-            json_end = response_text.rfind('}') + 1
+            json_start = response_text.find("{")
+            json_end = response_text.rfind("}") + 1
             if json_start == -1 or json_end == 0:
                 raise ValueError("No JSON object found in response")
 

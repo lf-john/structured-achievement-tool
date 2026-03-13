@@ -261,13 +261,21 @@ class TestAuditJournal:
         """AC 5: Tests that query gracefully handles and skips malformed JSON lines."""
         record1 = AuditRecord(
             timestamp=datetime(2023, 1, 1, 10, 0, 0).isoformat(),
-            task_file="task_A.md", story_id="story_1", success=True,
-            duration_seconds=120.5, exit_code=0, error_summary=None,
+            task_file="task_A.md",
+            story_id="story_1",
+            success=True,
+            duration_seconds=120.5,
+            exit_code=0,
+            error_summary=None,
         )
         record2 = AuditRecord(
             timestamp=datetime(2023, 1, 1, 11, 0, 0).isoformat(),
-            task_file="task_B.md", story_id="story_2", success=False,
-            duration_seconds=60.0, exit_code=1, error_summary="Design phase failed",
+            task_file="task_B.md",
+            story_id="story_2",
+            success=False,
+            duration_seconds=60.0,
+            exit_code=1,
+            error_summary="Design phase failed",
         )
         with open(journal_path, "w") as f:
             f.write(record1.model_dump_json() + "\n")
@@ -304,8 +312,12 @@ class TestAuditJournal:
         journal = AuditJournal(journal_path)
         record = AuditRecord(
             timestamp=datetime(2023, 1, 1, 10, 0, 0).isoformat(),
-            task_file="single.md", story_id="s1", success=True,
-            duration_seconds=100.0, exit_code=0, error_summary=None,
+            task_file="single.md",
+            story_id="s1",
+            success=True,
+            duration_seconds=100.0,
+            exit_code=0,
+            error_summary=None,
         )
         journal.log(record)
         summary = journal.summary()
@@ -319,11 +331,35 @@ class TestAuditJournal:
         """AC 6: Specific check for success rate with mixed results."""
         journal = AuditJournal(journal_path)
         records = [
-            AuditRecord(timestamp=datetime.now().isoformat(), task_file="t1", story_id="s1", success=True, duration_seconds=10.0, exit_code=0, error_summary=None),
-            AuditRecord(timestamp=datetime.now().isoformat(), task_file="t2", story_id="s2", success=False, duration_seconds=10.0, exit_code=1, error_summary="Fail"),
-            AuditRecord(timestamp=datetime.now().isoformat(), task_file="t3", story_id="s3", success=True, duration_seconds=10.0, exit_code=0, error_summary=None),
+            AuditRecord(
+                timestamp=datetime.now().isoformat(),
+                task_file="t1",
+                story_id="s1",
+                success=True,
+                duration_seconds=10.0,
+                exit_code=0,
+                error_summary=None,
+            ),
+            AuditRecord(
+                timestamp=datetime.now().isoformat(),
+                task_file="t2",
+                story_id="s2",
+                success=False,
+                duration_seconds=10.0,
+                exit_code=1,
+                error_summary="Fail",
+            ),
+            AuditRecord(
+                timestamp=datetime.now().isoformat(),
+                task_file="t3",
+                story_id="s3",
+                success=True,
+                duration_seconds=10.0,
+                exit_code=0,
+                error_summary=None,
+            ),
         ]
         for r in records:
             journal.log(r)
         summary = journal.summary()
-        assert pytest.approx(summary["success_rate"], 0.01) == (2/3) * 100
+        assert pytest.approx(summary["success_rate"], 0.01) == (2 / 3) * 100

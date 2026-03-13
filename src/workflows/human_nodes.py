@@ -91,26 +91,34 @@ def prepare_node(
     ]
 
     if deliverables:
-        summary_parts.extend([
-            "## Deliverables",
-            "",
-        ] + deliverables + [""])
+        summary_parts.extend(
+            [
+                "## Deliverables",
+                "",
+            ]
+            + deliverables
+            + [""]
+        )
 
     if deadline:
-        summary_parts.extend([
-            "## Deadline",
-            f"{deadline}",
-            "",
-        ])
+        summary_parts.extend(
+            [
+                "## Deadline",
+                f"{deadline}",
+                "",
+            ]
+        )
 
-    summary_parts.extend([
-        "<details>",
-        "<summary>Context (click to expand)</summary>",
-        "",
-        context,
-        "",
-        "</details>",
-    ])
+    summary_parts.extend(
+        [
+            "<details>",
+            "<summary>Context (click to expand)</summary>",
+            "",
+            context,
+            "",
+            "</details>",
+        ]
+    )
 
     human_summary = "\n".join(summary_parts)
     state["human_summary"] = human_summary
@@ -145,10 +153,19 @@ def validate_node(
     # Check if response indicates completion
     # Look for explicit markers or positive indicators
     response_lower = response.lower()
-    completed = any(word in response_lower for word in [
-        "done", "complete", "finished", "delivered", "resolved",
-        "approved", "confirmed", "verified",
-    ])
+    completed = any(
+        word in response_lower
+        for word in [
+            "done",
+            "complete",
+            "finished",
+            "delivered",
+            "resolved",
+            "approved",
+            "confirmed",
+            "verified",
+        ]
+    )
 
     if not criteria:
         # No criteria to validate — accept any response
@@ -284,10 +301,12 @@ def package_diagnostics_node(
         phase = output.get("phase", "")
         status = output.get("status", "")
         if phase in ("CODE", "FIX", "EXECUTE") and status == "failed":
-            attempted_fixes.append({
-                "phase": phase,
-                "output": output.get("output", "")[:500],
-            })
+            attempted_fixes.append(
+                {
+                    "phase": phase,
+                    "output": output.get("output", "")[:500],
+                }
+            )
 
     # Build recommendations based on failure patterns
     recommendations = []
@@ -307,10 +326,7 @@ def package_diagnostics_node(
         "attempted_fixes": attempted_fixes,
         "recommendations": recommendations,
         "total_attempts": state.get("story_attempt", 1),
-        "phase_history": [
-            {"phase": o.get("phase", ""), "status": o.get("status", "")}
-            for o in phase_outputs
-        ],
+        "phase_history": [{"phase": o.get("phase", ""), "status": o.get("status", "")} for o in phase_outputs],
     }
 
     phase_output = PhaseOutput(

@@ -54,10 +54,7 @@ class SQLiteStateManager:
             conn = sqlite3.connect(self.db_path, timeout=30)
             cursor = conn.cursor()
 
-            cursor.execute(
-                "INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)",
-                (key, json_value)
-            )
+            cursor.execute("INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)", (key, json_value))
 
             conn.commit()
             conn.close()

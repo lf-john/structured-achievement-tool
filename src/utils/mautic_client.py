@@ -13,9 +13,7 @@ class MauticClient:
         Updates a Mautic contact's lead_score field.
         """
         endpoint = f"{self.api_url}/contacts/{contact_id}/edit"
-        payload = {
-            "lead_score": score
-        }
+        payload = {"lead_score": score}
         try:
             response = requests.patch(endpoint, headers=self.headers, json=payload, timeout=30)
             response.raise_for_status()

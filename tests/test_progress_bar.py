@@ -20,7 +20,11 @@ class TestProgressBar:
         notifier = Notifier(ntfy_topic="test", config={})
         notifier.send_progress("task-1", 5, 10, "US-005", "VERIFY")
 
-        call_data = mock_post.call_args[1].get("data", b"") if mock_post.call_args[1] else mock_post.call_args.kwargs.get("data", b"")
+        call_data = (
+            mock_post.call_args[1].get("data", b"")
+            if mock_post.call_args[1]
+            else mock_post.call_args.kwargs.get("data", b"")
+        )
         message = call_data.decode() if isinstance(call_data, bytes) else call_data
         assert "█" in message
         assert "░" in message
@@ -32,7 +36,11 @@ class TestProgressBar:
         notifier = Notifier(ntfy_topic="test", config={})
         notifier.send_progress("task-1", 10, 10)
 
-        call_headers = mock_post.call_args[1].get("headers", {}) if mock_post.call_args[1] else mock_post.call_args.kwargs.get("headers", {})
+        call_headers = (
+            mock_post.call_args[1].get("headers", {})
+            if mock_post.call_args[1]
+            else mock_post.call_args.kwargs.get("headers", {})
+        )
         assert "10/10" in call_headers.get("Title", "")
 
     @patch("src.notifications.notifier.requests.post")
@@ -48,7 +56,11 @@ class TestProgressBar:
         notifier = Notifier(ntfy_topic="test", config={})
         notifier.send_progress("task-1", 3, 10, "Configure DNS", "EXECUTE")
 
-        call_data = mock_post.call_args[1].get("data", b"") if mock_post.call_args[1] else mock_post.call_args.kwargs.get("data", b"")
+        call_data = (
+            mock_post.call_args[1].get("data", b"")
+            if mock_post.call_args[1]
+            else mock_post.call_args.kwargs.get("data", b"")
+        )
         message = call_data.decode() if isinstance(call_data, bytes) else call_data
         assert "Configure DNS" in message
         assert "EXECUTE" in message

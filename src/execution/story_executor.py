@@ -15,6 +15,8 @@ import datetime  # Added for checkpoint metadata timestamp
 import json
 import logging
 import os
+import re
+import time
 from dataclasses import dataclass, field
 
 from src.agents.failure_classifier import FailureSeverity, classify_failure
@@ -122,6 +124,180 @@ def get_workflow_for_story(
         workflow = workflow_cls(routing_engine=routing_engine)
 
     return workflow.compile(checkpointer=checkpointer)
+
+
+# Regex to extract file paths from acceptance criteria text.
+# Matches absolute paths (/foo/bar.py) and common relative patterns (src/foo.py, ./foo.py).
+_FILE_PATH_RE = re.compile(
+    r"""(?:^|[\s"'`(])"""  # preceded by whitespace, quote, or paren
+    r"""("""
+    r"""(?:/[\w./-]+\.\w+)"""  # absolute path: /some/path/file.ext
+    r"""|"""
+    r"""(?:\.?\.?/[\w./-]+\.\w+)"""  # relative: ./foo.py or ../foo.py
+    r"""|"""
+    r"""(?:(?:src|tests|config|scripts|docs|output|build)"""
+    r"""/[\w./-]+\.\w+)"""  # well-known dirs: src/foo.py
+    r""")""",
+    re.VERBOSE,
+)
+
+# Story types where output file verification is lenient (no mandatory file output).
+_LENIENT_OUTPUT_TYPES = {"config", "research", "conversation", "review", "escalation", "qa_feedback"}
+
+# Story types that skip output verification entirely (they have their own gates).
+_SKIP_OUTPUT_VERIFY_TYPES = {"content", "human_task", "assignment", "task_verification", "document_assembly"}
+
+
+@dataclass
+class OutputVerificationResult:
+    """Result of post-execution output file verification."""
+
+    passed: bool
+    failures: list[str] = field(default_factory=list)
+    checked_files: list[str] = field(default_factory=list)
+
+
+def _extract_expected_paths(story: dict) -> list[str]:
+    """Extract expected output file paths from story acceptance criteria and metadata.
+
+    Looks for:
+    1. Explicit ``output_path`` in story metadata
+    2. File paths mentioned in acceptance criteria text
+    """
+    paths: list[str] = []
+
+    # 1. Explicit output_path from story metadata
+    output_path = story.get("output_path")
+    if output_path:
+        paths.append(output_path)
+
+    # 2. Scan acceptance criteria for file paths
+    for ac in story.get("acceptanceCriteria", []):
+        for match in _FILE_PATH_RE.finditer(ac):
+            p = match.group(1)
+            if p not in paths:
+                paths.append(p)
+
+    return paths
+
+
+def verify_output_files(
+    story: dict,
+    working_directory: str,
+    execution_start_time: float,
+) -> OutputVerificationResult:
+    """Verify that expected output files exist, are non-empty, and were modified during execution.
+
+    Args:
+        story: Story dict with type, acceptanceCriteria, output_path, etc.
+        working_directory: The working directory for resolving relative paths.
+        execution_start_time: Unix timestamp (time.time()) captured before workflow execution.
+
+    Returns:
+        OutputVerificationResult with pass/fail and details.
+    """
+    story_type = story.get("type", "development")
+
+    # Skip entirely for workflow types that have their own verification
+    if story_type in _SKIP_OUTPUT_VERIFY_TYPES:
+        return OutputVerificationResult(passed=True)
+
+    expected_paths = _extract_expected_paths(story)
+
+    # For lenient types (config, research, etc.) with no expected paths, pass
+    if not expected_paths and story_type in _LENIENT_OUTPUT_TYPES:
+        logger.info(
+            "Output verification skipped for %s story (type=%s, no expected paths)",
+            story.get("id", "unknown"),
+            story_type,
+        )
+        return OutputVerificationResult(passed=True)
+
+    # For dev/maintenance stories with no expected paths, also pass
+    # (verification only fires when paths are explicitly specified)
+    if not expected_paths:
+        logger.info(
+            "Output verification: no expected paths found for story %s, skipping",
+            story.get("id", "unknown"),
+        )
+        return OutputVerificationResult(passed=True)
+
+    failures: list[str] = []
+    checked: list[str] = []
+
+    for raw_path in expected_paths:
+        # Resolve relative paths against working directory
+        if not os.path.isabs(raw_path):
+            full_path = os.path.join(working_directory, raw_path)
+        else:
+            full_path = raw_path
+
+        checked.append(full_path)
+
+        # Check 1: exists
+        if not os.path.exists(full_path):
+            failures.append(f"Output verification failed: {full_path} does not exist")
+            continue
+
+        # Check 2: non-empty
+        try:
+            size = os.path.getsize(full_path)
+        except OSError as e:
+            failures.append(f"Output verification failed: cannot stat {full_path}: {e}")
+            continue
+
+        if size == 0:
+            failures.append(f"Output verification failed: {full_path} is empty (0 bytes)")
+            continue
+
+        # Check 3: modified during execution
+        try:
+            mtime = os.path.getmtime(full_path)
+        except OSError as e:
+            failures.append(f"Output verification failed: cannot get mtime for {full_path}: {e}")
+            continue
+
+        if mtime < execution_start_time:
+            failures.append(
+                f"Output verification failed: {full_path} was not modified during execution "
+                f"(mtime={mtime:.0f} < start={execution_start_time:.0f})"
+            )
+
+    # For dev_tdd stories, also check that test files exist if AC mentions them
+    if story_type == "development":
+        for raw_path in expected_paths:
+            if not os.path.isabs(raw_path):
+                full_path = os.path.join(working_directory, raw_path)
+            else:
+                full_path = raw_path
+            # If a source file is expected, check for a corresponding test file
+            if "/src/" in full_path and full_path.endswith(".py"):
+                test_path = full_path.replace("/src/", "/tests/test_")
+                if test_path not in checked:
+                    checked.append(test_path)
+                    if not os.path.exists(test_path):
+                        logger.info(
+                            "Output verification: expected test file %s not found (non-blocking for now)",
+                            test_path,
+                        )
+                        # Note: test file absence is logged but not a hard failure,
+                        # since the workflow's own TDD verification handles this.
+
+    passed = len(failures) == 0
+    if not passed:
+        logger.warning(
+            "Output verification FAILED for story %s: %s",
+            story.get("id", "unknown"),
+            "; ".join(failures),
+        )
+    else:
+        logger.info(
+            "Output verification passed for story %s (%d files checked)",
+            story.get("id", "unknown"),
+            len(checked),
+        )
+
+    return OutputVerificationResult(passed=passed, failures=failures, checked_files=checked)
 
 
 def _load_execution_config() -> dict:
@@ -336,6 +512,9 @@ async def _execute_story_inner(
                     reason="Cancelled by user",
                 )
 
+            # Capture execution start time for output verification
+            execution_start_time = time.time()
+
             # Reset on retry (keep code for verify failures, full reset otherwise)
             if attempt > 1 and base_commit:
                 if last_failure_reason == "verify_failure":
@@ -410,6 +589,25 @@ async def _execute_story_inner(
                     # retry limits are hit and the workflow skips ahead).
                     verification_ok = True
                 if last_status == "complete" and verification_ok:
+                    # Post-execution output file verification
+                    output_check = verify_output_files(
+                        story=story,
+                        working_directory=working_directory,
+                        execution_start_time=execution_start_time,
+                    )
+                    if not output_check.passed:
+                        failure_msg = "; ".join(output_check.failures)
+                        logger.warning(
+                            "Story %s output verification failed (attempt %d): %s",
+                            story_id,
+                            attempt,
+                            failure_msg,
+                        )
+                        last_failure_reason = f"output_verification: {failure_msg}"
+                        delay = min(RETRY_BASE_DELAY * (2 ** (attempt - 1)), RETRY_MAX_DELAY)
+                        await asyncio.sleep(delay)
+                        continue
+
                     # Success
                     if notifier:
                         notifier.notify_story_complete(story_id, story_title)

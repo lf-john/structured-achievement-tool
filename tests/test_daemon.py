@@ -29,6 +29,7 @@ from src.daemon import (
 # has_tag
 # ---------------------------------------------------------------------------
 
+
 class TestHasTag:
     """Tests for has_tag(file_path, tag)."""
 
@@ -84,6 +85,7 @@ class TestHasTag:
 # is_task_ready
 # ---------------------------------------------------------------------------
 
+
 class TestIsTaskReady:
     """Tests for is_task_ready(file_path) -- alias for has_tag(<Pending>)."""
 
@@ -111,6 +113,7 @@ class TestIsTaskReady:
 # ---------------------------------------------------------------------------
 # detect_signal
 # ---------------------------------------------------------------------------
+
 
 class TestDetectSignal:
     """Tests for detect_signal(file_path)."""
@@ -186,6 +189,7 @@ class TestDetectSignal:
 # mark_file_status
 # ---------------------------------------------------------------------------
 
+
 class TestMarkFileStatus:
     """Tests for mark_file_status(file_path, old_tag, new_tag)."""
 
@@ -236,6 +240,7 @@ class TestMarkFileStatus:
 # get_latest_md_file
 # ---------------------------------------------------------------------------
 
+
 class TestGetLatestMdFile:
     """Tests for get_latest_md_file(directory)."""
 
@@ -283,6 +288,7 @@ class TestGetLatestMdFile:
 # ---------------------------------------------------------------------------
 # PID lock functions
 # ---------------------------------------------------------------------------
+
 
 class TestPidLock:
     """Tests for _acquire_pid_lock and _release_pid_lock."""
@@ -440,6 +446,7 @@ class TestCircularDependencyDetection:
 
     def test_cycle_clears_deps(self):
         """A→B and B→A should detect a cycle and clear deps."""
+
         def _find(name):
             if "a.md" in name:
                 return {"task_path": "/path/a.md", "depends_on": '["b.md"]'}
@@ -460,4 +467,5 @@ class TestCircularDependencyDetection:
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(pytest.main([__file__, "-v"]))

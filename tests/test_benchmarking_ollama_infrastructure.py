@@ -2,6 +2,7 @@
 Tests for Ollama Benchmark Infrastructure (US-001)
 Comprehensive tests for the benchmarking framework.
 """
+
 import datetime
 import os
 from unittest.mock import MagicMock, patch
@@ -36,7 +37,7 @@ class TestDataModels:
             tokens_per_sec=150.5,
             time_to_first_token=0.8,
             total_response_time=5.2,
-            timestamp=datetime.datetime.now()
+            timestamp=datetime.datetime.now(),
         )
         assert result.model_name == "llama3"
         assert result.prompt == "What is the capital of France?"
@@ -54,7 +55,7 @@ class TestDataModels:
                 # Missing tokens_per_sec
                 time_to_first_token=0.8,
                 total_response_time=5.2,
-                timestamp=datetime.datetime.now()
+                timestamp=datetime.datetime.now(),
             )
 
     def test_benchmark_result_default_types(self):
@@ -65,7 +66,7 @@ class TestDataModels:
             tokens_per_sec=100.0,
             time_to_first_token=0.5,
             total_response_time=3.0,
-            timestamp=datetime.datetime.now()
+            timestamp=datetime.datetime.now(),
         )
         assert isinstance(result.model_name, str)
         assert isinstance(result.prompt, str)
@@ -86,18 +87,23 @@ class TestConfiguration:
 
     def test_prompts_configured_correctly(self):
         """Verify all 3 prompts are defined in the configuration."""
-        assert len(src.benchmarking.config.PROMPTS) == 3, f"Expected 3 prompts, got {len(src.benchmarking.config.PROMPTS)}"
+        assert len(src.benchmarking.config.PROMPTS) == 3, (
+            f"Expected 3 prompts, got {len(src.benchmarking.config.PROMPTS)}"
+        )
         expected_prompts = [
             "Write a python function to calculate the fibonacci sequence.",
             "What are the main benefits of using a containerized application?",
             "Explain the concept of RAG in large language models.",
         ]
-        assert expected_prompts == src.benchmarking.config.PROMPTS, f"Prompts mismatch: {src.benchmarking.config.PROMPTS}"
+        assert expected_prompts == src.benchmarking.config.PROMPTS, (
+            f"Prompts mismatch: {src.benchmarking.config.PROMPTS}"
+        )
 
     def test_api_url_configured(self):
         """Verify the Ollama API URL is configured correctly."""
-        assert src.benchmarking.config.OLLAMA_API_BASE_URL == "http://localhost:11434", \
+        assert src.benchmarking.config.OLLAMA_API_BASE_URL == "http://localhost:11434", (
             f"API URL mismatch: {src.benchmarking.config.OLLAMA_API_BASE_URL}"
+        )
 
     def test_configuration_is_list(self):
         """Test that MODELS and PROMPTS are lists (extensible)."""
@@ -133,7 +139,7 @@ class TestOllamaClient:
         client = src.benchmarking.ollama_client.OllamaClient(base_url=custom_url)
         assert client.base_url == custom_url
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_is_available_when_ollama_is_running(self, mock_get):
         """Test is_available returns True when Ollama API is accessible."""
         mock_response = MagicMock()
@@ -144,7 +150,7 @@ class TestOllamaClient:
         assert client.is_available() is True
         mock_get.assert_called_once_with(client.base_url)
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_is_available_when_ollama_is_not_running(self, mock_get):
         """Test is_available returns False when Ollama API is not accessible."""
         mock_get.side_effect = requests.exceptions.RequestException("Connection failed")
@@ -152,7 +158,7 @@ class TestOllamaClient:
         client = src.benchmarking.ollama_client.OllamaClient()
         assert client.is_available() is False
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_list_models_successfully(self, mock_get):
         """Test listing available models from Ollama."""
         mock_response = MagicMock()
@@ -160,7 +166,7 @@ class TestOllamaClient:
         mock_response.json.return_value = {
             "models": [
                 {"name": "llama3", "modelfile": "llama3:latest"},
-                {"name": "mistral", "modelfile": "mistral:latest"}
+                {"name": "mistral", "modelfile": "mistral:latest"},
             ]
         }
         mock_get.return_value = mock_response
@@ -171,7 +177,7 @@ class TestOllamaClient:
         assert result is not None
         mock_get.assert_called_once_with(f"{client.base_url}/api/tags")
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_list_models_handles_connection_error(self, mock_get):
         """Test list_models handles connection errors gracefully."""
         mock_get.side_effect = requests.exceptions.RequestException("Connection failed")
@@ -181,7 +187,7 @@ class TestOllamaClient:
 
         assert result is None
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_list_models_handles_http_error(self, mock_get):
         """Test list_models handles HTTP errors gracefully."""
         mock_response = MagicMock()
@@ -206,7 +212,7 @@ class TestIntegration:
             tokens_per_sec=100.0,
             time_to_first_token=0.5,
             total_response_time=3.0,
-            timestamp=datetime.datetime.now()
+            timestamp=datetime.datetime.now(),
         )
         data = result.model_dump()
         assert data["model_name"] == "llama3"
@@ -224,12 +230,12 @@ class TestIntegration:
             "tokens_per_sec": 100.0,
             "time_to_first_token": 0.5,
             "total_response_time": 3.0,
-            "timestamp": "2026-02-26T12:00:00"
+            "timestamp": "2026-02-26T12:00:00",
         }
         result = src.benchmarking.data_models.BenchmarkResult(**data)
         assert result.model_name == "llama3"
         assert result.prompt == "Test prompt"
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

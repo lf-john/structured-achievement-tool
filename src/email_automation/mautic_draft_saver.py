@@ -36,7 +36,4 @@ def save_email_as_draft(email_data, mautic_api_config):
     Raises:
         Exception: If Mautic API call fails
     """
-    return call_mautic_api_to_save_draft(
-        email_data=email_data,
-        mautic_api_config=mautic_api_config
-    )
+    return call_mautic_api_to_save_draft(email_data=email_data, mautic_api_config=mautic_api_config)

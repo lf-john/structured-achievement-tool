@@ -16,6 +16,7 @@ from src.execution.audit_cronjob import MaintenanceAuditLog, SystemAuditor
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def maintenance_log(tmp_path):
     """Create a MaintenanceAuditLog writing to a temp directory."""
@@ -55,13 +56,16 @@ def task_tree(tmp_path):
 # Input Collection
 # ---------------------------------------------------------------------------
 
+
 class TestCollectInputs:
     def test_collect_returns_all_keys(self, auditor):
         """collect_inputs returns dict with all expected sections."""
-        with patch.object(auditor, "_get_recent_tasks", return_value=[]), \
-             patch.object(auditor, "_get_system_health", return_value={}), \
-             patch.object(auditor, "_get_debug_history", return_value=[]), \
-             patch.object(auditor, "_get_service_status", return_value={}):
+        with (
+            patch.object(auditor, "_get_recent_tasks", return_value=[]),
+            patch.object(auditor, "_get_system_health", return_value={}),
+            patch.object(auditor, "_get_debug_history", return_value=[]),
+            patch.object(auditor, "_get_service_status", return_value={}),
+        ):
             inputs = auditor.collect_inputs()
 
         assert "recent_tasks" in inputs
@@ -92,6 +96,7 @@ class TestCollectInputs:
     def test_get_system_health_timeout(self, auditor):
         """System health returns 'unavailable' on timeout."""
         import subprocess as sp
+
         with patch("subprocess.run", side_effect=sp.TimeoutExpired("df", 5)):
             health = auditor._get_system_health()
 
@@ -100,6 +105,7 @@ class TestCollectInputs:
 
     def test_get_service_status_mixed(self, auditor):
         """Service status returns True/False per service."""
+
         def run_side_effect(cmd, **kwargs):
             svc = cmd[-1]  # service name is last arg
             if svc == "sat.service":
@@ -116,11 +122,13 @@ class TestCollectInputs:
     def test_get_recent_tasks(self, auditor, task_tree):
         """Recent tasks finds modified task files, skips response files."""
         with patch.object(
-            type(auditor), "_get_recent_tasks",
+            type(auditor),
+            "_get_recent_tasks",
             wraps=auditor._get_recent_tasks,
         ):
             # Temporarily override TASK_DIRS
             import src.execution.audit_cronjob as mod
+
             orig = mod.TASK_DIRS
             mod.TASK_DIRS = [task_tree]
             try:
@@ -143,21 +151,30 @@ class TestCollectInputs:
     def test_get_debug_history_with_data(self, auditor, tmp_path):
         """Debug history parses budget manager JSON."""
         budget_file = tmp_path / "debug_budget.json"
-        budget_file.write_text(json.dumps({
-            "task_001": {"attempts": 3, "last_attempt": "2026-02-25T12:00:00"},
-            "task_002": {"attempts": 1, "last_attempt": "2026-02-25T13:00:00"},
-        }))
+        budget_file.write_text(
+            json.dumps(
+                {
+                    "task_001": {"attempts": 3, "last_attempt": "2026-02-25T12:00:00"},
+                    "task_002": {"attempts": 1, "last_attempt": "2026-02-25T13:00:00"},
+                }
+            )
+        )
 
-        with patch("os.path.exists", return_value=True), \
-             patch("builtins.open", side_effect=lambda *a, **kw: open(str(budget_file), *a[1:], **kw)):
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("builtins.open", side_effect=lambda *a, **kw: open(str(budget_file), *a[1:], **kw)),
+        ):
             # Simpler approach: just test with a real file path
             pass
 
         # Direct test with patched file path
         auditor_mod = auditor
         import src.execution.audit_cronjob as mod
-        with patch.object(mod.os.path, "exists", return_value=True), \
-             patch("builtins.open", return_value=open(str(budget_file))):
+
+        with (
+            patch.object(mod.os.path, "exists", return_value=True),
+            patch("builtins.open", return_value=open(str(budget_file))),
+        ):
             result = auditor_mod._get_debug_history()
 
         assert len(result) == 2
@@ -168,6 +185,7 @@ class TestCollectInputs:
 # ---------------------------------------------------------------------------
 # Prompt Construction
 # ---------------------------------------------------------------------------
+
 
 class TestBuildAuditPrompt:
     def test_prompt_includes_service_status(self, auditor):
@@ -246,14 +264,17 @@ class TestBuildAuditPrompt:
 # Response Parsing
 # ---------------------------------------------------------------------------
 
+
 class TestParseAuditResponse:
     def test_parse_ok_response(self, auditor):
         """Parses a clean 'ok' JSON response."""
-        response = json.dumps({
-            "status": "ok",
-            "issues": [],
-            "recommendations": ["Keep monitoring"],
-        })
+        response = json.dumps(
+            {
+                "status": "ok",
+                "issues": [],
+                "recommendations": ["Keep monitoring"],
+            }
+        )
         result = auditor.parse_audit_response(response)
 
         assert result["status"] == "ok"
@@ -262,11 +283,13 @@ class TestParseAuditResponse:
 
     def test_parse_warning_response(self, auditor):
         """Parses a 'warning' response with issues."""
-        response = json.dumps({
-            "status": "warning",
-            "issues": ["Disk usage at 85%"],
-            "recommendations": ["Clean up logs"],
-        })
+        response = json.dumps(
+            {
+                "status": "warning",
+                "issues": ["Disk usage at 85%"],
+                "recommendations": ["Clean up logs"],
+            }
+        )
         result = auditor.parse_audit_response(response)
 
         assert result["status"] == "warning"
@@ -275,11 +298,13 @@ class TestParseAuditResponse:
 
     def test_parse_critical_response(self, auditor):
         """Parses a 'critical' response."""
-        response = json.dumps({
-            "status": "critical",
-            "issues": ["SAT daemon down", "Ollama unresponsive"],
-            "recommendations": ["Restart services immediately"],
-        })
+        response = json.dumps(
+            {
+                "status": "critical",
+                "issues": ["SAT daemon down", "Ollama unresponsive"],
+                "recommendations": ["Restart services immediately"],
+            }
+        )
         result = auditor.parse_audit_response(response)
 
         assert result["status"] == "critical"
@@ -304,11 +329,13 @@ class TestParseAuditResponse:
 
     def test_parse_invalid_status_value(self, auditor):
         """Coerces unknown status values to 'warning'."""
-        response = json.dumps({
-            "status": "banana",
-            "issues": ["something"],
-            "recommendations": [],
-        })
+        response = json.dumps(
+            {
+                "status": "banana",
+                "issues": ["something"],
+                "recommendations": [],
+            }
+        )
         result = auditor.parse_audit_response(response)
         assert result["status"] == "warning"
 
@@ -316,6 +343,7 @@ class TestParseAuditResponse:
 # ---------------------------------------------------------------------------
 # Audit Result Saving
 # ---------------------------------------------------------------------------
+
 
 class TestSaveAuditResult:
     def test_save_creates_file(self, auditor, tmp_path):
@@ -350,6 +378,7 @@ class TestSaveAuditResult:
 # Notification Logic
 # ---------------------------------------------------------------------------
 
+
 class TestSendNotification:
     def test_no_notification_for_ok(self, auditor):
         """No notification sent when status is ok."""
@@ -360,11 +389,13 @@ class TestSendNotification:
     def test_notification_for_warning(self, auditor):
         """Notification sent for warning status."""
         with patch("subprocess.run") as mock_run:
-            auditor.send_notification({
-                "status": "warning",
-                "issues": ["Disk at 85%"],
-                "recommendations": ["Clean logs"],
-            })
+            auditor.send_notification(
+                {
+                    "status": "warning",
+                    "issues": ["Disk at 85%"],
+                    "recommendations": ["Clean logs"],
+                }
+            )
         mock_run.assert_called_once()
         call_args = mock_run.call_args
         cmd = call_args[0][0]
@@ -374,11 +405,13 @@ class TestSendNotification:
     def test_notification_for_critical(self, auditor):
         """Critical uses urgent priority."""
         with patch("subprocess.run") as mock_run:
-            auditor.send_notification({
-                "status": "critical",
-                "issues": ["Everything is on fire"],
-                "recommendations": [],
-            })
+            auditor.send_notification(
+                {
+                    "status": "critical",
+                    "issues": ["Everything is on fire"],
+                    "recommendations": [],
+                }
+            )
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
         assert any("urgent" in str(a) for a in cmd)
@@ -386,33 +419,46 @@ class TestSendNotification:
     def test_notification_handles_timeout(self, auditor):
         """Notification does not raise on timeout."""
         import subprocess as sp
+
         with patch("subprocess.run", side_effect=sp.TimeoutExpired("curl", 10)):
             # Should not raise
-            auditor.send_notification({
-                "status": "warning",
-                "issues": ["test"],
-                "recommendations": [],
-            })
+            auditor.send_notification(
+                {
+                    "status": "warning",
+                    "issues": ["test"],
+                    "recommendations": [],
+                }
+            )
 
 
 # ---------------------------------------------------------------------------
 # Full Audit Cycle
 # ---------------------------------------------------------------------------
 
+
 class TestRunAudit:
     def test_run_audit_returns_result(self, auditor):
         """run_audit returns a dict with status, issues, recommendations, and timestamp."""
-        llm_response = json.dumps({
-            "status": "ok",
-            "issues": [],
-            "recommendations": ["All systems nominal"],
-        })
-        with patch.object(auditor, "collect_inputs", return_value={
-            "recent_tasks": [],
-            "system_health": {},
-            "debug_history": [],
-            "service_status": {"sat.service": True},
-        }), patch.object(auditor, "_invoke_llm", return_value=llm_response):
+        llm_response = json.dumps(
+            {
+                "status": "ok",
+                "issues": [],
+                "recommendations": ["All systems nominal"],
+            }
+        )
+        with (
+            patch.object(
+                auditor,
+                "collect_inputs",
+                return_value={
+                    "recent_tasks": [],
+                    "system_health": {},
+                    "debug_history": [],
+                    "service_status": {"sat.service": True},
+                },
+            ),
+            patch.object(auditor, "_invoke_llm", return_value=llm_response),
+        ):
             result = auditor.run_audit()
 
         assert result["status"] == "ok"
@@ -422,12 +468,19 @@ class TestRunAudit:
 
     def test_run_audit_handles_llm_failure(self, auditor):
         """run_audit handles empty LLM response gracefully."""
-        with patch.object(auditor, "collect_inputs", return_value={
-            "recent_tasks": [],
-            "system_health": {},
-            "debug_history": [],
-            "service_status": {},
-        }), patch.object(auditor, "_invoke_llm", return_value=""):
+        with (
+            patch.object(
+                auditor,
+                "collect_inputs",
+                return_value={
+                    "recent_tasks": [],
+                    "system_health": {},
+                    "debug_history": [],
+                    "service_status": {},
+                },
+            ),
+            patch.object(auditor, "_invoke_llm", return_value=""),
+        ):
             result = auditor.run_audit()
 
         # Empty response parses as "ok" (default)
@@ -435,17 +488,26 @@ class TestRunAudit:
 
     def test_run_audit_writes_audit_log_entries(self, auditor, maintenance_log):
         """run_audit writes audit_started and llm_response_received entries."""
-        llm_response = json.dumps({
-            "status": "ok",
-            "issues": [],
-            "recommendations": [],
-        })
-        with patch.object(auditor, "collect_inputs", return_value={
-            "recent_tasks": [],
-            "system_health": {},
-            "debug_history": [],
-            "service_status": {},
-        }), patch.object(auditor, "_invoke_llm", return_value=llm_response):
+        llm_response = json.dumps(
+            {
+                "status": "ok",
+                "issues": [],
+                "recommendations": [],
+            }
+        )
+        with (
+            patch.object(
+                auditor,
+                "collect_inputs",
+                return_value={
+                    "recent_tasks": [],
+                    "system_health": {},
+                    "debug_history": [],
+                    "service_status": {},
+                },
+            ),
+            patch.object(auditor, "_invoke_llm", return_value=llm_response),
+        ):
             auditor.run_audit()
 
         with open(maintenance_log.path) as f:
@@ -463,17 +525,26 @@ class TestRunAudit:
 
     def test_run_audit_logs_issues_when_present(self, auditor, maintenance_log):
         """run_audit writes issues_detected entry when LLM reports issues."""
-        llm_response = json.dumps({
-            "status": "warning",
-            "issues": ["Disk at 90%", "Ollama slow"],
-            "recommendations": [],
-        })
-        with patch.object(auditor, "collect_inputs", return_value={
-            "recent_tasks": [],
-            "system_health": {},
-            "debug_history": [],
-            "service_status": {},
-        }), patch.object(auditor, "_invoke_llm", return_value=llm_response):
+        llm_response = json.dumps(
+            {
+                "status": "warning",
+                "issues": ["Disk at 90%", "Ollama slow"],
+                "recommendations": [],
+            }
+        )
+        with (
+            patch.object(
+                auditor,
+                "collect_inputs",
+                return_value={
+                    "recent_tasks": [],
+                    "system_health": {},
+                    "debug_history": [],
+                    "service_status": {},
+                },
+            ),
+            patch.object(auditor, "_invoke_llm", return_value=llm_response),
+        ):
             auditor.run_audit()
 
         with open(maintenance_log.path) as f:
@@ -486,11 +557,13 @@ class TestRunAudit:
     def test_send_notification_writes_audit_log(self, auditor, maintenance_log):
         """send_notification writes notification_sent entry for non-ok status."""
         with patch("subprocess.run"):
-            auditor.send_notification({
-                "status": "warning",
-                "issues": ["test issue"],
-                "recommendations": [],
-            })
+            auditor.send_notification(
+                {
+                    "status": "warning",
+                    "issues": ["test issue"],
+                    "recommendations": [],
+                }
+            )
 
         with open(maintenance_log.path) as f:
             entries = [json.loads(line) for line in f]
@@ -504,6 +577,7 @@ class TestRunAudit:
 # ---------------------------------------------------------------------------
 # MaintenanceAuditLog
 # ---------------------------------------------------------------------------
+
 
 class TestMaintenanceAuditLog:
     def test_write_creates_jsonl_entry(self, maintenance_log):

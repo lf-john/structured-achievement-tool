@@ -20,6 +20,7 @@ T = TypeVar("T", bound=BaseModel)
 
 # --- Pydantic Models ---
 
+
 class AgentStatus(str, Enum):
     COMPLETE = "complete"
     FAILED = "failed"
@@ -29,6 +30,7 @@ class AgentStatus(str, Enum):
 
 class AgentResponse(BaseModel):
     """Standard response format for all LLM agents."""
+
     thinking: str = ""
     status: AgentStatus
     output: str
@@ -38,17 +40,21 @@ class AgentResponse(BaseModel):
 
 class ClassifyResponse(BaseModel):
     """Response from the Classifier agent."""
+
     task_type: str
+    operation_mode: str = "create"  # "create" or "edit"
     confidence: float = Field(ge=0.0, le=1.0)
     reasoning: str = ""
 
 
 class StorySchema(BaseModel):
     """A single user story from decomposition."""
+
     id: str
     title: str
     description: str
     type: str = "development"
+    operation_mode: str = "create"  # "create" or "edit"
     status: str = "pending"
     dependsOn: list[str] = Field(default_factory=list)
     acceptanceCriteria: list[str] = Field(default_factory=list)
@@ -63,11 +69,13 @@ class StorySchema(BaseModel):
 
 class DecomposeResponse(BaseModel):
     """Response from the Decompose/StoryAgent."""
+
     stories: list[StorySchema]
 
 
 class VerifyResponse(BaseModel):
     """Response from the Verify phase."""
+
     status: str  # "pass", "fail", "retry_with_fixes"
     issues: list[str] = Field(default_factory=list)
     feedback: str = ""
@@ -88,6 +96,7 @@ class MediatorAction(BaseModel):
 
 class MediatorResponse(BaseModel):
     """Response from the Mediator agent."""
+
     decision: MediatorDecision
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     reasoning: str = ""
@@ -98,6 +107,7 @@ class MediatorResponse(BaseModel):
 
 
 # --- JSON Extraction ---
+
 
 def extract_json(text: str) -> dict:
     """Extract JSON object from LLM output.
@@ -120,7 +130,7 @@ def extract_json(text: str) -> dict:
             pass
 
     # Try 2: Extract from markdown code fences (multiline or inline)
-    fence_pattern = r'```(?:json)?\s*\n?(.*?)\n?\s*```'
+    fence_pattern = r"```(?:json)?\s*\n?(.*?)\n?\s*```"
     matches = re.findall(fence_pattern, text, re.DOTALL)
     for match in matches:
         try:
@@ -138,7 +148,7 @@ def extract_json(text: str) -> dict:
             elif text[i] == "}":
                 depth -= 1
                 if depth == 0:
-                    candidate = text[brace_start:i + 1]
+                    candidate = text[brace_start : i + 1]
                     try:
                         return json.loads(candidate)
                     except json.JSONDecodeError:

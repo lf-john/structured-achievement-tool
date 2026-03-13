@@ -33,8 +33,7 @@ class TestAssignmentWorkflowGraph:
         graph = workflow.build_graph()
         node_names = set(graph.nodes.keys())
 
-        expected = {"prepare", "notify", "pause", "follow_up", "escalation",
-                    "validate", "integrate", "learn"}
+        expected = {"prepare", "notify", "pause", "follow_up", "escalation", "validate", "integrate", "learn"}
         assert expected == node_names
 
     def test_entry_point_is_prepare(self):

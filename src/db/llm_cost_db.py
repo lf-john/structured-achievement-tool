@@ -69,22 +69,30 @@ class LLMCostDB:
                      estimated_cost, actual_input_tokens, actual_output_tokens,
                      cached_tokens, input_cost, output_cost)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (ts, model_name, prompt_tokens, completion_tokens,
-                     estimated_cost, actual_input_tokens, actual_output_tokens,
-                     cached_tokens, input_cost, output_cost)
+                    (
+                        ts,
+                        model_name,
+                        prompt_tokens,
+                        completion_tokens,
+                        estimated_cost,
+                        actual_input_tokens,
+                        actual_output_tokens,
+                        cached_tokens,
+                        input_cost,
+                        output_cost,
+                    ),
                 )
                 conn.commit()
         except sqlite3.Error as e:
             logger.warning(f"Database error adding log entry: {e}")
 
     def get_daily_cost(self, date: datetime) -> float:
-        date_str = date.strftime('%Y-%m-%d')
+        date_str = date.strftime("%Y-%m-%d")
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT SUM(estimated_cost) FROM llm_costs WHERE substr(timestamp, 1, 10) = ?",
-                    (date_str,)
+                    "SELECT SUM(estimated_cost) FROM llm_costs WHERE substr(timestamp, 1, 10) = ?", (date_str,)
                 )
                 result = cursor.fetchone()[0]
                 return result if result is not None else 0.0
@@ -93,13 +101,12 @@ class LLMCostDB:
             return 0.0
 
     def get_monthly_cost(self, date: datetime) -> float:
-        month_str = date.strftime('%Y-%m')
+        month_str = date.strftime("%Y-%m")
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT SUM(estimated_cost) FROM llm_costs WHERE substr(timestamp, 1, 7) = ?",
-                    (month_str,)
+                    "SELECT SUM(estimated_cost) FROM llm_costs WHERE substr(timestamp, 1, 7) = ?", (month_str,)
                 )
                 result = cursor.fetchone()[0]
                 return result if result is not None else 0.0

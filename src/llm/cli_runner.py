@@ -28,10 +28,12 @@ def _get_cost_tracker():
     if _cost_tracker is None:
         try:
             from src.llm_cost_tracker import LLMCostTracker
+
             _cost_tracker = LLMCostTracker()
         except Exception as e:
             logger.debug(f"Cost tracker unavailable: {e}")
     return _cost_tracker
+
 
 DEFAULT_TIMEOUT = 600  # 10 minutes
 HEALTH_CHECK_TIMEOUT = 30
@@ -40,6 +42,7 @@ HEALTH_CHECK_TIMEOUT = 30
 @dataclass
 class CLIResult:
     """Result of a CLI invocation."""
+
     stdout: str = ""
     stderr: str = ""
     exit_code: int = 0
@@ -51,13 +54,13 @@ class CLIResult:
 
 
 # Patterns that indicate API errors (from Ralph Pro)
-API_ERROR_PATTERN = re.compile(r'API Error:\s*(\d{3})')
-AUTH_ERROR_PATTERN = re.compile(r'authentication_error|invalid.*api.*key|unauthorized', re.IGNORECASE)
+API_ERROR_PATTERN = re.compile(r"API Error:\s*(\d{3})")
+AUTH_ERROR_PATTERN = re.compile(r"authentication_error|invalid.*api.*key|unauthorized", re.IGNORECASE)
 # Note: bare "429" was removed — it caused false positives when LLM output
 # contained "429" in content (e.g., HTTP status codes in documentation).
 # Only match explicit rate-limit phrases or "error 429" / "status 429" patterns.
 RATE_LIMIT_PATTERN = re.compile(
-    r'rate.?limit|too many requests|error[:\s]+429|status[:\s]+429|code[:\s]+429|HTTP/\S+\s+429',
+    r"rate.?limit|too many requests|error[:\s]+429|status[:\s]+429|code[:\s]+429|HTTP/\S+\s+429",
     re.IGNORECASE,
 )
 
@@ -65,6 +68,7 @@ RATE_LIMIT_PATTERN = re.compile(
 def classify_error_category(error_code: int | None, stderr: str) -> str:
     """Classify an API error into a category for circuit breaker routing."""
     from src.llm.routing_engine import ErrorCategory
+
     if error_code == 429:
         return ErrorCategory.RATE_LIMIT
     elif error_code in (401, 403):
@@ -145,7 +149,9 @@ def _parse_token_usage(stdout: str, stderr: str) -> tuple[int | None, int | None
     return None, None
 
 
-def _build_command(provider: ProviderConfig, prompt_file: str | None = None, prompt: str | None = None, agentic: bool = True) -> list[str]:
+def _build_command(
+    provider: ProviderConfig, prompt_file: str | None = None, prompt: str | None = None, agentic: bool = True
+) -> list[str]:
     """Build the CLI command for a provider.
 
     Args:
@@ -336,9 +342,12 @@ async def invoke(
                 logger.debug(f"Failed to clean up stream file {stream_output_file}: {e}")
 
         # Auto-continue on max turns if continuator is provided
-        if (session_continuator and task_id
-                and session_continuator.detect_max_turns(stdout, result.exit_code)
-                and session_continuator.can_continue(task_id)):
+        if (
+            session_continuator
+            and task_id
+            and session_continuator.detect_max_turns(stdout, result.exit_code)
+            and session_continuator.can_continue(task_id)
+        ):
             session_id = session_continuator.extract_session_id(stdout)
             if session_id:
                 logger.info(f"Max turns detected for {task_id}, auto-continuing session {session_id}")
@@ -367,9 +376,7 @@ async def invoke(
             try:
                 await asyncio.wait_for(process.wait(), timeout=10)
             except TimeoutError:
-                logger.warning(
-                    "Process did not exit after SIGTERM+10s, sending SIGKILL"
-                )
+                logger.warning("Process did not exit after SIGTERM+10s, sending SIGKILL")
                 process.kill()
                 await asyncio.wait_for(process.wait(), timeout=5)
         except Exception:
@@ -380,12 +387,11 @@ async def invoke(
         if stream_output_file:
             try:
                 if os.path.exists(stream_output_file):
-                    with open(stream_output_file, encoding='utf-8') as f:
+                    with open(stream_output_file, encoding="utf-8") as f:
                         partial_stdout = f.read()
                     if partial_stdout:
                         logger.info(
-                            f"Recovered {len(partial_stdout)} chars of partial output "
-                            f"from stream file on timeout"
+                            f"Recovered {len(partial_stdout)} chars of partial output from stream file on timeout"
                         )
             except Exception as e:
                 logger.warning(f"Failed to recover partial output from stream file: {e}")
@@ -430,8 +436,4 @@ async def health_check(provider: ProviderConfig) -> bool:
         prompt="Reply with just the word HEALTHY",
         timeout=HEALTH_CHECK_TIMEOUT,
     )
-    return (
-        result.exit_code == 0
-        and not result.is_api_error
-        and "HEALTHY" in result.stdout.upper()
-    )
+    return result.exit_code == 0 and not result.is_api_error and "HEALTHY" in result.stdout.upper()

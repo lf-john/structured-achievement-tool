@@ -15,8 +15,7 @@ class TestEscalationWorkflowGraph:
         graph = workflow.build_graph()
         node_names = set(graph.nodes.keys())
 
-        expected = {"prepare", "package_diagnostics", "notify", "pause",
-                    "follow_up", "escalation", "learn"}
+        expected = {"prepare", "package_diagnostics", "notify", "pause", "follow_up", "escalation", "learn"}
         assert expected == node_names
 
     def test_node_count(self):

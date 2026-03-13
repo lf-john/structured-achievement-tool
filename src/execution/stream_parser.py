@@ -65,7 +65,7 @@ class StreamParser:
         if self._in_code_block and not force:
             return
 
-        with open(self.output_file, 'a', encoding='utf-8') as f:
+        with open(self.output_file, "a", encoding="utf-8") as f:
             f.write(self._buffer)
             f.flush()
             os.fsync(f.fileno())
@@ -86,4 +86,4 @@ class StreamParser:
             chunk = await stream.read(chunk_size)
             if not chunk:
                 break
-            yield chunk.decode('utf-8', errors='replace')
+            yield chunk.decode("utf-8", errors="replace")

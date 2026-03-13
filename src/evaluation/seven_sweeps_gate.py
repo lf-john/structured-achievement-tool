@@ -110,10 +110,7 @@ def check_quality_gate(llm_response: str) -> tuple[bool, dict]:
         pass_value = result["sweeps"][sweep]["pass"]
         expected_pass = score >= 3
         if pass_value != expected_pass:
-            raise ValueError(
-                f"Sweep '{sweep}' pass={pass_value} but score={score}. "
-                f"pass must be {expected_pass}"
-            )
+            raise ValueError(f"Sweep '{sweep}' pass={pass_value} but score={score}. pass must be {expected_pass}")
 
     # 2. Calculate the logically correct overall_pass
     # overall_pass must be True only if ALL sweeps >= 3 AND overall_score >= 70

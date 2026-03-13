@@ -16,32 +16,33 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TechStack:
     """Detected technology stack for a project."""
-    language: str = "python"           # python, javascript, php, rust, go, etc.
-    test_framework: str = "pytest"     # pytest, jest, phpunit, go test, cargo test
-    test_directory: str = "tests/"     # Relative path to test directory
-    test_command: str = "pytest"       # Command to run tests
-    package_file: str = ""             # requirements.txt, package.json, composer.json
-    build_tool: str = ""               # pip, npm, composer, cargo, go
+
+    language: str = "python"  # python, javascript, php, rust, go, etc.
+    test_framework: str = "pytest"  # pytest, jest, phpunit, go test, cargo test
+    test_directory: str = "tests/"  # Relative path to test directory
+    test_command: str = "pytest"  # Command to run tests
+    package_file: str = ""  # requirements.txt, package.json, composer.json
+    build_tool: str = ""  # pip, npm, composer, cargo, go
 
 
 # Marker files → (language, test_framework, test_directory, test_command, build_tool)
 _MARKER_FILES = [
     # Python
-    ("pyproject.toml",     "python",     "pytest",   "tests/",  "pytest",        "pip"),
-    ("setup.py",           "python",     "pytest",   "tests/",  "pytest",        "pip"),
-    ("setup.cfg",          "python",     "pytest",   "tests/",  "pytest",        "pip"),
-    ("requirements.txt",   "python",     "pytest",   "tests/",  "pytest",        "pip"),
-    ("Pipfile",            "python",     "pytest",   "tests/",  "pytest",        "pipenv"),
+    ("pyproject.toml", "python", "pytest", "tests/", "pytest", "pip"),
+    ("setup.py", "python", "pytest", "tests/", "pytest", "pip"),
+    ("setup.cfg", "python", "pytest", "tests/", "pytest", "pip"),
+    ("requirements.txt", "python", "pytest", "tests/", "pytest", "pip"),
+    ("Pipfile", "python", "pytest", "tests/", "pytest", "pipenv"),
     # JavaScript / TypeScript
-    ("package.json",       "javascript", "jest",     "tests/",  "npm test",      "npm"),
-    ("tsconfig.json",      "typescript", "jest",     "tests/",  "npm test",      "npm"),
-    ("bun.lockb",          "typescript", "bun:test", "tests/",  "bun test",      "bun"),
+    ("package.json", "javascript", "jest", "tests/", "npm test", "npm"),
+    ("tsconfig.json", "typescript", "jest", "tests/", "npm test", "npm"),
+    ("bun.lockb", "typescript", "bun:test", "tests/", "bun test", "bun"),
     # PHP
-    ("composer.json",      "php",        "phpunit",  "tests/",  "vendor/bin/phpunit", "composer"),
+    ("composer.json", "php", "phpunit", "tests/", "vendor/bin/phpunit", "composer"),
     # Rust
-    ("Cargo.toml",         "rust",       "cargo",    "tests/",  "cargo test",    "cargo"),
+    ("Cargo.toml", "rust", "cargo", "tests/", "cargo test", "cargo"),
     # Go
-    ("go.mod",             "go",         "go",       ".",       "go test ./...", "go"),
+    ("go.mod", "go", "go", ".", "go test ./...", "go"),
 ]
 
 
@@ -159,6 +160,7 @@ def _refine_from_config(working_directory: str, stack: TechStack) -> TechStack:
         if os.path.exists(pkg_json):
             try:
                 import json
+
                 with open(pkg_json) as f:
                     pkg = json.load(f)
                 scripts = pkg.get("scripts", {})
@@ -191,16 +193,12 @@ def get_existing_test_files(working_directory: str, test_directory: str) -> list
         return []
 
     test_files = []
-    test_extensions = (".test.py", ".test.js", ".test.ts", ".test.php",
-                       "_test.py", "_test.go", "_test.rs")
+    test_extensions = (".test.py", ".test.js", ".test.ts", ".test.php", "_test.py", "_test.go", "_test.rs")
     test_prefixes = ("test_",)
 
     for root, _dirs, files in os.walk(test_path):
         for f in sorted(files):
-            is_test = (
-                any(f.endswith(ext) for ext in test_extensions)
-                or any(f.startswith(pfx) for pfx in test_prefixes)
-            )
+            is_test = any(f.endswith(ext) for ext in test_extensions) or any(f.startswith(pfx) for pfx in test_prefixes)
             if is_test:
                 rel = os.path.relpath(os.path.join(root, f), working_directory)
                 test_files.append(rel)

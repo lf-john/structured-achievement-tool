@@ -32,7 +32,7 @@ class GrafanaClient:
             api_key = api_key.strip()
 
         if api_key is None:
-            api_key = os.environ.get('GRAFANA_API_KEY', '').strip()
+            api_key = os.environ.get("GRAFANA_API_KEY", "").strip()
 
         if not api_key:
             raise ValueError("GRAFANA_API_KEY environment variable must be set")
@@ -42,7 +42,7 @@ class GrafanaClient:
         # Determine if we should validate authentication
         # Skip validation if explicitly set to False or if GRAFANA_SKIP_AUTH_VALIDATION env var is set
         if validate_auth is None:
-            validate_auth = not os.environ.get('GRAFANA_SKIP_AUTH_VALIDATION', '0').lower() == '1'
+            validate_auth = not os.environ.get("GRAFANA_SKIP_AUTH_VALIDATION", "0").lower() == "1"
 
         self._validate_auth = validate_auth
         self._headers: dict[str, str] | None = None
@@ -60,37 +60,29 @@ class GrafanaClient:
         if self._headers is not None:
             return self._headers
 
-        headers = {
-            'Authorization': f'Bearer {self.api_key}'
-        }
+        headers = {"Authorization": f"Bearer {self.api_key}"}
 
         # Test authentication by making a simple request
         # This is skipped when validate_auth=False (for testing scenarios)
         if self._validate_auth:
             try:
                 response = requests.Session.request(
-                    method='GET',
-                    url='https://grafana.example.com/api/search',
-                    headers=headers,
-                    timeout=5
+                    method="GET", url="https://grafana.example.com/api/search", headers=headers, timeout=5
                 )
                 response.raise_for_status()
             except requests.exceptions.RequestException as e:
                 error_msg = str(e).lower()
-                if '401' in error_msg or 'unauthorized' in error_msg:
-                    raise Exception('401 Unauthorized: Authentication failed') from e
-                if '403' in error_msg or 'forbidden' in error_msg:
-                    raise Exception('403 Forbidden: Permission denied') from e
+                if "401" in error_msg or "unauthorized" in error_msg:
+                    raise Exception("401 Unauthorized: Authentication failed") from e
+                if "403" in error_msg or "forbidden" in error_msg:
+                    raise Exception("403 Forbidden: Permission denied") from e
                 raise
 
         self._headers = headers
         return headers
 
     def _make_request(
-        self,
-        endpoint: str,
-        method: str = 'GET',
-        json_data: dict[str, Any] | None = None
+        self, endpoint: str, method: str = "GET", json_data: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
         Make an HTTP request to Grafana API.
@@ -110,37 +102,31 @@ class GrafanaClient:
         """
         headers = self._get_headers()
 
-        url = f'https://grafana.example.com{endpoint}'
+        url = f"https://grafana.example.com{endpoint}"
 
         try:
-            response = requests.Session.request(
-                method,
-                url,
-                headers=headers,
-                json=json_data,
-                timeout=30
-            )
+            response = requests.Session.request(method, url, headers=headers, json=json_data, timeout=30)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.Timeout:
-            raise TimeoutError('Request timed out')
+            raise TimeoutError("Request timed out")
         except requests.exceptions.ConnectionError:
-            raise ConnectionError('Cannot connect to Grafana')
+            raise ConnectionError("Cannot connect to Grafana")
         except requests.exceptions.HTTPError as e:
             # Check for authentication errors in response
-            if hasattr(response, 'status_code'):
+            if hasattr(response, "status_code"):
                 status_code = response.status_code
                 if status_code == 401:
-                    raise Exception('401 Unauthorized: Authentication failed') from e
+                    raise Exception("401 Unauthorized: Authentication failed") from e
                 if status_code == 403:
-                    raise Exception('403 Forbidden: Permission denied') from e
-            raise Exception(f'HTTP {response.status_code if hasattr(response, "status_code") else "Unknown"}')
+                    raise Exception("403 Forbidden: Permission denied") from e
+            raise Exception(f"HTTP {response.status_code if hasattr(response, 'status_code') else 'Unknown'}")
         except requests.exceptions.RequestException as e:
             error_msg = str(e).lower()
-            if '401' in error_msg or 'unauthorized' in error_msg:
-                raise Exception('401 Unauthorized: Authentication failed') from e
-            if '403' in error_msg or 'forbidden' in error_msg:
-                raise Exception('403 Forbidden: Permission denied') from e
+            if "401" in error_msg or "unauthorized" in error_msg:
+                raise Exception("401 Unauthorized: Authentication failed") from e
+            if "403" in error_msg or "forbidden" in error_msg:
+                raise Exception("403 Forbidden: Permission denied") from e
             raise Exception(str(e))
 
     def _handle_response(self, response_data: dict[str, Any]) -> dict[str, Any]:
@@ -157,12 +143,12 @@ class GrafanaClient:
             Exception: If response contains error information.
         """
         # Handle error responses
-        if 'message' in response_data and 'error' in response_data['message'].lower():
-            raise Exception(f'API Error: {response_data["message"]}')
+        if "message" in response_data and "error" in response_data["message"].lower():
+            raise Exception(f"API Error: {response_data['message']}")
 
         # Extract dashboard from response
-        if 'dashboard' in response_data:
-            return response_data['dashboard']
+        if "dashboard" in response_data:
+            return response_data["dashboard"]
         return response_data
 
     def get_dashboard(self, uid: str) -> dict[str, Any]:
@@ -178,8 +164,8 @@ class GrafanaClient:
         Raises:
             Exception: If dashboard not found or other errors occur.
         """
-        endpoint = f'/api/dashboards/uid/{uid}'
-        response = self._make_request(endpoint, 'GET')
+        endpoint = f"/api/dashboards/uid/{uid}"
+        response = self._make_request(endpoint, "GET")
         return self._handle_response(response)
 
     def create_dashboard(self, dashboard_json: dict[str, Any]) -> dict[str, Any]:
@@ -195,8 +181,8 @@ class GrafanaClient:
         Raises:
             Exception: If dashboard creation fails or validation error occurs.
         """
-        endpoint = '/api/dashboards/db'
-        response = self._make_request(endpoint, 'POST', dashboard_json)
+        endpoint = "/api/dashboards/db"
+        response = self._make_request(endpoint, "POST", dashboard_json)
         return self._handle_response(response)
 
     def update_dashboard(self, uid: str, dashboard_json: dict[str, Any]) -> dict[str, Any]:
@@ -213,6 +199,6 @@ class GrafanaClient:
         Raises:
             Exception: If dashboard not found, permission denied, or other errors.
         """
-        endpoint = f'/api/dashboards/uid/{uid}'
-        response = self._make_request(endpoint, 'PUT', dashboard_json)
+        endpoint = f"/api/dashboards/uid/{uid}"
+        response = self._make_request(endpoint, "PUT", dashboard_json)
         return self._handle_response(response)

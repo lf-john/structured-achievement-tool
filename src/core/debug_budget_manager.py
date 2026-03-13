@@ -23,7 +23,7 @@ class DebugBudgetManager:
     def _save_budgets(self):
         os.makedirs(os.path.dirname(self.budget_file_path), exist_ok=True)
         json_string = json.dumps(self.budgets, indent=4)
-        with open(self.budget_file_path, 'w') as f:
+        with open(self.budget_file_path, "w") as f:
             f.write(json_string)
 
     def increment_debug_attempt(self, task_id: str):
@@ -46,21 +46,21 @@ class DebugBudgetManager:
         """Acquire exclusive debug session lock. Returns True if acquired, False if another session is active."""
         os.makedirs(os.path.dirname(self._lock_path), exist_ok=True)
         try:
-            self._lock_fd = open(self._lock_path, 'w')
+            self._lock_fd = open(self._lock_path, "w")
             fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             self._lock_fd.write(str(os.getpid()))
             self._lock_fd.flush()
             return True
         except OSError:
             logger.warning("Another debug session is already active")
-            if hasattr(self, '_lock_fd'):
+            if hasattr(self, "_lock_fd"):
                 self._lock_fd.close()
                 self._lock_fd = None
             return False
 
     def release_debug_lock(self):
         """Release the debug session lock."""
-        if hasattr(self, '_lock_fd') and self._lock_fd:
+        if hasattr(self, "_lock_fd") and self._lock_fd:
             try:
                 fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
                 self._lock_fd.close()

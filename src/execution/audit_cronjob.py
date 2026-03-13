@@ -37,14 +37,12 @@ MAINTENANCE_AUDIT_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 class MaintenanceAuditLog:
     """Append-only JSONL audit log for maintenance operations."""
 
-    def __init__(self, path: str = MAINTENANCE_AUDIT_LOG,
-                 max_bytes: int = MAINTENANCE_AUDIT_MAX_BYTES):
+    def __init__(self, path: str = MAINTENANCE_AUDIT_LOG, max_bytes: int = MAINTENANCE_AUDIT_MAX_BYTES):
         self.path = path
         self.max_bytes = max_bytes
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
-    def write(self, source: str, action: str, details: dict | None = None,
-              llm_response_hash: str | None = None):
+    def write(self, source: str, action: str, details: dict | None = None, llm_response_hash: str | None = None):
         """Append one audit entry, rotating if the file exceeds max_bytes."""
         self._rotate_if_needed()
         entry = {
@@ -77,8 +75,7 @@ class MaintenanceAuditLog:
 
 
 class SystemAuditor:
-    def __init__(self, audit_dir: str = AUDIT_DIR,
-                 maintenance_log: MaintenanceAuditLog | None = None):
+    def __init__(self, audit_dir: str = AUDIT_DIR, maintenance_log: MaintenanceAuditLog | None = None):
         self.audit_dir = audit_dir
         self.audit_log = maintenance_log or MaintenanceAuditLog()
         os.makedirs(audit_dir, exist_ok=True)
@@ -182,7 +179,8 @@ class SystemAuditor:
         timestamp = datetime.now().isoformat()
 
         self.audit_log.write(
-            source="audit_cronjob", action="audit_started",
+            source="audit_cronjob",
+            action="audit_started",
             details={"timestamp": timestamp},
         )
 
@@ -195,7 +193,8 @@ class SystemAuditor:
         result = self.parse_audit_response(llm_response)
 
         self.audit_log.write(
-            source="audit_cronjob", action="llm_response_received",
+            source="audit_cronjob",
+            action="llm_response_received",
             details={"status": result.get("status", "unknown")},
             llm_response_hash=response_hash,
         )
@@ -204,7 +203,8 @@ class SystemAuditor:
         issues = result.get("issues", [])
         if issues:
             self.audit_log.write(
-                source="audit_cronjob", action="issues_detected",
+                source="audit_cronjob",
+                action="issues_detected",
                 details={"issues": issues},
             )
 
@@ -253,11 +253,13 @@ class SystemAuditor:
                                 if tag in content:
                                     status = tag
                                     break
-                            recent.append({
-                                "file": f"{task_dir_name}/{fname}",
-                                "status": status,
-                                "mtime": mtime,
-                            })
+                            recent.append(
+                                {
+                                    "file": f"{task_dir_name}/{fname}",
+                                    "status": status,
+                                    "mtime": mtime,
+                                }
+                            )
                     except OSError:
                         continue
 
@@ -269,7 +271,9 @@ class SystemAuditor:
         try:
             res = subprocess.run(
                 ["df", "-h", "/"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if res.returncode == 0:
                 health["disk"] = res.stdout.strip()
@@ -279,7 +283,9 @@ class SystemAuditor:
         try:
             res = subprocess.run(
                 ["free", "-h"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if res.returncode == 0:
                 health["memory"] = res.stdout.strip()
@@ -298,8 +304,9 @@ class SystemAuditor:
                 data = json.load(f)
             entries = []
             for task_id, info in data.items():
-                entries.append(f"{task_id}: attempts={info.get('attempts', '?')}, "
-                               f"last={info.get('last_attempt', 'unknown')}")
+                entries.append(
+                    f"{task_id}: attempts={info.get('attempts', '?')}, last={info.get('last_attempt', 'unknown')}"
+                )
             return entries
         except (json.JSONDecodeError, OSError):
             return []
@@ -312,7 +319,9 @@ class SystemAuditor:
             try:
                 res = subprocess.run(
                     ["systemctl", "--user", "is-active", svc],
-                    capture_output=True, text=True, timeout=5,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
                 )
                 result[svc] = res.stdout.strip() == "active"
             except (subprocess.TimeoutExpired, OSError):
@@ -324,7 +333,9 @@ class SystemAuditor:
         try:
             res = subprocess.run(
                 ["ollama", "run", "qwen3:8b", "--", prompt],
-                capture_output=True, text=True, timeout=120,
+                capture_output=True,
+                text=True,
+                timeout=120,
             )
             if res.returncode == 0:
                 return res.stdout.strip()
@@ -344,7 +355,8 @@ class SystemAuditor:
             return
 
         self.audit_log.write(
-            source="audit_cronjob", action="notification_sent",
+            source="audit_cronjob",
+            action="notification_sent",
             details={"status": status, "issue_count": len(result.get("issues", []))},
         )
 
@@ -369,14 +381,20 @@ class SystemAuditor:
         try:
             subprocess.run(
                 [
-                    "curl", "-s",
-                    "-H", f"Title: {title}",
-                    "-H", f"Priority: {priority}",
-                    "-H", f"Tags: {tags}",
-                    "-d", body,
+                    "curl",
+                    "-s",
+                    "-H",
+                    f"Title: {title}",
+                    "-H",
+                    f"Priority: {priority}",
+                    "-H",
+                    f"Tags: {tags}",
+                    "-d",
+                    body,
                     f"{NTFY_SERVER}/{NTFY_TOPIC}",
                 ],
-                capture_output=True, timeout=10,
+                capture_output=True,
+                timeout=10,
             )
         except (subprocess.TimeoutExpired, OSError):
             logger.error("Failed to send ntfy notification")
@@ -400,4 +418,5 @@ def main():
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(main())

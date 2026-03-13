@@ -68,6 +68,7 @@ class StoryModel(BaseModel):
     title: str
     description: str = ""
     type: str = "development"
+    operation_mode: str = "create"  # "create" or "edit"
     status: str = "pending"
     dependsOn: list[str] = Field(default_factory=list)
     acceptanceCriteria: list[str] = Field(default_factory=list)
@@ -226,6 +227,7 @@ class StoryState(TypedDict):
     critic_average: float | None  # Average rating across all ACs
     critic_validation: dict | None  # ValidationResult dict from validate_ratings()
     critic_retry_count: int  # Number of critic-triggered rewrites
+    verify_retry_count: int  # Number of mechanical-verify-triggered rewrites
 
 
 def create_initial_state(
@@ -291,4 +293,5 @@ def create_initial_state(
         critic_average=None,
         critic_validation=None,
         critic_retry_count=0,
+        verify_retry_count=0,
     )

@@ -1,6 +1,5 @@
 """Tests for src.workflows.dev_tdd_workflow — Graph structure and conditional edges."""
 
-
 from src.workflows.base_workflow import check_test_decision, mediator_decision, verify_decision
 from src.workflows.config_tdd_workflow import ConfigTDDWorkflow
 from src.workflows.debug_workflow import DebugWorkflow
@@ -17,10 +16,18 @@ class TestDevTDDWorkflowStructure:
 
     def test_has_all_required_nodes(self):
         nodes = set(self.graph.nodes)
-        expected = {"architect_code", "plan_code", "test_writer", "code",
-                    "parallel_verify", "learn",
-                    "tdd_red_check", "tdd_green_check",
-                    "mediator_code", "mediator_verify"}
+        expected = {
+            "architect_code",
+            "plan_code",
+            "test_writer",
+            "code",
+            "parallel_verify",
+            "learn",
+            "tdd_red_check",
+            "tdd_green_check",
+            "mediator_code",
+            "mediator_verify",
+        }
         assert expected.issubset(nodes)
 
     def test_entry_point_is_architect_code(self):

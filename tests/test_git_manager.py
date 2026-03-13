@@ -65,9 +65,7 @@ class TestAutoCommit:
     def test_commit_message_format(self, git_repo):
         (git_repo / "file.py").write_text("x = 1")
         auto_commit(str(git_repo), "US-001", "CODE")
-        result = subprocess.run(
-            ["git", "log", "-1", "--format=%s"], cwd=git_repo, capture_output=True, text=True
-        )
+        result = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=git_repo, capture_output=True, text=True)
         assert "US-001" in result.stdout
         assert "CODE" in result.stdout
 

@@ -7,8 +7,9 @@ from src.notifications.notifier import Notifier
 
 logger = logging.getLogger(__name__)
 
+
 class LLMGenerationService:
-    CLAUDE_EMAIL_COST_ESTIMATE = 0.01 # Placeholder cost, adjust as needed based on actual Claude pricing for emails
+    CLAUDE_EMAIL_COST_ESTIMATE = 0.01  # Placeholder cost, adjust as needed based on actual Claude pricing for emails
 
     def __init__(self, llm_cost_tracker: LLMCostTracker, notifier: Notifier, cli_runner: CLIRunner = None):
         self.llm_cost_tracker = llm_cost_tracker
@@ -23,7 +24,7 @@ class LLMGenerationService:
         requires_human_review = False
         generated_content = ""
 
-        claude_provider_config = get_provider("opus") # Assuming 'opus' is the default Claude model
+        claude_provider_config = get_provider("opus")  # Assuming 'opus' is the default Claude model
         get_provider("qwen3_8b")
 
         try:
@@ -36,8 +37,7 @@ class LLMGenerationService:
 
             # Attempt to generate with Claude
             generated_content = self.cli_runner.execute_llm_command(
-                provider_config=claude_provider_config,
-                prompt=task_description
+                provider_config=claude_provider_config, prompt=task_description
             )
             return generated_content, requires_human_review
         except LLMCLIExecutionError as e:
@@ -55,10 +55,7 @@ class LLMGenerationService:
         """Handles fallback to Qwen3 8B."""
         requires_human_review = True
         qwen3_provider_config = get_provider("qwen3_8b")
-        generated_content = self.cli_runner.execute_llm_command(
-            provider_config=qwen3_provider_config,
-            prompt=prompt
-        )
+        generated_content = self.cli_runner.execute_llm_command(provider_config=qwen3_provider_config, prompt=prompt)
         logger.info("Content generated with Qwen3 8B. Flagged for human review.")
         return f"[HUMAN REVIEW REQUIRED] {generated_content}", requires_human_review
 
@@ -67,4 +64,3 @@ class LLMGenerationService:
         title = "SAT: LLM Fallback Triggered"
         message = f"{reason}. Falling back to Qwen3 8B."
         self.notifier.send_ntfy(title=title, message=message, priority="high", tags="warning")
-

@@ -3,7 +3,7 @@ import os
 
 
 class LLMBudgetConfig:
-    def __init__(self, config_path: str = 'config.json'):
+    def __init__(self, config_path: str = "config.json"):
         self.config_path = config_path
         self._config = self._load_config()
 
@@ -14,7 +14,7 @@ class LLMBudgetConfig:
         try:
             with open(self.config_path) as f:
                 full_config = json.load(f)
-            return full_config.get('llm_cost_tracker', {})
+            return full_config.get("llm_cost_tracker", {})
         except json.JSONDecodeError as e:
             print(f"Error decoding config file {self.config_path}: {e}. Using default values.")
             return {}
@@ -26,16 +26,16 @@ class LLMBudgetConfig:
         return self._config.get(key, default)
 
     def get_daily_budget(self) -> float:
-        return self._get_setting('daily_budget', 0.0)
+        return self._get_setting("daily_budget", 0.0)
 
     def get_monthly_budget(self) -> float:
-        return self._get_setting('monthly_budget', 0.0)
+        return self._get_setting("monthly_budget", 0.0)
 
     def get_daily_warning_threshold(self) -> float:
-        return self._get_setting('daily_warning_threshold', 0.0)
+        return self._get_setting("daily_warning_threshold", 0.0)
 
     def get_monthly_warning_threshold(self) -> float:
-        return self._get_setting('monthly_warning_threshold', 0.0)
+        return self._get_setting("monthly_warning_threshold", 0.0)
 
     def get_model_pricing(self) -> dict:
-        return self._get_setting('model_pricing', {})
+        return self._get_setting("model_pricing", {})

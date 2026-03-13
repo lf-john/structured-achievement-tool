@@ -32,6 +32,7 @@ def retrieve_context(query: str, vector_store: VectorStore, k: int = 3) -> list[
     except Exception as e:
         # Log the error but don't crash - graceful degradation
         import logging
+
         logging.warning(f"VectorStore search failed: {e}")
         return []
 
@@ -54,22 +55,22 @@ def format_context(results: list[dict[str, Any]]) -> str:
 
     for i, result in enumerate(results, 1):
         # Extract information from result
-        text = result.get('text', 'N/A')
-        score = result.get('score', 0.0)
-        metadata = result.get('metadata', {})
+        text = result.get("text", "N/A")
+        score = result.get("score", 0.0)
+        metadata = result.get("metadata", {})
 
         # Format the task information
-        story_id = metadata.get('story_id', 'Unknown')
+        story_id = metadata.get("story_id", "Unknown")
 
         # Build the formatted entry
         entry = f"\n{i}. [{story_id}] (similarity: {score:.2f})\n   {text}"
 
         # Add additional metadata if available
-        status = metadata.get('status')
+        status = metadata.get("status")
         if status:
             entry += f"\n   Status: {status}"
 
-        phase_outputs = metadata.get('phase_outputs')
+        phase_outputs = metadata.get("phase_outputs")
         if phase_outputs:
             entry += f"\n   Phases: {', '.join(phase_outputs)}"
 

@@ -18,6 +18,7 @@ GH_TIMEOUT = 30  # seconds
 @dataclass
 class GHResult:
     """Result of a gh CLI command."""
+
     stdout: str = ""
     stderr: str = ""
     exit_code: int = 0

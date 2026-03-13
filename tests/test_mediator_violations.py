@@ -24,11 +24,15 @@ def git_repo(tmp_path):
     subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True)
     subprocess.run(
         ["git", "config", "user.email", "test@test.com"],
-        cwd=repo, capture_output=True, check=True,
+        cwd=repo,
+        capture_output=True,
+        check=True,
     )
     subprocess.run(
         ["git", "config", "user.name", "Test"],
-        cwd=repo, capture_output=True, check=True,
+        cwd=repo,
+        capture_output=True,
+        check=True,
     )
 
     (repo / "src").mkdir()
@@ -39,7 +43,9 @@ def git_repo(tmp_path):
     subprocess.run(["git", "add", "."], cwd=repo, capture_output=True, check=True)
     subprocess.run(
         ["git", "commit", "-m", "initial"],
-        cwd=repo, capture_output=True, check=True,
+        cwd=repo,
+        capture_output=True,
+        check=True,
     )
     return str(repo)
 
@@ -69,8 +75,7 @@ class TestCase1TddRed:
     Only 1 test needed: auto-revert is deterministic, no LLM verdicts.
     """
 
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["src/main.py", "tests/test_main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["src/main.py", "tests/test_main.py"])
     def test_code_modified_during_tdd_red_is_reverted(self, mock_modified, git_repo):
         src_file = os.path.join(git_repo, "src", "main.py")
         with open(src_file, "w") as f:
@@ -94,8 +99,7 @@ class TestCase2CodeAllVerdicts:
     """
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["tests/test_main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["tests/test_main.py"])
     def test_accept_verdict(self, mock_modified, mock_review, git_repo):
         test_file = os.path.join(git_repo, "tests", "test_main.py")
         with open(test_file, "w") as f:
@@ -110,8 +114,7 @@ class TestCase2CodeAllVerdicts:
         assert mock_review.called
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["tests/test_main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["tests/test_main.py"])
     def test_revert_verdict_restores_files(self, mock_modified, mock_review, git_repo):
         test_file = os.path.join(git_repo, "tests", "test_main.py")
         original = open(test_file).read()
@@ -129,8 +132,7 @@ class TestCase2CodeAllVerdicts:
             assert f.read() == original
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["tests/test_main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["tests/test_main.py"])
     def test_partial_verdict(self, mock_modified, mock_review, git_repo):
         test_file = os.path.join(git_repo, "tests", "test_main.py")
         with open(test_file, "w") as f:
@@ -144,16 +146,13 @@ class TestCase2CodeAllVerdicts:
         assert result["mediator_verdict"]["decision"] == "PARTIAL"
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["tests/test_main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["tests/test_main.py"])
     def test_retry_verdict_with_guidance(self, mock_modified, mock_review, git_repo):
         test_file = os.path.join(git_repo, "tests", "test_main.py")
         with open(test_file, "w") as f:
             f.write("def test_retry(): pass\n")
 
-        mock_review.return_value = _mock_response(
-            "RETRY", guidance="Redo without modifying tests"
-        )
+        mock_review.return_value = _mock_response("RETRY", guidance="Redo without modifying tests")
 
         state = _make_state(git_repo, "CODE")
         result = mediator_gate_node(state, routing_engine=MagicMock())
@@ -172,8 +171,7 @@ class TestCase3VerifyAllVerdicts:
     # --- Single-category tests (all 4 verdicts for test files) ---
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["tests/test_main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["tests/test_main.py"])
     def test_test_files_accept(self, mock_modified, mock_review, git_repo):
         mock_review.return_value = _mock_response("ACCEPT")
         state = _make_state(git_repo, "VERIFY")
@@ -181,8 +179,7 @@ class TestCase3VerifyAllVerdicts:
         assert result["mediator_verdict"]["decision"] == "ACCEPT"
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["tests/test_main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["tests/test_main.py"])
     def test_test_files_revert(self, mock_modified, mock_review, git_repo):
         test_file = os.path.join(git_repo, "tests", "test_main.py")
         original = open(test_file).read()
@@ -198,8 +195,7 @@ class TestCase3VerifyAllVerdicts:
             assert f.read() == original
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["tests/test_main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["tests/test_main.py"])
     def test_test_files_partial(self, mock_modified, mock_review, git_repo):
         mock_review.return_value = _mock_response("PARTIAL")
         state = _make_state(git_repo, "VERIFY")
@@ -208,8 +204,7 @@ class TestCase3VerifyAllVerdicts:
         assert result["mediator_verdict"]["decision"] in ("PARTIAL", "ACCEPT")
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["tests/test_main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["tests/test_main.py"])
     def test_test_files_retry(self, mock_modified, mock_review, git_repo):
         mock_review.return_value = _mock_response("RETRY", guidance="Fix tests")
         state = _make_state(git_repo, "VERIFY")
@@ -219,8 +214,7 @@ class TestCase3VerifyAllVerdicts:
     # --- Single-category tests (all 4 verdicts for code files) ---
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["src/main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["src/main.py"])
     def test_code_files_accept(self, mock_modified, mock_review, git_repo):
         mock_review.return_value = _mock_response("ACCEPT")
         state = _make_state(git_repo, "VERIFY")
@@ -228,8 +222,7 @@ class TestCase3VerifyAllVerdicts:
         assert result["mediator_verdict"]["decision"] == "ACCEPT"
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["src/main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["src/main.py"])
     def test_code_files_revert(self, mock_modified, mock_review, git_repo):
         src_file = os.path.join(git_repo, "src", "main.py")
         original = open(src_file).read()
@@ -245,8 +238,7 @@ class TestCase3VerifyAllVerdicts:
             assert f.read() == original
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["src/main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["src/main.py"])
     def test_code_files_partial(self, mock_modified, mock_review, git_repo):
         mock_review.return_value = _mock_response("PARTIAL")
         state = _make_state(git_repo, "VERIFY")
@@ -254,8 +246,7 @@ class TestCase3VerifyAllVerdicts:
         assert result["mediator_verdict"]["decision"] in ("PARTIAL", "ACCEPT")
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["src/main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["src/main.py"])
     def test_code_files_retry(self, mock_modified, mock_review, git_repo):
         mock_review.return_value = _mock_response("RETRY", guidance="Fix code")
         state = _make_state(git_repo, "VERIFY")
@@ -265,8 +256,7 @@ class TestCase3VerifyAllVerdicts:
     # --- Cross-category combination tests ---
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["tests/test_main.py", "src/main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["tests/test_main.py", "src/main.py"])
     def test_both_accept(self, mock_modified, mock_review, git_repo):
         mock_review.return_value = _mock_response("ACCEPT")
         state = _make_state(git_repo, "VERIFY")
@@ -275,8 +265,7 @@ class TestCase3VerifyAllVerdicts:
         assert mock_review.call_count == 2
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["tests/test_main.py", "src/main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["tests/test_main.py", "src/main.py"])
     def test_test_accept_code_revert(self, mock_modified, mock_review, git_repo):
         """ACCEPT tests + REVERT code → combined REVERT."""
         src_file = os.path.join(git_repo, "src", "main.py")
@@ -297,8 +286,7 @@ class TestCase3VerifyAllVerdicts:
             assert f.read() == original_src
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["tests/test_main.py", "src/main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["tests/test_main.py", "src/main.py"])
     def test_test_retry_code_accept(self, mock_modified, mock_review, git_repo):
         """RETRY tests + ACCEPT code → combined RETRY."""
         mock_review.side_effect = [
@@ -311,8 +299,7 @@ class TestCase3VerifyAllVerdicts:
         assert result["mediator_verdict"]["decision"] == "RETRY"
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["tests/test_main.py", "src/main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["tests/test_main.py", "src/main.py"])
     def test_revert_overrides_retry(self, mock_modified, mock_review, git_repo):
         """RETRY tests + REVERT code → REVERT wins (stronger)."""
         mock_review.side_effect = [
@@ -334,8 +321,7 @@ class TestEdgeCases:
         assert result["mediator_verdict"]["decision"] == "ACCEPT"
 
     @patch("src.workflows.base_workflow._invoke_mediator_review")
-    @patch("src.workflows.base_workflow.get_modified_files",
-           return_value=["tests/test_main.py"])
+    @patch("src.workflows.base_workflow.get_modified_files", return_value=["tests/test_main.py"])
     def test_error_falls_back_to_accept(self, mock_modified, mock_review, git_repo):
         mock_review.side_effect = Exception("LLM timeout")
         state = _make_state(git_repo, "CODE")

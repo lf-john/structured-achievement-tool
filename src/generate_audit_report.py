@@ -26,13 +26,14 @@ from health_check import (
 def format_status(status):
     """Formats a boolean or string status into color-coded Markdown."""
     if isinstance(status, str):
-        if status.upper() == 'UP' or status.upper() == 'OK' or status.upper() == 'ACTIVE':
+        if status.upper() == "UP" or status.upper() == "OK" or status.upper() == "ACTIVE":
             return "**OK**"
         else:
             return f"~~{status.upper()}~~"
     if status:
         return "**OK**"
     return "~~FAIL~~"
+
 
 def generate_report():
     """Gathers data and generates the Markdown report."""
@@ -49,7 +50,9 @@ def generate_report():
     report_lines.append("| Service | Status |")
     report_lines.append("|---|---|")
     report_lines.append(f"| SAT Daemon (`sat.service`) | {format_status(check_service('sat.service'))} |")
-    report_lines.append(f"| SAT Monitor (`sat-monitor.service`) | {format_status(check_service('sat-monitor.service'))} |")
+    report_lines.append(
+        f"| SAT Monitor (`sat-monitor.service`) | {format_status(check_service('sat-monitor.service'))} |"
+    )
     report_lines.append(f"| Ollama | {format_status(check_ollama())} |")
     report_lines.append(f"| SAT Dashboard | {format_status(check_dashboard())} |")
     report_lines.append("")
@@ -91,19 +94,20 @@ def generate_report():
         report_lines.append("")
 
         targets = promo_data.get("data", {}).get("activeTargets", [])
-        if any(t['health'] != 'up' for t in targets):
+        if any(t["health"] != "up" for t in targets):
             report_lines.append("**Unhealthy Targets:**")
             report_lines.append("| Job | Endpoint | Status | Error |")
             report_lines.append("|---|---|---|---|")
             for target in targets:
-                if target['health'] != 'up':
-                    job = target.get('scrapePool', 'N/A')
-                    endpoint = target.get('scrapeUrl', 'N/A')
-                    health = target.get('health', 'N/A').upper()
-                    error = target.get('lastError', '')
+                if target["health"] != "up":
+                    job = target.get("scrapePool", "N/A")
+                    endpoint = target.get("scrapeUrl", "N/A")
+                    health = target.get("health", "N/A").upper()
+                    error = target.get("lastError", "")
                     report_lines.append(f"| {job} | `{endpoint}` | ~~{health}~~ | `{error}` |")
 
     return "\n".join(report_lines)
+
 
 def main():
     """Main function to generate and write the report."""
@@ -118,6 +122,7 @@ def main():
     except OSError as e:
         print(f"Error writing report to {filename}: {e}", file=sys.stderr)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

@@ -129,8 +129,7 @@ class BaseAgent(ABC):
                 return self._parse_and_validate(retry_result.stdout)
             except (ValueError, ValidationError) as second_error:
                 raise ValueError(
-                    f"{self.agent_name}: Validation failed after retry. "
-                    f"First: {first_error}. Second: {second_error}"
+                    f"{self.agent_name}: Validation failed after retry. First: {first_error}. Second: {second_error}"
                 )
 
     async def _invoke(
@@ -166,8 +165,7 @@ class BaseAgent(ABC):
             if result.is_api_error and result.api_error_code == 429:
                 self.routing_engine.mark_rate_limited(candidate.name)
                 logger.warning(
-                    f"{self.agent_name}: {candidate.name} rate-limited (429), "
-                    f"backoff {backoff}s before next provider"
+                    f"{self.agent_name}: {candidate.name} rate-limited (429), backoff {backoff}s before next provider"
                 )
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 120)
@@ -176,27 +174,22 @@ class BaseAgent(ABC):
             # Non-429 result (success or other error) — return it
             if result.is_api_error:
                 raise RuntimeError(
-                    f"API error from {candidate.name}: code={result.api_error_code}, "
-                    f"stderr={result.stderr[:500]}"
+                    f"API error from {candidate.name}: code={result.api_error_code}, stderr={result.stderr[:500]}"
                 )
 
             if result.is_environmental:
-                raise RuntimeError(
-                    f"Environmental error from {candidate.name}: {result.stderr[:500]}"
-                )
+                raise RuntimeError(f"Environmental error from {candidate.name}: {result.stderr[:500]}")
 
             if result.exit_code != 0 and not result.stdout.strip():
                 raise RuntimeError(
-                    f"CLI failed for {candidate.name}: exit_code={result.exit_code}, "
-                    f"stderr={result.stderr[:500]}"
+                    f"CLI failed for {candidate.name}: exit_code={result.exit_code}, stderr={result.stderr[:500]}"
                 )
 
             return result
 
         # All providers exhausted — raise with last result info
         raise RuntimeError(
-            f"All providers rate-limited for {self.agent_name}. "
-            f"Tried: {', '.join(tried)}. Last error: 429"
+            f"All providers rate-limited for {self.agent_name}. Tried: {', '.join(tried)}. Last error: 429"
         )
 
     async def _invoke_raw(
@@ -211,9 +204,7 @@ class BaseAgent(ABC):
         No tool access needed, so agentic=False avoids burning API calls.
         """
         if len(prompt) > 10_000:
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".md", delete=False, dir=working_directory
-            ) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, dir=working_directory) as f:
                 f.write(prompt)
                 prompt_file = f.name
 

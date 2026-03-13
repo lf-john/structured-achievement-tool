@@ -177,7 +177,9 @@ class TestCreateInitialStateWithStoryModel:
 
     def test_with_extra_fields_tolerant(self):
         story_dict = {
-            "id": "s1", "title": "T", "description": "D",
+            "id": "s1",
+            "title": "T",
+            "description": "D",
             "some_extra_field": "value",
         }
         state = create_initial_state(

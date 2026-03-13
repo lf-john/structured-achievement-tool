@@ -24,6 +24,7 @@ from src.execution.verification_sdk import (
 # VerifyResult basics
 # ---------------------------------------------------------------------------
 
+
 class TestVerifyResult:
     def test_str_pass(self):
         r = VerifyResult(passed=True, checker="file", target="/tmp/x", message="ok")
@@ -42,6 +43,7 @@ class TestVerifyResult:
 # ---------------------------------------------------------------------------
 # FileChecker
 # ---------------------------------------------------------------------------
+
 
 class TestFileCheckerExists:
     def test_file_exists(self, tmp_path):
@@ -128,6 +130,7 @@ class TestFileCheckerNotContains:
 # PortChecker
 # ---------------------------------------------------------------------------
 
+
 class TestPortCheckerListening:
     def test_port_open(self):
         mock_sock = MagicMock()
@@ -193,11 +196,10 @@ class TestPortCheckerHTTP:
 # ServiceChecker
 # ---------------------------------------------------------------------------
 
+
 class TestServiceCheckerSystemd:
     def test_active_user_service(self):
-        result = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="active\n", stderr=""
-        )
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout="active\n", stderr="")
         with patch("src.execution.verification_sdk.subprocess.run", return_value=result) as mock_run:
             r = ServiceChecker().check_systemd("sat.service", user=True)
         assert r.passed is True
@@ -207,18 +209,14 @@ class TestServiceCheckerSystemd:
         assert "--user" in call_args
 
     def test_inactive_system_service(self):
-        result = subprocess.CompletedProcess(
-            args=[], returncode=3, stdout="inactive\n", stderr=""
-        )
+        result = subprocess.CompletedProcess(args=[], returncode=3, stdout="inactive\n", stderr="")
         with patch("src.execution.verification_sdk.subprocess.run", return_value=result):
             r = ServiceChecker().check_systemd("nginx.service", user=False)
         assert r.passed is False
         assert "inactive" in r.message
 
     def test_failed_service(self):
-        result = subprocess.CompletedProcess(
-            args=[], returncode=3, stdout="failed\n", stderr=""
-        )
+        result = subprocess.CompletedProcess(args=[], returncode=3, stdout="failed\n", stderr="")
         with patch("src.execution.verification_sdk.subprocess.run", return_value=result):
             r = ServiceChecker().check_systemd("broken.service")
         assert r.passed is False
@@ -235,9 +233,7 @@ class TestServiceCheckerSystemd:
 
 class TestServiceCheckerProcess:
     def test_process_running(self):
-        result = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="1234\n5678\n", stderr=""
-        )
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout="1234\n5678\n", stderr="")
         with patch("src.execution.verification_sdk.subprocess.run", return_value=result):
             r = ServiceChecker().check_process("python")
         assert r.passed is True
@@ -245,9 +241,7 @@ class TestServiceCheckerProcess:
         assert r.details["pids"] == ["1234", "5678"]
 
     def test_process_not_running(self):
-        result = subprocess.CompletedProcess(
-            args=[], returncode=1, stdout="", stderr=""
-        )
+        result = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="")
         with patch("src.execution.verification_sdk.subprocess.run", return_value=result):
             r = ServiceChecker().check_process("nonexistent_proc")
         assert r.passed is False
@@ -266,6 +260,7 @@ class TestServiceCheckerProcess:
 # ---------------------------------------------------------------------------
 # ConfigValidator
 # ---------------------------------------------------------------------------
+
 
 class TestConfigValidatorJSON:
     def test_valid_json(self, tmp_path):
@@ -308,7 +303,7 @@ class TestConfigValidatorYAML:
         with patch.dict("sys.modules", {"yaml": None}):
             # Force reimport to trigger ImportError
             # Directly patch the import inside the method
-            original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
+            original_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
 
             def mock_import(name, *args, **kwargs):
                 if name == "yaml":
@@ -391,15 +386,18 @@ class TestConfigValidatorEnvFile:
 # run_checks utility
 # ---------------------------------------------------------------------------
 
+
 class TestRunChecks:
     def test_mixed_results(self, tmp_path):
         exists_file = tmp_path / "yes.txt"
         exists_file.write_text("hello")
         fc = FileChecker()
-        results = run_checks([
-            (fc.check_exists, str(exists_file)),
-            (fc.check_exists, str(tmp_path / "nope")),
-        ])
+        results = run_checks(
+            [
+                (fc.check_exists, str(exists_file)),
+                (fc.check_exists, str(tmp_path / "nope")),
+            ]
+        )
         assert len(results) == 2
         assert results[0].passed is True
         assert results[1].passed is False
@@ -410,6 +408,7 @@ class TestRunChecks:
 
     def test_exception_in_check(self):
         """A broken callable should not crash run_checks; it yields a FAIL result."""
+
         def bad_check():
             raise RuntimeError("boom")
 
@@ -423,10 +422,12 @@ class TestRunChecks:
         f.write_text('{"ok": true}')
         fc = FileChecker()
         cv = ConfigValidator()
-        results = run_checks([
-            (fc.check_exists, str(f)),
-            (fc.check_contains, str(f), r'"ok"'),
-            (cv.check_json, str(f)),
-        ])
+        results = run_checks(
+            [
+                (fc.check_exists, str(f)),
+                (fc.check_contains, str(f), r'"ok"'),
+                (cv.check_json, str(f)),
+            ]
+        )
         assert all(r.passed for r in results)
         assert len(results) == 3

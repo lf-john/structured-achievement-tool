@@ -8,11 +8,10 @@ from src.utils.mautic_client import MauticClient
 
 
 class TestMauticClient(unittest.TestCase):
-
     def setUp(self):
         self.client = MauticClient(api_url="https://fake-mautic.com/api", token="fake-token")
 
-    @patch('requests.patch')
+    @patch("requests.patch")
     def test_update_contact_score_success(self, mock_patch):
         # Arrange
         mock_response = MagicMock()
@@ -30,10 +29,10 @@ class TestMauticClient(unittest.TestCase):
             f"https://fake-mautic.com/api/contacts/{contact_id}/edit",
             headers={"Authorization": "Bearer fake-token"},
             json={"lead_score": score},
-            timeout=30
+            timeout=30,
         )
 
-    @patch('requests.patch')
+    @patch("requests.patch")
     def test_update_contact_score_failure(self, mock_patch):
         # Arrange
         mock_patch.side_effect = requests.RequestException("API call failed")
@@ -46,5 +45,6 @@ class TestMauticClient(unittest.TestCase):
         # Assert
         self.assertFalse(result)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

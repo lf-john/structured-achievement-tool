@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 
 # Configure logging for the module
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # Import LLMCostTracker from its dedicated module
 from src.llm_cost_tracker import LLMCostTracker
@@ -16,6 +16,7 @@ class LLMDashboardReporter:
     """
     Aggregates LLM cost and GPU utilization data and formats it into a report.
     """
+
     def __init__(self, cost_tracker: LLMCostTracker, gpu_monitor: OllamaGPUMonitor):
         self.cost_tracker = cost_tracker
         self.gpu_monitor = gpu_monitor
@@ -40,11 +41,7 @@ class LLMDashboardReporter:
             daily_cost = self.cost_tracker.get_daily_cost_summary(date=today).get("claude", 0.0)
             weekly_cost = self.cost_tracker.get_weekly_cost_summary(end_date=today).get("claude", 0.0)
             monthly_cost = self.cost_tracker.get_monthly_cost_summary(end_date=today).get("claude", 0.0)
-            report["estimated_claude_cost"] = {
-                "daily": daily_cost,
-                "weekly": weekly_cost,
-                "monthly": monthly_cost
-            }
+            report["estimated_claude_cost"] = {"daily": daily_cost, "weekly": weekly_cost, "monthly": monthly_cost}
         except Exception as e:
             self.logger.error(f"Error retrieving estimated Claude cost: {e}")
             report["estimated_claude_cost"] = {"daily": 0.0, "weekly": 0.0, "monthly": 0.0}

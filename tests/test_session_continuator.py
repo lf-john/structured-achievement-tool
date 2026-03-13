@@ -23,27 +23,33 @@ def continuator():
 class TestDetectMaxTurns:
     """Test pattern matching for max-turns indicators."""
 
-    @pytest.mark.parametrize("text", [
-        "Error: maximum turns reached",
-        "Maximum turn reached, stopping.",
-        "max turns limit exceeded",
-        "Max turn limit hit",
-        "conversation turn limit reached",
-        "Conversation Turn Limit — please retry",
-        "reached maximum messages allowed",
-        "We've reached maximum messages for this session",
-    ])
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Error: maximum turns reached",
+            "Maximum turn reached, stopping.",
+            "max turns limit exceeded",
+            "Max turn limit hit",
+            "conversation turn limit reached",
+            "Conversation Turn Limit — please retry",
+            "reached maximum messages allowed",
+            "We've reached maximum messages for this session",
+        ],
+    )
     def test_detects_max_turns(self, continuator, text):
         assert continuator.detect_max_turns(text) is True
 
-    @pytest.mark.parametrize("text", [
-        "Task completed successfully",
-        "All tests pass",
-        "turn left at the next intersection",
-        "the maximum value is 42",
-        "",
-        "Here is your output:\n\nDone.",
-    ])
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Task completed successfully",
+            "All tests pass",
+            "turn left at the next intersection",
+            "the maximum value is 42",
+            "",
+            "Here is your output:\n\nDone.",
+        ],
+    )
     def test_no_false_positives(self, continuator, text):
         assert continuator.detect_max_turns(text) is False
 
@@ -59,13 +65,16 @@ class TestDetectMaxTurns:
 class TestExtractSessionId:
     """Test session ID extraction from Claude CLI output."""
 
-    @pytest.mark.parametrize("text,expected", [
-        ("session_id: abc-123_XYZ", "abc-123_XYZ"),
-        ("session id: sess-00ff", "sess-00ff"),
-        ("sessionid: mySession42", "mySession42"),
-        ("Session_Id: UPPER-case", "UPPER-case"),
-        ("blah blah session_id: id99 blah", "id99"),
-    ])
+    @pytest.mark.parametrize(
+        "text,expected",
+        [
+            ("session_id: abc-123_XYZ", "abc-123_XYZ"),
+            ("session id: sess-00ff", "sess-00ff"),
+            ("sessionid: mySession42", "mySession42"),
+            ("Session_Id: UPPER-case", "UPPER-case"),
+            ("blah blah session_id: id99 blah", "id99"),
+        ],
+    )
     def test_extracts_session_id(self, continuator, text, expected):
         assert continuator.extract_session_id(text) == expected
 
@@ -87,9 +96,7 @@ class TestContinuationLimits:
 
     def test_cannot_continue_after_max(self, continuator):
         for _ in range(MAX_CONTINUATIONS):
-            continuator._continuation_counts["task-1"] = (
-                continuator._continuation_counts.get("task-1", 0) + 1
-            )
+            continuator._continuation_counts["task-1"] = continuator._continuation_counts.get("task-1", 0) + 1
         assert continuator.can_continue("task-1") is False
 
     def test_counts_are_per_task(self, continuator):
@@ -136,9 +143,7 @@ class TestContinueSession:
 
     @patch("src.execution.session_continuator.subprocess.run")
     def test_successful_continuation(self, mock_run, continuator):
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout="Resumed output", stderr=""
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout="Resumed output", stderr="")
         result = continuator.continue_session("sess-1", "task-1", "/tmp")
 
         assert result.success is True
@@ -148,15 +153,15 @@ class TestContinueSession:
         assert result.error == ""
         mock_run.assert_called_once_with(
             ["claude", "--resume", "sess-1"],
-            capture_output=True, text=True,
-            cwd="/tmp", timeout=600,
+            capture_output=True,
+            text=True,
+            cwd="/tmp",
+            timeout=600,
         )
 
     @patch("src.execution.session_continuator.subprocess.run")
     def test_failed_continuation(self, mock_run, continuator):
-        mock_run.return_value = MagicMock(
-            returncode=1, stdout="", stderr="Error occurred"
-        )
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="Error occurred")
         result = continuator.continue_session("sess-2", "task-2", "/tmp")
 
         assert result.success is False
@@ -215,8 +220,11 @@ class TestContinuationResult:
 
     def test_all_fields(self):
         r = ContinuationResult(
-            success=False, session_id="s1",
-            continuation_count=2, output="out", error="err",
+            success=False,
+            session_id="s1",
+            continuation_count=2,
+            output="out",
+            error="err",
         )
         assert r.success is False
         assert r.session_id == "s1"

@@ -59,9 +59,7 @@ logger.setLevel(logging.DEBUG)
 
 _fh = logging.FileHandler(LOG_DIR / "monthly_calibration.log")
 _fh.setLevel(logging.DEBUG)
-_fh.setFormatter(logging.Formatter(
-    "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-))
+_fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
 logger.addHandler(_fh)
 
 _sh = logging.StreamHandler(sys.stderr)
@@ -73,6 +71,7 @@ logger.addHandler(_sh)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _period_bounds(reference: datetime | None = None) -> tuple[str, str, str]:
     """Return (label, start_iso, end_iso) for the preceding calendar month."""
@@ -171,9 +170,11 @@ def _send_ntfy(title: str, body: str, priority: str = "default"):
 # Report sections
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ReportData:
     """Aggregated data used across report sections."""
+
     label: str = ""
     start_iso: str = ""
     end_iso: str = ""
@@ -236,9 +237,9 @@ def _section_cost(rd: ReportData) -> str:
         return "\n".join(lines)
 
     # Aggregate by provider/model from llm_costs.db
-    by_model: dict[str, dict[str, float]] = defaultdict(lambda: {
-        "cost": 0.0, "prompt_tokens": 0, "completion_tokens": 0, "invocations": 0
-    })
+    by_model: dict[str, dict[str, float]] = defaultdict(
+        lambda: {"cost": 0.0, "prompt_tokens": 0, "completion_tokens": 0, "invocations": 0}
+    )
     for row in rd.cost_rows:
         model = row["model_name"]
         by_model[model]["cost"] += row["estimated_cost"]
@@ -290,8 +291,7 @@ def _section_cost(rd: ReportData) -> str:
         lines.append("|----------|------------|----------------|")
         for prov in sorted(events_cost_by_provider, key=lambda p: events_cost_by_provider[p], reverse=True):
             lines.append(
-                f"| {prov} | {events_invocations_by_provider[prov]} "
-                f"| {_fmt_usd(events_cost_by_provider[prov])} |"
+                f"| {prov} | {events_invocations_by_provider[prov]} | {_fmt_usd(events_cost_by_provider[prov])} |"
             )
         lines.append("")
 
@@ -372,9 +372,7 @@ def _section_reliability(rd: ReportData) -> str:
         for prov in sorted(provider_outcomes):
             p = provider_outcomes[prov]
             tot = p["success"] + p["fail"]
-            lines.append(
-                f"| {prov} | {p['success']} | {p['fail']} | {_pct(p['success'], tot)} |"
-            )
+            lines.append(f"| {prov} | {p['success']} | {p['fail']} | {_pct(p['success'], tot)} |")
         lines.append("")
 
     return "\n".join(lines)
@@ -397,7 +395,7 @@ def _section_quality(rd: ReportData) -> str:
     lines.append("| Provider | Agent Type | N | Completeness | Correctness | Format | Confidence |")
     lines.append("|----------|-----------|---|-------------|-------------|--------|------------|")
 
-    for (prov, atype) in sorted(key_scores):
+    for prov, atype in sorted(key_scores):
         scores = key_scores[(prov, atype)]
         n = len(scores)
         avg_comp = sum(s.get("completeness", 0) for s in scores) / n
@@ -405,10 +403,7 @@ def _section_quality(rd: ReportData) -> str:
         avg_fmt = sum(s.get("format_compliance", 0) for s in scores) / n
         conf_vals = [s.get("agent_confidence") for s in scores if s.get("agent_confidence") is not None]
         avg_conf = f"{sum(conf_vals) / len(conf_vals):.1f}" if conf_vals else "N/A"
-        lines.append(
-            f"| {prov} | {atype} | {n} | {avg_comp:.2f} | {avg_corr:.2f} "
-            f"| {avg_fmt:.2f} | {avg_conf} |"
-        )
+        lines.append(f"| {prov} | {atype} | {n} | {avg_comp:.2f} | {avg_corr:.2f} | {avg_fmt:.2f} | {avg_conf} |")
     lines.append("")
 
     # Flag low-quality combinations
@@ -457,9 +452,9 @@ def _section_routing_recommendations(rd: ReportData) -> str:
             )
 
     # Check if local models are underutilized
-    local_models = [m for m in model_costs if any(
-        tag in m.lower() for tag in ["qwen", "deepseek", "nemotron", "llama", "mistral"]
-    )]
+    local_models = [
+        m for m in model_costs if any(tag in m.lower() for tag in ["qwen", "deepseek", "nemotron", "llama", "mistral"])
+    ]
     [m for m in model_costs if m not in local_models]
     total_inv = sum(model_costs[m]["invocations"] for m in model_costs)
     local_inv = sum(model_costs[m]["invocations"] for m in local_models)
@@ -511,8 +506,7 @@ def _section_routing_recommendations(rd: ReportData) -> str:
         if n < 3:
             continue
         avg_all = sum(
-            s.get("completeness", 0) + s.get("correctness", 0) + s.get("format_compliance", 0)
-            for s in scores
+            s.get("completeness", 0) + s.get("correctness", 0) + s.get("format_compliance", 0) for s in scores
         ) / (n * 3)
         if avg_all <= 2.5:
             recommendations.append(
@@ -521,8 +515,10 @@ def _section_routing_recommendations(rd: ReportData) -> str:
             )
 
     if not recommendations:
-        lines.append("No specific routing changes recommended at this time. "
-                     "Current configuration appears reasonable based on available data.")
+        lines.append(
+            "No specific routing changes recommended at this time. "
+            "Current configuration appears reasonable based on available data."
+        )
     else:
         lines.extend(recommendations)
 
@@ -577,12 +573,16 @@ def _section_budget_projection(rd: ReportData) -> str:
 
     # Budget alert thresholds
     if projected_monthly > 50:
-        lines.append(f"> **Warning:** Projected monthly cost ({_fmt_usd(projected_monthly)}) exceeds $50. "
-                     "Review expensive model usage above.")
+        lines.append(
+            f"> **Warning:** Projected monthly cost ({_fmt_usd(projected_monthly)}) exceeds $50. "
+            "Review expensive model usage above."
+        )
         lines.append("")
     elif projected_monthly > 20:
-        lines.append(f"> **Note:** Projected monthly cost ({_fmt_usd(projected_monthly)}) is moderate. "
-                     "Monitor for growth trends.")
+        lines.append(
+            f"> **Note:** Projected monthly cost ({_fmt_usd(projected_monthly)}) is moderate. "
+            "Monitor for growth trends."
+        )
         lines.append("")
 
     return "\n".join(lines)
@@ -591,6 +591,7 @@ def _section_budget_projection(rd: ReportData) -> str:
 # ---------------------------------------------------------------------------
 # Report assembly
 # ---------------------------------------------------------------------------
+
 
 def generate_report(reference_date: datetime | None = None) -> tuple[str, str]:
     """

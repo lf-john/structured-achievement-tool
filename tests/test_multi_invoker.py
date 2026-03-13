@@ -16,42 +16,59 @@ from src.llm.providers import get_provider
 def _ok_result(provider_name: str = "qwen3_8b", stdout: str = "done") -> CLIResult:
     """Helper: build a successful CLIResult."""
     return CLIResult(
-        stdout=stdout, stderr="", exit_code=0,
-        is_api_error=False, is_environmental=False,
-        provider_name=provider_name, duration_seconds=1.0,
+        stdout=stdout,
+        stderr="",
+        exit_code=0,
+        is_api_error=False,
+        is_environmental=False,
+        provider_name=provider_name,
+        duration_seconds=1.0,
     )
 
 
 def _fail_result(provider_name: str = "qwen3_8b", code: int = 1) -> CLIResult:
     """Helper: build a failed CLIResult."""
     return CLIResult(
-        stdout="", stderr="error", exit_code=code,
-        is_api_error=False, is_environmental=False,
-        provider_name=provider_name, duration_seconds=0.5,
+        stdout="",
+        stderr="error",
+        exit_code=code,
+        is_api_error=False,
+        is_environmental=False,
+        provider_name=provider_name,
+        duration_seconds=0.5,
     )
 
 
 def _api_error_result(provider_name: str = "sonnet", error_code: int = 429) -> CLIResult:
     """Helper: build an API error CLIResult."""
     return CLIResult(
-        stdout="", stderr="rate limit", exit_code=1,
-        is_api_error=True, api_error_code=error_code,
-        provider_name=provider_name, duration_seconds=0.3,
+        stdout="",
+        stderr="rate limit",
+        exit_code=1,
+        is_api_error=True,
+        api_error_code=error_code,
+        provider_name=provider_name,
+        duration_seconds=0.3,
     )
 
 
 def _env_error_result(provider_name: str = "sonnet") -> CLIResult:
     """Helper: build an environmental error CLIResult."""
     return CLIResult(
-        stdout="", stderr="Command not found: claude", exit_code=-1,
-        is_api_error=False, is_environmental=True,
-        provider_name=provider_name, duration_seconds=0.1,
+        stdout="",
+        stderr="Command not found: claude",
+        exit_code=-1,
+        is_api_error=False,
+        is_environmental=True,
+        provider_name=provider_name,
+        duration_seconds=0.1,
     )
 
 
 # ---------------------------------------------------------------------------
 # InvocationResult
 # ---------------------------------------------------------------------------
+
 
 class TestInvocationResult:
     def test_success_property_on_ok_result(self):
@@ -79,6 +96,7 @@ class TestInvocationResult:
 # ---------------------------------------------------------------------------
 # Health Tracking
 # ---------------------------------------------------------------------------
+
 
 class TestHealthTracking:
     def test_new_provider_is_healthy(self):
@@ -151,6 +169,7 @@ class TestHealthTracking:
 # execute_with_provider
 # ---------------------------------------------------------------------------
 
+
 class TestExecuteWithProvider:
     @pytest.mark.asyncio
     @patch("src.execution.multi_invoker.invoke", new_callable=AsyncMock)
@@ -177,9 +196,7 @@ class TestExecuteWithProvider:
     async def test_passes_working_directory_and_timeout(self, mock_invoke):
         mock_invoke.return_value = _ok_result()
         invoker = MultiInvoker()
-        await invoker.execute_with_provider(
-            "qwen3_8b", "test", working_directory="/tmp", timeout=30
-        )
+        await invoker.execute_with_provider("qwen3_8b", "test", working_directory="/tmp", timeout=30)
         call_kwargs = mock_invoke.call_args[1]
         assert call_kwargs["working_directory"] == "/tmp"
         assert call_kwargs["timeout"] == 30
@@ -189,15 +206,14 @@ class TestExecuteWithProvider:
 # execute_with_routing
 # ---------------------------------------------------------------------------
 
+
 class TestExecuteWithRouting:
     @pytest.mark.asyncio
     @patch("src.execution.multi_invoker.invoke", new_callable=AsyncMock)
     async def test_primary_succeeds(self, mock_invoke):
         mock_invoke.return_value = _ok_result("sonnet")
         engine = MagicMock()
-        engine.select_with_fallback.return_value = (
-            get_provider("sonnet"), get_provider("glm5")
-        )
+        engine.select_with_fallback.return_value = (get_provider("sonnet"), get_provider("glm5"))
         invoker = MultiInvoker(routing_engine=engine)
         result = await invoker.execute_with_routing("coder", "write code")
         assert result.success is True
@@ -213,9 +229,7 @@ class TestExecuteWithRouting:
             _ok_result("glm5", "fallback answer"),
         ]
         engine = MagicMock()
-        engine.select_with_fallback.return_value = (
-            get_provider("sonnet"), get_provider("glm5")
-        )
+        engine.select_with_fallback.return_value = (get_provider("sonnet"), get_provider("glm5"))
         invoker = MultiInvoker(routing_engine=engine)
         result = await invoker.execute_with_routing("coder", "write code")
         assert result.success is True
@@ -232,9 +246,7 @@ class TestExecuteWithRouting:
             _fail_result("glm5"),
         ]
         engine = MagicMock()
-        engine.select_with_fallback.return_value = (
-            get_provider("sonnet"), get_provider("glm5")
-        )
+        engine.select_with_fallback.return_value = (get_provider("sonnet"), get_provider("glm5"))
         invoker = MultiInvoker(routing_engine=engine)
         result = await invoker.execute_with_routing("coder", "write code")
         assert result.success is False
@@ -246,9 +258,7 @@ class TestExecuteWithRouting:
         """When primary is unhealthy, healthy fallback is tried first."""
         mock_invoke.return_value = _ok_result("glm5")
         engine = MagicMock()
-        engine.select_with_fallback.return_value = (
-            get_provider("sonnet"), get_provider("glm5")
-        )
+        engine.select_with_fallback.return_value = (get_provider("sonnet"), get_provider("glm5"))
         invoker = MultiInvoker(routing_engine=engine, failure_threshold=1, cooldown_seconds=9999)
         # Mark sonnet unhealthy
         invoker._record_failure("sonnet")
@@ -263,9 +273,7 @@ class TestExecuteWithRouting:
         """When primary == fallback, only one attempt is made."""
         mock_invoke.return_value = _ok_result("sonnet")
         engine = MagicMock()
-        engine.select_with_fallback.return_value = (
-            get_provider("sonnet"), get_provider("sonnet")
-        )
+        engine.select_with_fallback.return_value = (get_provider("sonnet"), get_provider("sonnet"))
         invoker = MultiInvoker(routing_engine=engine)
         result = await invoker.execute_with_routing("coder", "write code")
         assert result.attempts == 1
@@ -275,21 +283,16 @@ class TestExecuteWithRouting:
     async def test_routing_passes_agent_params(self, mock_invoke):
         mock_invoke.return_value = _ok_result("sonnet")
         engine = MagicMock()
-        engine.select_with_fallback.return_value = (
-            get_provider("sonnet"), get_provider("glm5")
-        )
+        engine.select_with_fallback.return_value = (get_provider("sonnet"), get_provider("glm5"))
         invoker = MultiInvoker(routing_engine=engine)
-        await invoker.execute_with_routing(
-            "coder", "code", story_complexity=7, is_code_task=True
-        )
-        engine.select_with_fallback.assert_called_once_with(
-            agent_name="coder", story_complexity=7, is_code_task=True
-        )
+        await invoker.execute_with_routing("coder", "code", story_complexity=7, is_code_task=True)
+        engine.select_with_fallback.assert_called_once_with(agent_name="coder", story_complexity=7, is_code_task=True)
 
 
 # ---------------------------------------------------------------------------
 # execute_local_first
 # ---------------------------------------------------------------------------
+
 
 class TestExecuteLocalFirst:
     @pytest.mark.asyncio
@@ -339,9 +342,7 @@ class TestExecuteLocalFirst:
     async def test_preferred_local_override(self, mock_list, mock_invoke):
         mock_invoke.return_value = _ok_result("deepseek_r1", "deepseek answer")
         invoker = MultiInvoker()
-        result = await invoker.execute_local_first(
-            "summarize", preferred_local="deepseek_r1"
-        )
+        result = await invoker.execute_local_first("summarize", preferred_local="deepseek_r1")
         assert result.provider_name == "deepseek_r1"
         # list_providers should NOT be called when preferred_local is set
         mock_list.assert_not_called()
@@ -356,9 +357,7 @@ class TestExecuteLocalFirst:
             _ok_result("haiku", "haiku answer"),
         ]
         invoker = MultiInvoker()
-        result = await invoker.execute_local_first(
-            "summarize", cloud_fallback="haiku"
-        )
+        result = await invoker.execute_local_first("summarize", cloud_fallback="haiku")
         assert result.provider_name == "haiku"
         assert result.was_failover is True
 
@@ -380,6 +379,7 @@ class TestExecuteLocalFirst:
 # ---------------------------------------------------------------------------
 # Edge Cases
 # ---------------------------------------------------------------------------
+
 
 class TestEdgeCases:
     def test_default_routing_engine_created(self):

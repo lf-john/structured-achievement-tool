@@ -73,7 +73,11 @@ class TestPrepareNode:
     def test_escalation_action(self):
         state = _make_state()
         result = prepare_node(state, story_type="escalation")
-        assert "diagnostic" in result["human_summary"].lower() or "guidance" in result["human_summary"].lower() or "Review" in result["human_summary"]
+        assert (
+            "diagnostic" in result["human_summary"].lower()
+            or "guidance" in result["human_summary"].lower()
+            or "Review" in result["human_summary"]
+        )
 
     def test_includes_deadline_when_present(self):
         state = _make_state()
@@ -104,18 +108,22 @@ class TestPrepareNode:
         assert result["phase_outputs"][0]["status"] == PhaseStatus.COMPLETE
 
     def test_includes_prior_phase_context(self):
-        state = _make_state(phase_outputs=[
-            {"phase": "CODE", "output": "Wrote main.py with handler logic"},
-        ])
+        state = _make_state(
+            phase_outputs=[
+                {"phase": "CODE", "output": "Wrote main.py with handler logic"},
+            ]
+        )
         result = prepare_node(state, story_type="assignment")
         assert "CODE" in result["human_summary"]
 
     def test_excludes_prepare_notify_pause_from_context(self):
-        state = _make_state(phase_outputs=[
-            {"phase": "PREPARE", "output": "Should be excluded"},
-            {"phase": "NOTIFY", "output": "Should be excluded"},
-            {"phase": "CODE", "output": "Should be included"},
-        ])
+        state = _make_state(
+            phase_outputs=[
+                {"phase": "PREPARE", "output": "Should be excluded"},
+                {"phase": "NOTIFY", "output": "Should be excluded"},
+                {"phase": "CODE", "output": "Should be included"},
+            ]
+        )
         result = prepare_node(state, story_type="assignment")
         # CODE output included, PREPARE/NOTIFY excluded
         assert "Should be included" in result["human_summary"]
@@ -226,10 +234,12 @@ class TestPackageDiagnosticsNode:
         assert "ImportError" in pkg["failure_context"]
 
     def test_collects_attempted_fixes(self):
-        state = _make_state(phase_outputs=[
-            {"phase": "CODE", "status": "failed", "output": "Tried adding import"},
-            {"phase": "FIX", "status": "failed", "output": "Tried installing package"},
-        ])
+        state = _make_state(
+            phase_outputs=[
+                {"phase": "CODE", "status": "failed", "output": "Tried adding import"},
+                {"phase": "FIX", "status": "failed", "output": "Tried installing package"},
+            ]
+        )
         result = package_diagnostics_node(state)
         assert len(result["escalation_package"]["attempted_fixes"]) == 2
 

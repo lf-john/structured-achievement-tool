@@ -97,7 +97,8 @@ class VectorStore:
         if len(text) > MAX_CHARS:
             logger.debug(
                 "Truncating document from %d to %d chars before embedding",
-                len(text), MAX_CHARS,
+                len(text),
+                MAX_CHARS,
             )
             text = EmbeddingService._truncate(text, MAX_CHARS)
 
@@ -114,19 +115,13 @@ class VectorStore:
 
         # Insert document text and metadata
         metadata_json = json.dumps(metadata)
-        cursor.execute(
-            "INSERT INTO documents (text, metadata) VALUES (?, ?)",
-            (text, metadata_json)
-        )
+        cursor.execute("INSERT INTO documents (text, metadata) VALUES (?, ?)", (text, metadata_json))
         doc_id = cursor.lastrowid
 
         # Store the embedding vector
         # Convert embedding to bytes for storage
         embedding_blob = self._serialize_embedding(embedding)
-        cursor.execute(
-            "INSERT INTO vec_documents (doc_id, embedding) VALUES (?, ?)",
-            (doc_id, embedding_blob)
-        )
+        cursor.execute("INSERT INTO vec_documents (doc_id, embedding) VALUES (?, ?)", (doc_id, embedding_blob))
 
         self.conn.commit()
         return doc_id
@@ -189,7 +184,8 @@ class VectorStore:
 
         # Perform vector similarity search
         # sqlite-vec uses cosine distance by default
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT
                 d.id,
                 d.text,
@@ -199,20 +195,24 @@ class VectorStore:
             JOIN documents d ON d.id = v.doc_id
             ORDER BY distance ASC
             LIMIT ?
-        """, (query_blob, k))
+        """,
+            (query_blob, k),
+        )
 
         results = []
         for row in cursor.fetchall():
             doc_id, text, metadata_json, distance = row
             metadata = json.loads(metadata_json) if metadata_json else {}
 
-            results.append({
-                "id": doc_id,
-                "text": text,
-                "metadata": metadata,
-                "score": 1.0 - distance,  # Convert distance to similarity score
-                "distance": distance
-            })
+            results.append(
+                {
+                    "id": doc_id,
+                    "text": text,
+                    "metadata": metadata,
+                    "score": 1.0 - distance,  # Convert distance to similarity score
+                    "distance": distance,
+                }
+            )
 
         return results
 
@@ -231,7 +231,7 @@ class VectorStore:
         import struct
 
         # Pack floats as binary data
-        return struct.pack(f'{len(embedding)}f', *embedding)
+        return struct.pack(f"{len(embedding)}f", *embedding)
 
     def close(self):
         """Close the database connection."""

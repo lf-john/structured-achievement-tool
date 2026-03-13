@@ -24,13 +24,7 @@ def get_expected_models() -> list[str]:
     Returns:
         List: List of expected model name substrings
     """
-    return [
-        "qwen",
-        "qwen2.5-coder",
-        "deepseek-r1",
-        "nemotron-mini",
-        "nomic-embed-text"
-    ]
+    return ["qwen", "qwen2.5-coder", "deepseek-r1", "nemotron-mini", "nomic-embed-text"]
 
 
 def _extract_model_core_parts(model_name: str) -> list[str]:
@@ -52,11 +46,12 @@ def _extract_model_core_parts(model_name: str) -> list[str]:
 
     # Remove version suffixes (e.g., -v1, -v2, -1.5, -2, etc.)
     import re
-    parts = re.sub(r'-v\d+(\.\d+)?$', '', parts)
-    parts = re.sub(r'(?<!:)-\d+$', '', parts)  # Remove trailing numbers if not part of version (like :7b)
-    parts = re.sub(r'(?<!:)-\d+b$', '', parts)  # Remove trailing 'b' if not part of version (like :7b)
 
-    return parts.split('-')
+    parts = re.sub(r"-v\d+(\.\d+)?$", "", parts)
+    parts = re.sub(r"(?<!:)-\d+$", "", parts)  # Remove trailing numbers if not part of version (like :7b)
+    parts = re.sub(r"(?<!:)-\d+b$", "", parts)  # Remove trailing 'b' if not part of version (like :7b)
+
+    return parts.split("-")
 
 
 def verify_ollama_models(api_url: str = "http://localhost:11434/api/tags") -> tuple[bool, list[str]]:

@@ -41,7 +41,7 @@ def analyze_results(data: list[dict[str, Any]]) -> tuple:
                 "timeouts": 0,
                 "errors": 0,
                 "total_runs": 0,
-                "successful_runs": 0
+                "successful_runs": 0,
             }
 
         # Track metrics based on status
@@ -63,43 +63,47 @@ def analyze_results(data: list[dict[str, Any]]) -> tuple:
             summary[model]["total_runs"] += 1
 
             # Add to detailed dataframe
-            detailed_rows.append({
-                "model_name": model,
-                "prompt": prompt,
-                "tokens_per_sec": tokens_per_sec,
-                "time_to_first_token_ms": time_to_first,
-                "total_response_time_ms": item.get("total_response_time_ms", 0),
-                "status": status
-            })
+            detailed_rows.append(
+                {
+                    "model_name": model,
+                    "prompt": prompt,
+                    "tokens_per_sec": tokens_per_sec,
+                    "time_to_first_token_ms": time_to_first,
+                    "total_response_time_ms": item.get("total_response_time_ms", 0),
+                    "status": status,
+                }
+            )
         elif status == "timeout":
             summary[model]["timeouts"] += 1
             summary[model]["total_runs"] += 1
-            detailed_rows.append({
-                "model_name": model,
-                "prompt": prompt,
-                "tokens_per_sec": 0,
-                "time_to_first_token_ms": 0,
-                "total_response_time_ms": item.get("total_response_time_ms", 0),
-                "status": "TIMEOUT"
-            })
+            detailed_rows.append(
+                {
+                    "model_name": model,
+                    "prompt": prompt,
+                    "tokens_per_sec": 0,
+                    "time_to_first_token_ms": 0,
+                    "total_response_time_ms": item.get("total_response_time_ms", 0),
+                    "status": "TIMEOUT",
+                }
+            )
         else:  # error
             summary[model]["errors"] += 1
             summary[model]["total_runs"] += 1
-            detailed_rows.append({
-                "model_name": model,
-                "prompt": prompt,
-                "tokens_per_sec": 0,
-                "time_to_first_token_ms": 0,
-                "total_response_time_ms": item.get("total_response_time_ms", 0),
-                "status": "ERROR"
-            })
+            detailed_rows.append(
+                {
+                    "model_name": model,
+                    "prompt": prompt,
+                    "tokens_per_sec": 0,
+                    "time_to_first_token_ms": 0,
+                    "total_response_time_ms": item.get("total_response_time_ms", 0),
+                    "status": "ERROR",
+                }
+            )
 
     # Calculate averages
     for model in summary:
         if summary[model]["successful_runs"] > 0:
-            summary[model]["tokens_per_sec"] = (
-                summary[model]["tokens_per_sec"] / summary[model]["successful_runs"]
-            )
+            summary[model]["tokens_per_sec"] = summary[model]["tokens_per_sec"] / summary[model]["successful_runs"]
             summary[model]["time_to_first_token_ms"] = (
                 summary[model]["time_to_first_token_ms"] / summary[model]["successful_runs"]
             )
@@ -125,25 +129,21 @@ def generate_recommendations(summary: dict[str, dict[str, Any]]) -> str:
     # Filter models that have successful runs and no errors
     # Handle case where successful_runs key might not exist
     # A model is valid if it has any successful runs OR has no errors (indicating it was attempted)
-    valid_models = {
-        model: data for model, data in summary.items()
-        if data.get("errors", 0) == 0
-    }
+    valid_models = {model: data for model, data in summary.items() if data.get("errors", 0) == 0}
 
     if not valid_models:
         return "| Task Type | Recommended Model |\n|---|---|\n| - | No valid models |"
 
     # Find best model for each category
     # Simple Q&A: highest tokens_per_sec
-    simple_qa = max(valid_models.items(),
-                   key=lambda x: x[1]["tokens_per_sec"],
-                   default=(None, {"tokens_per_sec": 0}))
+    simple_qa = max(valid_models.items(), key=lambda x: x[1]["tokens_per_sec"], default=(None, {"tokens_per_sec": 0}))
 
     # Reasoning & Code: lowest response time with no errors
-    reasoning_code = min(valid_models.items(),
-                        key=lambda x: (x[1]["total_response_time_ms"],
-                                     x[1]["errors"]),  # Secondarily minimize errors
-                        default=(None, {"total_response_time_ms": float('inf')}))
+    reasoning_code = min(
+        valid_models.items(),
+        key=lambda x: (x[1]["total_response_time_ms"], x[1]["errors"]),  # Secondarily minimize errors
+        default=(None, {"total_response_time_ms": float("inf")}),
+    )
 
     # Generate Markdown table
     recommendations = [
@@ -154,15 +154,13 @@ def generate_recommendations(summary: dict[str, dict[str, Any]]) -> str:
         f"| Reasoning | {reasoning_code[0] if reasoning_code[0] else 'N/A'} | Fastest response with no errors "
         f"(avg time: {reasoning_code[1]['total_response_time_ms']:.2f}ms) |",
         f"| Code | {reasoning_code[0] if reasoning_code[0] else 'N/A'} | Same as reasoning (code requires "
-        f"reasoning capabilities) |"
+        f"reasoning capabilities) |",
     ]
 
     return "\n".join(recommendations)
 
 
-def generate_report(summary: dict[str, dict[str, Any]],
-                    detailed_df: pd.DataFrame,
-                    output_path: str) -> None:
+def generate_report(summary: dict[str, dict[str, Any]], detailed_df: pd.DataFrame, output_path: str) -> None:
     """
     Generate comprehensive benchmark report in Markdown format.
 
@@ -195,7 +193,7 @@ def generate_report(summary: dict[str, dict[str, Any]],
         "## Benchmark Summary",
         "",
         "| Model | Tokens/sec | Time to First Token (ms) | Total Response Time (ms) | Successful Runs | Timeouts | Errors |",
-        "|---|---|---|---|---|---|---|"
+        "|---|---|---|---|---|---|---|",
     ]
 
     # Add model rows
@@ -218,50 +216,44 @@ def generate_report(summary: dict[str, dict[str, Any]],
             f"{status_markdown} | {timeouts} | {errors} |"
         )
 
-    lines.extend([
-        "",
-        "## Execution Summary",
-        "",
-        f"- **Total Models Benchmarked:** {len(models)}",
-        f"- **Total Runs:** {sum(data.get('total_runs', 0) for data in summary.values())}",
-        f"- **Successful Runs:** {sum(data.get('successful_runs', 0) for data in summary.values())}",
-        f"- **Timeouts:** {sum(data.get('timeouts', 0) for data in summary.values())}",
-        f"- **Errors:** {sum(data.get('errors', 0) for data in summary.values())}",
-        ""
-    ])
+    lines.extend(
+        [
+            "",
+            "## Execution Summary",
+            "",
+            f"- **Total Models Benchmarked:** {len(models)}",
+            f"- **Total Runs:** {sum(data.get('total_runs', 0) for data in summary.values())}",
+            f"- **Successful Runs:** {sum(data.get('successful_runs', 0) for data in summary.values())}",
+            f"- **Timeouts:** {sum(data.get('timeouts', 0) for data in summary.values())}",
+            f"- **Errors:** {sum(data.get('errors', 0) for data in summary.values())}",
+            "",
+        ]
+    )
 
     # Recommendations
-    lines.extend([
-        "## Recommendations",
-        "",
-        generate_recommendations(summary),
-        ""
-    ])
+    lines.extend(["## Recommendations", "", generate_recommendations(summary), ""])
 
     # Detailed Results
-    lines.extend([
-        "## Detailed Results",
-        "",
-        "### Per-Model Analysis",
-        ""
-    ])
+    lines.extend(["## Detailed Results", "", "### Per-Model Analysis", ""])
 
     # Group by model
     for model in models:
         model_name = model.split(":")[0]
         model_data = summary[model]
 
-        lines.extend([
-            f"#### {model_name}",
-            "",
-            f"- **Average Tokens/sec:** {model_data.get('tokens_per_sec', 0):.2f}",
-            f"- **Average Time to First Token:** {model_data.get('time_to_first_token_ms', 0):.2f} ms",
-            f"- **Average Total Response Time:** {model_data.get('total_response_time_ms', 0):.2f} ms",
-            f"- **Successful Runs:** {model_data.get('successful_runs', 0)}",
-            f"- **Timeouts:** {model_data.get('timeouts', 0)}",
-            f"- **Errors:** {model_data.get('errors', 0)}",
-            ""
-        ])
+        lines.extend(
+            [
+                f"#### {model_name}",
+                "",
+                f"- **Average Tokens/sec:** {model_data.get('tokens_per_sec', 0):.2f}",
+                f"- **Average Time to First Token:** {model_data.get('time_to_first_token_ms', 0):.2f} ms",
+                f"- **Average Total Response Time:** {model_data.get('total_response_time_ms', 0):.2f} ms",
+                f"- **Successful Runs:** {model_data.get('successful_runs', 0)}",
+                f"- **Timeouts:** {model_data.get('timeouts', 0)}",
+                f"- **Errors:** {model_data.get('errors', 0)}",
+                "",
+            ]
+        )
 
         # Add per-prompt details if available
         model_rows = detailed_df[detailed_df["model_name"] == model]
@@ -297,20 +289,13 @@ def main() -> None:
     """
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Generate benchmark report from Ollama benchmark results"
-    )
-    parser.add_argument(
-        "--input",
-        type=str,
-        required=True,
-        help="Path to input JSON file with benchmark results"
-    )
+    parser = argparse.ArgumentParser(description="Generate benchmark report from Ollama benchmark results")
+    parser.add_argument("--input", type=str, required=True, help="Path to input JSON file with benchmark results")
     parser.add_argument(
         "--output",
         type=str,
         default="~/projects/system-reports/ollama_benchmark.md",
-        help="Path to output Markdown report (default: ~/projects/system-reports/ollama_benchmark.md)"
+        help="Path to output Markdown report (default: ~/projects/system-reports/ollama_benchmark.md)",
     )
 
     args = parser.parse_args()

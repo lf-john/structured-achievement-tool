@@ -22,8 +22,10 @@ logger = logging.getLogger(__name__)
 
 # --- Pydantic Response Models ---
 
+
 class RequiredInput(BaseModel):
     """A single piece of information the human must provide."""
+
     name: str = Field(description="Short identifier, e.g. 'aws_access_key'")
     description: str = Field(description="What this input is and where to find it")
     example: str = Field(default="", description="Example value (redacted if sensitive)")
@@ -32,6 +34,7 @@ class RequiredInput(BaseModel):
 
 class VerificationCheck(BaseModel):
     """A verification check for human task TDD."""
+
     type: str = Field(description="Check type: command, http, dns, port_check, file_check, service_check, config_check")
     description: str = Field(default="", description="What this check verifies")
     command: str = Field(default="", description="Shell command (for command type)")
@@ -46,36 +49,19 @@ class VerificationCheck(BaseModel):
 
 class HumanTaskResponse(BaseModel):
     """Response from the Human Task Agent."""
-    needs_human: bool = Field(
-        description="Whether this story requires human intervention"
-    )
-    reason: str = Field(
-        default="",
-        description="Why human intervention is needed (or why it is not)"
-    )
-    instructions: str = Field(
-        default="",
-        description="Step-by-step instructions for the human operator"
-    )
+
+    needs_human: bool = Field(description="Whether this story requires human intervention")
+    reason: str = Field(default="", description="Why human intervention is needed (or why it is not)")
+    instructions: str = Field(default="", description="Step-by-step instructions for the human operator")
     required_inputs: list[RequiredInput] = Field(
-        default_factory=list,
-        description="List of inputs the human must provide"
+        default_factory=list, description="List of inputs the human must provide"
     )
-    provider: str = Field(
-        default="",
-        description="External service provider, e.g. 'AWS', 'Cloudflare', 'GitHub'"
-    )
-    documentation_url: str = Field(
-        default="",
-        description="URL to relevant documentation for the human task"
-    )
-    estimated_time_minutes: int = Field(
-        default=0,
-        description="Estimated time for the human to complete the task"
-    )
+    provider: str = Field(default="", description="External service provider, e.g. 'AWS', 'Cloudflare', 'GitHub'")
+    documentation_url: str = Field(default="", description="URL to relevant documentation for the human task")
+    estimated_time_minutes: int = Field(default=0, description="Estimated time for the human to complete the task")
     verification_checks: list[VerificationCheck] = Field(
         default_factory=list,
-        description="TDD-style verification checks: quick checks (immediate) and final checks (delayed)"
+        description="TDD-style verification checks: quick checks (immediate) and final checks (delayed)",
     )
 
 
@@ -84,26 +70,64 @@ class HumanTaskResponse(BaseModel):
 # Keywords that strongly indicate human intervention is required
 HUMAN_KEYWORDS = {
     # Credentials and secrets
-    "api key", "api_key", "apikey", "secret key", "secret_key",
-    "access key", "access_key", "credentials", "password", "token",
-    "oauth", "client_id", "client_secret", "private key",
+    "api key",
+    "api_key",
+    "apikey",
+    "secret key",
+    "secret_key",
+    "access key",
+    "access_key",
+    "credentials",
+    "password",
+    "token",
+    "oauth",
+    "client_id",
+    "client_secret",
+    "private key",
     # External UI / console actions
-    "console", "dashboard", "portal", "admin panel", "web ui",
-    "control panel", "management console",
+    "console",
+    "dashboard",
+    "portal",
+    "admin panel",
+    "web ui",
+    "control panel",
+    "management console",
     # DNS and domain
-    "dns record", "dns configuration", "domain verification",
-    "cname", "mx record", "txt record", "a record", "aaaa record",
-    "nameserver", "registrar",
+    "dns record",
+    "dns configuration",
+    "domain verification",
+    "cname",
+    "mx record",
+    "txt record",
+    "a record",
+    "aaaa record",
+    "nameserver",
+    "registrar",
     # Cloud provider setup
-    "aws ses", "ses verification", "ses sandbox",
-    "cloudflare", "route53", "google cloud console",
-    "azure portal", "digitalocean",
+    "aws ses",
+    "ses verification",
+    "ses sandbox",
+    "cloudflare",
+    "route53",
+    "google cloud console",
+    "azure portal",
+    "digitalocean",
     # Manual configuration
-    "manual configuration", "manual setup", "manually configure",
-    "sign up", "register", "create account", "enable service",
-    "activate", "verify domain", "verify email",
+    "manual configuration",
+    "manual setup",
+    "manually configure",
+    "sign up",
+    "register",
+    "create account",
+    "enable service",
+    "activate",
+    "verify domain",
+    "verify email",
     # Billing and subscriptions
-    "billing", "subscription", "payment method", "pricing tier",
+    "billing",
+    "subscription",
+    "payment method",
+    "pricing tier",
     "upgrade plan",
 }
 
@@ -149,9 +173,7 @@ def detect_human_needs(story: dict) -> bool:
         return True
 
     # Check title and description for human keywords
-    text = (
-        story.get("title", "") + " " + story.get("description", "")
-    ).lower()
+    text = (story.get("title", "") + " " + story.get("description", "")).lower()
 
     for keyword in HUMAN_KEYWORDS:
         if keyword in text:
@@ -162,9 +184,7 @@ def detect_human_needs(story: dict) -> bool:
 
 def detect_provider(story: dict) -> str:
     """Detect the external service provider from story text."""
-    text = (
-        story.get("title", "") + " " + story.get("description", "")
-    ).lower()
+    text = (story.get("title", "") + " " + story.get("description", "")).lower()
 
     for pattern, provider in PROVIDER_PATTERNS.items():
         if pattern in text:
@@ -234,10 +254,7 @@ class HumanTaskAgent(BaseAgent):
             return result
 
         except Exception as e:
-            logger.warning(
-                f"HumanTaskAgent LLM analysis failed: {e}. "
-                f"Falling back to heuristic detection."
-            )
+            logger.warning(f"HumanTaskAgent LLM analysis failed: {e}. Falling back to heuristic detection.")
             # Fallback: use heuristics to build a basic response
             return self._heuristic_response(story)
 

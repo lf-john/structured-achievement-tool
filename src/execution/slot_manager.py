@@ -58,7 +58,7 @@ class SlotManager:
         """Acquire exclusive flock for an LLM provider. Returns True if acquired."""
         lock_path = os.path.join(self.lock_dir, f"{provider_name}.lock")
         try:
-            fd = open(lock_path, 'w')
+            fd = open(lock_path, "w")
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             fd.write(f"{os.getpid()}\n")
             fd.flush()

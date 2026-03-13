@@ -89,10 +89,7 @@ class RateLimitHandler:
             reason=reason,
         )
         self._queue.append(entry)
-        logger.info(
-            f"Rate limit retry queued: {task_file} attempt {attempt}, "
-            f"next retry at +{backoff:.0f}s"
-        )
+        logger.info(f"Rate limit retry queued: {task_file} attempt {attempt}, next retry at +{backoff:.0f}s")
         self._save_state()
         return entry
 
@@ -158,14 +155,16 @@ class RateLimitHandler:
         now = time.time()
         entries = []
         for entry in self._queue:
-            entries.append({
-                "task_file": entry.task_file,
-                "story_id": entry.story_id,
-                "attempt": entry.attempt,
-                "reason": entry.reason,
-                "seconds_until_retry": max(0, entry.next_retry_at - now),
-                "ready": entry.next_retry_at <= now,
-            })
+            entries.append(
+                {
+                    "task_file": entry.task_file,
+                    "story_id": entry.story_id,
+                    "attempt": entry.attempt,
+                    "reason": entry.reason,
+                    "seconds_until_retry": max(0, entry.next_retry_at - now),
+                    "ready": entry.next_retry_at <= now,
+                }
+            )
         return {
             "queue_size": len(self._queue),
             "token_exhausted": self._token_exhausted,
@@ -201,9 +200,7 @@ class RateLimitHandler:
             with open(self.state_file) as f:
                 data = json.load(f)
             self._token_exhausted = data.get("token_exhausted", False)
-            self._queue = [
-                RetryEntry(**entry) for entry in data.get("queue", [])
-            ]
+            self._queue = [RetryEntry(**entry) for entry in data.get("queue", [])]
             logger.debug(f"Loaded rate limit state: {len(self._queue)} entries")
         except (json.JSONDecodeError, TypeError, KeyError) as e:
             logger.warning(f"Failed to load rate limit state from {self.state_file}: {e}")

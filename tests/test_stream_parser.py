@@ -192,6 +192,6 @@ class TestStreamProcess:
         mock_process.stdout.read = mock_read
         result = await p.stream_process(mock_process)
 
-        assert result == content.decode('utf-8')
+        assert result == content.decode("utf-8")
         with open(tmp_output) as f:
-            assert f.read() == content.decode('utf-8')
+            assert f.read() == content.decode("utf-8")

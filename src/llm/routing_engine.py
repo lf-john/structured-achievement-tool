@@ -5,6 +5,7 @@ Selects the optimal LLM provider for each agent based on:
 - Agent complexity rating (from the definitive plan)
 - Model power ratings
 - Preference: local → cheap cloud → expensive cloud
+- Historical performance data (tie-breaker only)
 
 Config overrides via phase_models in config.json bypass these rules.
 """
@@ -107,7 +108,7 @@ class RoutingEngine:
     CLOUD_CIRCUIT_COOLDOWN = 300  # 5 minutes
     AUTH_CIRCUIT_COOLDOWN = 1800  # 30 minutes (key probably revoked)
 
-    def __init__(self, config_path: str | None = None):
+    def __init__(self, config_path: str | None = None, performance_tracker=None):
         self.config = {}
         self.phase_overrides = {}
         # Track rate-limited providers: {provider_name: timestamp_of_429}
@@ -119,6 +120,8 @@ class RoutingEngine:
         # Generalized circuit breaker state
         # {provider_name: {"failures": int, "opened_at": float, "cooldown": float, "last_error": str}}
         self._circuit_state: dict[str, dict] = {}
+        # Historical performance tracker (optional, used as tie-breaker)
+        self._perf_tracker = performance_tracker
 
         if config_path and os.path.exists(config_path):
             with open(config_path) as f:
@@ -364,16 +367,21 @@ class RoutingEngine:
         agent_name: str,
         story_complexity: int | None = None,
         is_code_task: bool = False,
+        story_type: str | None = None,
     ) -> ProviderConfig:
         """Select the best provider for an agent.
 
         Applies the 4 rules in order, then selects from eligible models
-        preferring: local → cheap cloud → expensive cloud.
+        preferring: local → cheap cloud → expensive cloud.  When a
+        PerformanceTracker is attached and has enough data, historical
+        success rates are used as a tie-breaker among equally-ranked
+        providers.
 
         Args:
             agent_name: Name of the agent (key in AGENT_COMPLEXITY)
             story_complexity: Override complexity for variable agents (coder, basic_info)
             is_code_task: If True, use code_power instead of power for comparison
+            story_type: Story type for historical performance lookup
         """
         # Pause-all gate (Failure State 5): wait out the cascade cooldown
         if self.is_paused:
@@ -444,12 +452,17 @@ class RoutingEngine:
             logger.warning(f"No eligible model for {agent_name} (complexity={complexity}), falling back to {default}")
             return get_provider(default)
 
+        # Pre-compute health status BEFORE sorting to avoid state mutation
+        # during sort key evaluation (both methods have side effects).
+        _circuit_status = {p.name: self.is_circuit_open(p.name) for p in eligible}
+        _rate_status = {p.name: self._is_rate_limited(p.name) for p in eligible}
+
         # Sort by preference: healthy first, non-rate-limited, local, cheapest, highest power
         def sort_key(p: ProviderConfig):
             cost_order = {"free": 0, "minimal": 1, "low": 2, "medium": 3, "high": 4}
             power = p.code_power if is_code_task else p.power
-            circuit_open = 2 if self.is_circuit_open(p.name) else 0
-            rate_limited = 1 if self._is_rate_limited(p.name) else 0
+            circuit_open = 2 if _circuit_status[p.name] else 0
+            rate_limited = 1 if _rate_status[p.name] else 0
             return (
                 circuit_open,  # Circuit-broken last
                 rate_limited,  # Non-rate-limited first
@@ -459,14 +472,82 @@ class RoutingEngine:
             )
 
         eligible.sort(key=sort_key)
+
+        # Historical performance tie-breaker: re-rank providers that share the
+        # same primary sort key (same health / local / cost / power tier) using
+        # historical success-rate data.  This is a TIE-BREAKER only — it cannot
+        # override the routing rules (health, locality, cost preference).
+        if self._perf_tracker and story_type and len(eligible) > 1:
+            eligible = self._apply_performance_tiebreak(
+                eligible,
+                agent_name,
+                story_type,
+                is_code_task,
+                sort_key,
+            )
+
         selected = eligible[0]
-        if self.is_circuit_open(selected.name):
+        if _circuit_status[selected.name]:
             logger.warning(f"All eligible providers circuit-broken for {agent_name}, using {selected.name} anyway")
-        elif self._is_rate_limited(selected.name):
+        elif _rate_status[selected.name]:
             logger.warning(f"All eligible providers rate-limited for {agent_name}, using {selected.name} anyway")
         else:
             logger.debug(f"Routing {agent_name} (complexity={complexity}) → {selected.name} (power={selected.power})")
         return selected
+
+    def _apply_performance_tiebreak(
+        self,
+        eligible: list[ProviderConfig],
+        agent_name: str,
+        story_type: str,
+        is_code_task: bool,
+        sort_key_fn,
+    ) -> list[ProviderConfig]:
+        """Re-order providers that share the same primary sort key using historical data.
+
+        Groups providers by their existing sort key, then within each group
+        reorders by historical success rate.  Groups themselves retain their
+        original order, so this only breaks ties — never overrides the rules.
+        """
+        try:
+            advice = self._perf_tracker.get_routing_advice(
+                agent=agent_name,
+                story_type=story_type,
+                eligible_providers=[p.name for p in eligible],
+                min_samples=5,
+            )
+        except Exception as e:
+            logger.debug(f"Performance tracker query failed, skipping tie-break: {e}")
+            return eligible
+
+        if not advice:
+            return eligible
+
+        # Build score lookup: {provider_name: score}
+        score_map = {name: score for name, score in advice}
+
+        # Group providers by their primary sort key
+        from itertools import groupby
+
+        groups = []
+        for _key, group in groupby(eligible, key=sort_key_fn):
+            group_list = list(group)
+            if len(group_list) > 1:
+                # Re-sort this tie group by historical score (highest first)
+                group_list.sort(key=lambda p: -score_map.get(p.name, 0.0))
+            groups.extend(group_list)
+
+        if groups:
+            old_first = eligible[0].name
+            new_first = groups[0].name
+            if old_first != new_first:
+                logger.info(
+                    f"Performance tie-break for {agent_name}/{story_type}: "
+                    f"{old_first} → {new_first} "
+                    f"(score: {score_map.get(new_first, 0):.2f} vs {score_map.get(old_first, 0):.2f})"
+                )
+
+        return groups
 
     def select_with_fallback(
         self,
@@ -556,10 +637,14 @@ class RoutingEngine:
             default = self.config.get("default_primary", "sonnet")
             return [get_provider(default)]
 
+        # Pre-compute rate-limit status BEFORE sorting to avoid state mutation
+        # during sort key evaluation (_is_rate_limited has side effects).
+        _rate_status = {p.name: self._is_rate_limited(p.name) for p in eligible}
+
         def sort_key(p: ProviderConfig):
             cost_order = {"free": 0, "minimal": 1, "low": 2, "medium": 3, "high": 4}
             power = p.code_power if is_code_task else p.power
-            rate_limited = 1 if self._is_rate_limited(p.name) else 0
+            rate_limited = 1 if _rate_status[p.name] else 0
             return (
                 rate_limited,
                 0 if p.local else 1,

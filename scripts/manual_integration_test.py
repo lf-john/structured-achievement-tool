@@ -14,7 +14,7 @@ import sys
 import tempfile
 
 # Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.core.embedding_service import EmbeddingService
 from src.core.vector_store import VectorStore
@@ -52,27 +52,21 @@ def test_vector_store(embedding_service):
 
     try:
         # Initialize vector store
-        vector_store = VectorStore(
-            db_path=db_path,
-            embedding_service=embedding_service
-        )
+        vector_store = VectorStore(db_path=db_path, embedding_service=embedding_service)
 
         # Add some documents
         doc1_id = vector_store.add_document(
-            "Implement user authentication with JWT tokens",
-            {"task_type": "development", "feature": "auth"}
+            "Implement user authentication with JWT tokens", {"task_type": "development", "feature": "auth"}
         )
         print(f"✓ Added document 1 (ID: {doc1_id})")
 
         doc2_id = vector_store.add_document(
-            "Create login page with email and password fields",
-            {"task_type": "development", "feature": "ui"}
+            "Create login page with email and password fields", {"task_type": "development", "feature": "ui"}
         )
         print(f"✓ Added document 2 (ID: {doc2_id})")
 
         doc3_id = vector_store.add_document(
-            "Write unit tests for shopping cart functionality",
-            {"task_type": "testing", "feature": "cart"}
+            "Write unit tests for shopping cart functionality", {"task_type": "testing", "feature": "cart"}
         )
         print(f"✓ Added document 3 (ID: {doc3_id})")
 
@@ -102,6 +96,7 @@ def test_vector_store(embedding_service):
     except Exception as e:
         print(f"✗ VectorStore test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
     finally:
@@ -113,7 +108,7 @@ def test_memory_directory_creation():
     """Test that memory directory is created in project path."""
     print("\n=== Testing Memory Directory Creation ===")
 
-    project_path = os.path.join(os.path.dirname(__file__), '..')
+    project_path = os.path.join(os.path.dirname(__file__), "..")
     memory_dir = os.path.join(project_path, ".memory")
 
     if os.path.exists(memory_dir):
