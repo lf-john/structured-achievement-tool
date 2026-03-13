@@ -67,25 +67,14 @@ def generate_email_copy(template_name, contact_data, api_key):
         raise ValueError(f"Invalid template name: {template_name}")
 
     # Call Claude API to get email content
-    api_response = call_claude_api(
-        template_name=template_name,
-        contact_data=contact_data,
-        api_key=api_key
-    )
+    api_response = call_claude_api(template_name=template_name, contact_data=contact_data, api_key=api_key)
 
     # Apply personalization tokens to email body
-    personalized_body = _apply_personalization_tokens(
-        api_response["email_body"],
-        contact_data
-    )
+    personalized_body = _apply_personalization_tokens(api_response["email_body"], contact_data)
 
     # Apply personalization tokens to each subject line variant
     personalized_subjects = [
-        _apply_personalization_tokens(subject, contact_data)
-        for subject in api_response["subject_lines"]
+        _apply_personalization_tokens(subject, contact_data) for subject in api_response["subject_lines"]
     ]
 
-    return {
-        "email_body": personalized_body,
-        "subject_lines": personalized_subjects
-    }
+    return {"email_body": personalized_body, "subject_lines": personalized_subjects}

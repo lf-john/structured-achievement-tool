@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ReviewComment:
     """A single review comment from a PR."""
+
     body: str
     author: str
     path: str | None = None
@@ -33,6 +34,7 @@ class ReviewComment:
 @dataclass
 class FollowUpStory:
     """A follow-up story generated from review feedback."""
+
     story_id: str
     title: str
     description: str
@@ -61,30 +63,32 @@ class FeedbackHandler:
 
         # Get inline review comments (on specific lines)
         result = run_gh(
-            ["api", f"repos/:owner/:repo/pulls/{pr_number}/comments",
-             "--paginate"],
-            repo=self.repo, cwd=self.cwd,
+            ["api", f"repos/:owner/:repo/pulls/{pr_number}/comments", "--paginate"],
+            repo=self.repo,
+            cwd=self.cwd,
         )
 
         if result.success and result.stdout.strip():
             try:
                 data = json.loads(result.stdout)
                 for comment in data:
-                    comments.append(ReviewComment(
-                        body=comment.get("body", ""),
-                        author=comment.get("user", {}).get("login", "unknown"),
-                        path=comment.get("path"),
-                        line=comment.get("line") or comment.get("original_line"),
-                        comment_type="inline",
-                    ))
+                    comments.append(
+                        ReviewComment(
+                            body=comment.get("body", ""),
+                            author=comment.get("user", {}).get("login", "unknown"),
+                            path=comment.get("path"),
+                            line=comment.get("line") or comment.get("original_line"),
+                            comment_type="inline",
+                        )
+                    )
             except json.JSONDecodeError:
                 pass
 
         # Get general review comments (not on specific lines)
         review_result = run_gh(
-            ["api", f"repos/:owner/:repo/pulls/{pr_number}/reviews",
-             "--paginate"],
-            repo=self.repo, cwd=self.cwd,
+            ["api", f"repos/:owner/:repo/pulls/{pr_number}/reviews", "--paginate"],
+            repo=self.repo,
+            cwd=self.cwd,
         )
 
         if review_result.success and review_result.stdout.strip():
@@ -93,11 +97,13 @@ class FeedbackHandler:
                 for review in reviews:
                     body = review.get("body", "").strip()
                     if body:  # Skip empty review bodies
-                        comments.append(ReviewComment(
-                            body=body,
-                            author=review.get("user", {}).get("login", "unknown"),
-                            comment_type="review",
-                        ))
+                        comments.append(
+                            ReviewComment(
+                                body=body,
+                                author=review.get("user", {}).get("login", "unknown"),
+                                comment_type="review",
+                            )
+                        )
             except json.JSONDecodeError:
                 pass
 
@@ -322,13 +328,15 @@ class FeedbackHandler:
         for criterion in story.acceptance_criteria:
             lines.append(f"- {criterion}")
 
-        lines.extend([
-            "",
-            f"**Type:** {story.story_type}",
-            f"**Source PR:** #{story.source_pr}",
-            f"**Source Story:** {story.source_story_id}",
-            "",
-            "# <Pending>",
-        ])
+        lines.extend(
+            [
+                "",
+                f"**Type:** {story.story_type}",
+                f"**Source PR:** #{story.source_pr}",
+                f"**Source Story:** {story.source_story_id}",
+                "",
+                "# <Pending>",
+            ]
+        )
 
         return "\n".join(lines)

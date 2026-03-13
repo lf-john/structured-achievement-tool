@@ -40,7 +40,10 @@ class TestCase1TddRedBranch:
 
     @patch("src.workflows.base_workflow.save_intervention")
     @patch("src.workflows.base_workflow._revert_files", return_value=["src/main.py"])
-    @patch("src.workflows.base_workflow.should_trigger", return_value={"should_trigger": True, "reason": "code files modified"})
+    @patch(
+        "src.workflows.base_workflow.should_trigger",
+        return_value={"should_trigger": True, "reason": "code files modified"},
+    )
     @patch("src.workflows.base_workflow.get_modified_files", return_value=["src/main.py", "tests/test_main.py"])
     def test_code_files_reverted_no_llm_call(self, mock_modified, mock_trigger, mock_revert, mock_save):
         state = _make_state("TDD_RED")
@@ -98,9 +101,7 @@ class TestCase2CodeFixBranch:
     @patch("src.workflows.base_workflow._invoke_mediator_review")
     @patch("src.workflows.base_workflow.get_modified_files", return_value=["tests/test_main.py"])
     def test_retry_verdict(self, mock_modified, mock_review, mock_save):
-        mock_review.return_value = _mock_mediator_response(
-            "RETRY", guidance="Try without modifying tests"
-        )
+        mock_review.return_value = _mock_mediator_response("RETRY", guidance="Try without modifying tests")
 
         state = _make_state("CODE")
         result = mediator_gate_node(state, routing_engine=MagicMock())
@@ -242,7 +243,9 @@ class TestMediatorDisabledAndFallback:
         """Unexpected phase that triggers should auto-accept."""
         state = _make_state("UNKNOWN_PHASE")
         # Force trigger
-        with patch("src.workflows.base_workflow.should_trigger", return_value={"should_trigger": True, "reason": "test"}):
+        with patch(
+            "src.workflows.base_workflow.should_trigger", return_value={"should_trigger": True, "reason": "test"}
+        ):
             result = mediator_gate_node(state, routing_engine=MagicMock())
 
         assert result["mediator_verdict"]["decision"] == "ACCEPT"

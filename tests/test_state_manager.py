@@ -53,13 +53,12 @@ class TestSQLiteStateManagerInitialization:
 
             # Query the database to verify table exists
             import sqlite3
+
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
 
             # Check if the state table exists
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='state'"
-            )
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='state'")
             result = cursor.fetchone()
             assert result is not None, "State table should be created"
 
@@ -88,6 +87,7 @@ class TestSetMethod:
 
             # Verify data was stored in database
             import sqlite3
+
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
             cursor.execute("SELECT value FROM state WHERE key = ?", ("user:1",))
@@ -105,15 +105,7 @@ class TestSetMethod:
             db_path = os.path.join(tmpdir, "test.db")
             manager = SQLiteStateManager(db_path)
 
-            test_data = {
-                "user": {
-                    "name": "Bob",
-                    "address": {
-                        "street": "123 Main St",
-                        "city": "Springfield"
-                    }
-                }
-            }
+            test_data = {"user": {"name": "Bob", "address": {"street": "123 Main St", "city": "Springfield"}}}
             manager.set("user:2", test_data)
 
             # Retrieve and verify
@@ -170,6 +162,7 @@ class TestSetMethod:
 
             # Verify only one record exists
             import sqlite3
+
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM state WHERE key = ?", ("config",))
@@ -298,6 +291,7 @@ class TestDeleteMethod:
 
             # Verify database is empty
             import sqlite3
+
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM state")
@@ -354,10 +348,7 @@ class TestIntegrationScenarios:
             # Create a large data structure
             large_data = {
                 "items": [{"id": i, "data": f"item_{i}"} for i in range(100)],
-                "metadata": {
-                    "created": "2024-01-01",
-                    "tags": ["test", "large", "data"]
-                }
+                "metadata": {"created": "2024-01-01", "tags": ["test", "large", "data"]},
             }
 
             manager.set("large_data", large_data)
@@ -386,5 +377,6 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 if __name__ == "__main__":
     # Run pytest programmatically and exit with appropriate code
     import sys
+
     exit_code = pytest.main([__file__, "-v"])
     sys.exit(exit_code)

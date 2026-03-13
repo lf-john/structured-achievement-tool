@@ -49,15 +49,15 @@ class TestParseRange:
 
 class TestMechanicalVerifyDecision:
     def test_pass_routes_to_critic(self):
-        state = {"verify_passed": True, "phase_retry_count": 0}
+        state = {"verify_passed": True, "verify_retry_count": 0}
         assert mechanical_verify_decision(state) == "critic_review"
 
     def test_fail_routes_to_write(self):
-        state = {"verify_passed": False, "phase_retry_count": 1}
+        state = {"verify_passed": False, "verify_retry_count": 1}
         assert mechanical_verify_decision(state) == "write"
 
     def test_fail_at_retry_limit_skips_to_critic(self):
-        state = {"verify_passed": False, "phase_retry_count": MAX_VERIFY_RETRIES}
+        state = {"verify_passed": False, "verify_retry_count": MAX_VERIFY_RETRIES}
         assert mechanical_verify_decision(state) == "critic_review"
 
 
@@ -143,19 +143,19 @@ class TestMechanicalVerifyNode:
             "working_directory": "/tmp",
             "current_phase": "",
             "phase_outputs": [],
-            "phase_retry_count": 1,
+            "verify_retry_count": 1,
         }
         result = mechanical_verify_node(state)
-        assert result["phase_retry_count"] == 2
+        assert result["verify_retry_count"] == 2
 
 
 class TestDetectOutputPath:
     def test_extracts_from_json_output(self):
-        state = {"phase_outputs": [{"phase": "WRITE", "output": '{"output_path": "docs/readme.md"}'}]}
+        state = {"phase_outputs": [{"phase": "CONTENT_WRITE", "output": '{"output_path": "docs/readme.md"}'}]}
         assert _detect_output_path(state, "/project") == "docs/readme.md"
 
     def test_extracts_from_text_path(self):
-        state = {"phase_outputs": [{"phase": "WRITE", "output": "Created file at docs/output.md done."}]}
+        state = {"phase_outputs": [{"phase": "CONTENT_WRITE", "output": "Created file at docs/output.md done."}]}
         assert _detect_output_path(state, "/project") == "docs/output.md"
 
     def test_returns_empty_when_no_write_output(self):

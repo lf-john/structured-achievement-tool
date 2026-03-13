@@ -9,6 +9,7 @@ from src.execution.slot_manager import DEFAULT_MAX_SLOTS, MAX_SLOTS_LIMIT, SlotM
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mgr(tmp_path):
     """SlotManager with default slots using a temporary lock directory."""
@@ -28,6 +29,7 @@ def full_mgr(tmp_path):
 # get_available_slot
 # ---------------------------------------------------------------------------
 
+
 class TestGetAvailableSlot:
     def test_initially_all_available(self, mgr):
         """First call should return slot 0 (first idle slot)."""
@@ -44,6 +46,7 @@ class TestGetAvailableSlot:
 # ---------------------------------------------------------------------------
 # assign_task / release_slot
 # ---------------------------------------------------------------------------
+
 
 class TestAssignRelease:
     def test_assign_sets_fields(self, mgr):
@@ -70,6 +73,7 @@ class TestAssignRelease:
 # ---------------------------------------------------------------------------
 # LLM lock acquire / release (flock-based)
 # ---------------------------------------------------------------------------
+
 
 class TestLLMLock:
     def test_acquire_returns_true(self, mgr):
@@ -113,6 +117,7 @@ class TestLLMLock:
 # get_status
 # ---------------------------------------------------------------------------
 
+
 class TestGetStatus:
     def test_idle_status(self, mgr):
         statuses = mgr.get_status()
@@ -137,6 +142,7 @@ class TestGetStatus:
 # active_count
 # ---------------------------------------------------------------------------
 
+
 class TestActiveCount:
     def test_zero_initially(self, mgr):
         assert mgr.active_count() == 0
@@ -155,6 +161,7 @@ class TestActiveCount:
 # ---------------------------------------------------------------------------
 # is_task_running
 # ---------------------------------------------------------------------------
+
 
 class TestIsTaskRunning:
     def test_false_when_idle(self, mgr):
@@ -178,6 +185,7 @@ class TestIsTaskRunning:
 # Max slots capped at MAX_SLOTS_LIMIT
 # ---------------------------------------------------------------------------
 
+
 class TestMaxSlotsCap:
     def test_capped_at_limit(self, tmp_path):
         sm = SlotManager(max_slots=100, lock_dir=str(tmp_path / "locks"))
@@ -195,6 +203,7 @@ class TestMaxSlotsCap:
 # ---------------------------------------------------------------------------
 # graceful_shutdown
 # ---------------------------------------------------------------------------
+
 
 class TestGracefulShutdown:
     @pytest.mark.asyncio

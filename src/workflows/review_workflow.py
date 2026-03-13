@@ -15,7 +15,6 @@ from src.workflows.state import StoryState
 
 
 class ReviewWorkflow(BaseWorkflow):
-
     def build_graph(self) -> StateGraph:
         builder = StateGraph(StoryState)
         re = self.routing_engine

@@ -25,6 +25,7 @@ from src.workflows.state import create_initial_state
 
 # --- Helpers ---
 
+
 def _make_state(**overrides) -> dict:
     base = create_initial_state(
         story={"id": "US-100", "title": "Test approval", "complexity": 3},
@@ -56,6 +57,7 @@ def _noop_write(path, content):
 # ApprovalConfig
 # ============================================================
 
+
 class TestApprovalConfig:
     def test_defaults(self):
         cfg = ApprovalConfig()
@@ -82,6 +84,7 @@ class TestApprovalConfig:
 # approval_pause_node
 # ============================================================
 
+
 class TestApprovalPauseNode:
     def test_immediate_response(self):
         """Human responds during initial pause."""
@@ -90,6 +93,7 @@ class TestApprovalPauseNode:
         state = _make_state()
 
         call_count = [0]
+
         def read_fn(path):
             call_count[0] += 1
             if call_count[0] >= 2:
@@ -97,8 +101,12 @@ class TestApprovalPauseNode:
             return None
 
         result = approval_pause_node(
-            state, ntf, cfg,
-            _sleep_fn=_noop_sleep, _write_fn=_noop_write, _read_fn=read_fn,
+            state,
+            ntf,
+            cfg,
+            _sleep_fn=_noop_sleep,
+            _write_fn=_noop_write,
+            _read_fn=read_fn,
         )
 
         assert result["approval_status"] == "responded"
@@ -111,8 +119,11 @@ class TestApprovalPauseNode:
         state = _make_state()
 
         result = approval_pause_node(
-            state, ntf, cfg,
-            _sleep_fn=_noop_sleep, _write_fn=_noop_write,
+            state,
+            ntf,
+            cfg,
+            _sleep_fn=_noop_sleep,
+            _write_fn=_noop_write,
             _read_fn=lambda p: None,
         )
 
@@ -126,12 +137,16 @@ class TestApprovalPauseNode:
         state = _make_state()
 
         written_paths = []
+
         def write_fn(path, content):
             written_paths.append(path)
 
         approval_pause_node(
-            state, ntf, cfg,
-            _sleep_fn=_noop_sleep, _write_fn=write_fn,
+            state,
+            ntf,
+            cfg,
+            _sleep_fn=_noop_sleep,
+            _write_fn=write_fn,
             _read_fn=lambda p: None,
         )
 
@@ -145,8 +160,11 @@ class TestApprovalPauseNode:
         state = _make_state()
 
         approval_pause_node(
-            state, ntf, cfg,
-            _sleep_fn=_noop_sleep, _write_fn=_noop_write,
+            state,
+            ntf,
+            cfg,
+            _sleep_fn=_noop_sleep,
+            _write_fn=_noop_write,
             _read_fn=lambda p: None,
         )
 
@@ -161,8 +179,11 @@ class TestApprovalPauseNode:
         state = _make_state()
 
         approval_pause_node(
-            state, ntf, cfg,
-            _sleep_fn=_noop_sleep, _write_fn=_noop_write,
+            state,
+            ntf,
+            cfg,
+            _sleep_fn=_noop_sleep,
+            _write_fn=_noop_write,
             _read_fn=lambda p: None,
         )
 
@@ -175,6 +196,7 @@ class TestApprovalPauseNode:
 # approval_follow_up_node
 # ============================================================
 
+
 class TestApprovalFollowUpNode:
     def test_response_during_follow_up(self):
         """Human responds during follow-up period."""
@@ -183,6 +205,7 @@ class TestApprovalFollowUpNode:
         state = _make_state(approval_signal_path="/tmp/signal.md", approval_elapsed=10)
 
         call_count = [0]
+
         def read_fn(path):
             call_count[0] += 1
             if call_count[0] >= 3:
@@ -190,8 +213,11 @@ class TestApprovalFollowUpNode:
             return None
 
         result = approval_follow_up_node(
-            state, ntf, cfg,
-            _sleep_fn=_noop_sleep, _read_fn=read_fn,
+            state,
+            ntf,
+            cfg,
+            _sleep_fn=_noop_sleep,
+            _read_fn=read_fn,
         )
 
         assert result["approval_status"] == "responded"
@@ -203,8 +229,11 @@ class TestApprovalFollowUpNode:
         state = _make_state(approval_signal_path="/tmp/signal.md", approval_elapsed=5)
 
         result = approval_follow_up_node(
-            state, ntf, cfg,
-            _sleep_fn=_noop_sleep, _read_fn=lambda p: None,
+            state,
+            ntf,
+            cfg,
+            _sleep_fn=_noop_sleep,
+            _read_fn=lambda p: None,
         )
 
         assert result["approval_status"] == "waiting"
@@ -216,8 +245,11 @@ class TestApprovalFollowUpNode:
         state = _make_state(approval_signal_path="/tmp/signal.md", approval_elapsed=5)
 
         approval_follow_up_node(
-            state, ntf, cfg,
-            _sleep_fn=_noop_sleep, _read_fn=lambda p: None,
+            state,
+            ntf,
+            cfg,
+            _sleep_fn=_noop_sleep,
+            _read_fn=lambda p: None,
         )
 
         ntf.send_ntfy.assert_called_once()
@@ -228,6 +260,7 @@ class TestApprovalFollowUpNode:
 # approval_escalation_node
 # ============================================================
 
+
 class TestApprovalEscalationNode:
     def test_response_during_escalation(self):
         """Human responds during escalation period."""
@@ -236,6 +269,7 @@ class TestApprovalEscalationNode:
         state = _make_state(approval_signal_path="/tmp/signal.md", approval_elapsed=10)
 
         call_count = [0]
+
         def read_fn(path):
             call_count[0] += 1
             if call_count[0] >= 2:
@@ -243,8 +277,11 @@ class TestApprovalEscalationNode:
             return None
 
         result = approval_escalation_node(
-            state, ntf, cfg,
-            _sleep_fn=_noop_sleep, _read_fn=read_fn,
+            state,
+            ntf,
+            cfg,
+            _sleep_fn=_noop_sleep,
+            _read_fn=read_fn,
         )
 
         assert result["approval_status"] == "responded"
@@ -254,14 +291,19 @@ class TestApprovalEscalationNode:
         """Normal path: timeout without auto-approve returns 'timeout'."""
         ntf = _mock_notifier()
         cfg = ApprovalConfig(
-            poll_interval=1, escalation_after=5, auto_timeout=10,
+            poll_interval=1,
+            escalation_after=5,
+            auto_timeout=10,
             auto_approve_on_timeout=False,
         )
         state = _make_state(approval_signal_path="/tmp/signal.md", approval_elapsed=5)
 
         result = approval_escalation_node(
-            state, ntf, cfg,
-            _sleep_fn=_noop_sleep, _read_fn=lambda p: None,
+            state,
+            ntf,
+            cfg,
+            _sleep_fn=_noop_sleep,
+            _read_fn=lambda p: None,
         )
 
         assert result["approval_status"] == "timeout"
@@ -271,14 +313,20 @@ class TestApprovalEscalationNode:
         """Emergency path: timeout with auto-approve returns 'auto_approved'."""
         ntf = _mock_notifier()
         cfg = ApprovalConfig(
-            poll_interval=1, escalation_after=5, auto_timeout=10,
-            auto_approve_on_timeout=True, emergency=True,
+            poll_interval=1,
+            escalation_after=5,
+            auto_timeout=10,
+            auto_approve_on_timeout=True,
+            emergency=True,
         )
         state = _make_state(approval_signal_path="/tmp/signal.md", approval_elapsed=5)
 
         result = approval_escalation_node(
-            state, ntf, cfg,
-            _sleep_fn=_noop_sleep, _read_fn=lambda p: None,
+            state,
+            ntf,
+            cfg,
+            _sleep_fn=_noop_sleep,
+            _read_fn=lambda p: None,
         )
 
         assert result["approval_status"] == "auto_approved"
@@ -291,8 +339,11 @@ class TestApprovalEscalationNode:
         state = _make_state(approval_signal_path="/tmp/signal.md", approval_elapsed=5)
 
         approval_escalation_node(
-            state, ntf, cfg,
-            _sleep_fn=_noop_sleep, _read_fn=lambda p: None,
+            state,
+            ntf,
+            cfg,
+            _sleep_fn=_noop_sleep,
+            _read_fn=lambda p: None,
         )
 
         call_kwargs = ntf.send_ntfy.call_args[1]
@@ -303,14 +354,19 @@ class TestApprovalEscalationNode:
         """Additional escalation contacts should receive email."""
         ntf = _mock_notifier()
         cfg = ApprovalConfig(
-            poll_interval=1, escalation_after=5, auto_timeout=8,
+            poll_interval=1,
+            escalation_after=5,
+            auto_timeout=8,
             escalation_contacts=["admin@example.com", "ops@example.com"],
         )
         state = _make_state(approval_signal_path="/tmp/signal.md", approval_elapsed=5)
 
         approval_escalation_node(
-            state, ntf, cfg,
-            _sleep_fn=_noop_sleep, _read_fn=lambda p: None,
+            state,
+            ntf,
+            cfg,
+            _sleep_fn=_noop_sleep,
+            _read_fn=lambda p: None,
         )
 
         assert ntf.send_email.call_count == 2
@@ -319,6 +375,7 @@ class TestApprovalEscalationNode:
 # ============================================================
 # Decision Functions
 # ============================================================
+
 
 class TestPauseInitialDecision:
     def test_responded(self):
@@ -359,6 +416,7 @@ class TestResponseDecision:
 # ============================================================
 # Workflow Graph Structure
 # ============================================================
+
 
 class TestApprovalWorkflowNormalPath:
     """Test the Normal path graph structure."""

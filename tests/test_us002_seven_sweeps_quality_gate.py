@@ -239,7 +239,7 @@ class TestTemplateFileStructure:
         content = _load_template()
         assert "Logical Front" in content, "Logical Front brand not mentioned"
         assert "1,000,000" in content or "1M+" in content, "1M+ desktops proof point missing"
-        assert "321" in content, "321 customers proof point missing"
+        assert "186" in content, "186 customers proof point missing"
         assert "30" in content and "45%" in content, "30-45% cost reduction proof missing"
 
 

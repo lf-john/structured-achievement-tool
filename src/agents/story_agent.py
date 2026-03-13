@@ -95,6 +95,7 @@ class StoryAgent(BaseAgent):
         existing_progress: dict | None = None,
         rag_context: str = "",
         rework_context: str = "",
+        spec_metadata: dict | None = None,
     ) -> DecomposeResponse:
         """Decompose a user request into stories with dependencies.
 
@@ -119,7 +120,15 @@ class StoryAgent(BaseAgent):
         if rag_context:
             context["rag_context"] = rag_context
 
+        if spec_metadata:
+            context["spec_metadata"] = json.dumps(spec_metadata)
+
         description = f"Request: {user_request}\nType: {task_type}"
+        if spec_metadata and spec_metadata.get("has_existing_output"):
+            description += (
+                f"\n\nNote: Output file '{spec_metadata.get('output_path', '')}' "
+                f"already exists. This is an EDIT task, not a create-from-scratch task."
+            )
         if rework_context:
             description += (
                 f"\n\n---\n## REWORK CONTEXT\n"

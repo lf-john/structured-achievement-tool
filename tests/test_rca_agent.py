@@ -137,7 +137,7 @@ class TestShouldTriggerRCA:
     def test_resets_on_success(self):
         journal = MagicMock()
         journal.query.return_value = [
-            _make_record(success=True),   # Oldest
+            _make_record(success=True),  # Oldest
             _make_record(success=False),
             _make_record(success=False),
         ]

@@ -69,7 +69,9 @@ class TestIssueManagerCreate:
     @patch("src.github.issue_manager.run_gh")
     def test_failed_creation_returns_error(self, mock_gh):
         mock_gh.return_value = GHResult(
-            stderr="permission denied", success=False, exit_code=1,
+            stderr="permission denied",
+            success=False,
+            exit_code=1,
         )
         mgr = IssueManager(repo="owner/repo")
         story = _make_story()
@@ -126,8 +128,7 @@ class TestIssueManagerUpdateStatus:
 
         assert result is True
         # Should have called add-label with status:working
-        add_calls = [c for c in mock_gh.call_args_list
-                     if "--add-label" in str(c) and "status:working" in str(c)]
+        add_calls = [c for c in mock_gh.call_args_list if "--add-label" in str(c) and "status:working" in str(c)]
         assert len(add_calls) >= 1
 
     @patch("src.github.issue_manager.run_gh")
@@ -137,8 +138,7 @@ class TestIssueManagerUpdateStatus:
 
         mgr.update_status(42, "complete")
 
-        close_calls = [c for c in mock_gh.call_args_list
-                       if "close" in str(c)]
+        close_calls = [c for c in mock_gh.call_args_list if "close" in str(c)]
         assert len(close_calls) >= 1
 
     @patch("src.github.issue_manager.run_gh")
@@ -148,8 +148,7 @@ class TestIssueManagerUpdateStatus:
 
         mgr.update_status(42, "invalid_status")
 
-        add_calls = [c for c in mock_gh.call_args_list
-                     if "--add-label" in str(c) and "status:pending" in str(c)]
+        add_calls = [c for c in mock_gh.call_args_list if "--add-label" in str(c) and "status:pending" in str(c)]
         assert len(add_calls) >= 1
 
 
@@ -157,7 +156,8 @@ class TestIssueManagerFind:
     @patch("src.github.issue_manager.run_gh")
     def test_finds_existing_issue(self, mock_gh):
         mock_gh.return_value = GHResult(
-            stdout='[{"number": 42}]', success=True,
+            stdout='[{"number": 42}]',
+            success=True,
         )
         mgr = IssueManager(repo="owner/repo")
 

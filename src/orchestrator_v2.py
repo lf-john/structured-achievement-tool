@@ -14,6 +14,7 @@ import logging
 import os
 
 from src.agents.classifier_agent import ClassifierAgent
+from src.agents.spec_validator import validate_spec
 from src.agents.story_agent import StoryAgent
 from src.core.checkpoint_manager import init_db as init_checkpoint_db
 from src.core.checkpoint_manager import read_checkpoint
@@ -72,9 +73,7 @@ class OrchestratorV2:
         # Failure monitoring (Layer 1) and audit journaling
         memory_dir = os.path.join(project_path, ".memory")
         self.failure_monitor = FailureMonitor(
-            output_dir=os.path.expanduser(
-                "~/GoogleDrive/DriveSyncFiles/sat-tasks/debug"
-            ),
+            output_dir=os.path.expanduser("~/GoogleDrive/DriveSyncFiles/sat-tasks/debug"),
         )
         self.audit_journal = AuditJournal(
             file_path=os.path.join(memory_dir, "audit_journal.jsonl"),
@@ -98,13 +97,16 @@ class OrchestratorV2:
         These must never appear in user-facing response files.
         """
         import re
+
         # Remove <system-reminder>...</system-reminder> blocks (possibly multiline)
         text = re.sub(
-            r'<system-reminder>.*?</system-reminder>',
-            '', text, flags=re.DOTALL,
+            r"<system-reminder>.*?</system-reminder>",
+            "",
+            text,
+            flags=re.DOTALL,
         )
         # Remove any stray opening/closing tags that weren't paired
-        text = re.sub(r'</?system-reminder>', '', text)
+        text = re.sub(r"</?system-reminder>", "", text)
         return text
 
     async def _write_response(self, task_dir: str, content: str, is_final: bool = False):
@@ -133,6 +135,7 @@ class OrchestratorV2:
         LLM subprocesses write files to the correct project, not to SAT.
         """
         from src.daemon import parse_task_project
+
         project_name = parse_task_project(file_path)
 
         # SAT's own tasks use SAT's project directory
@@ -173,6 +176,7 @@ class OrchestratorV2:
         # Set task-level correlation ID for hierarchical logging
         try:
             from src.logging_config import set_correlation_id
+
             set_correlation_id(task_id=task_id)
         except Exception:
             pass
@@ -180,10 +184,47 @@ class OrchestratorV2:
         with open(file_path) as f:
             user_request = f.read()
 
-        # --- Classify ---
+        # --- Validate spec ---
+        db_manager = DatabaseManager()
+        spec_result = validate_spec(user_request, db_manager=db_manager)
+
+        if spec_result.errors:
+            logger.error(f"Spec validation failed for {file_path}: {spec_result.errors}")
+            # Annotate the task file with the problems
+            annotation = "\n\n---\n## Spec Validation Errors\n"
+            for err in spec_result.errors:
+                annotation += f"- {err}\n"
+            if spec_result.warnings:
+                annotation += "\n## Spec Validation Warnings\n"
+                for warn in spec_result.warnings:
+                    annotation += f"- {warn}\n"
+            with open(file_path, "a") as f:
+                f.write(annotation)
+                f.flush()
+                os.fsync(f.fileno())
+            # Mark as Failed so monitor doesn't reprocess after timeout
+            if mark_status_callback:
+                try:
+                    mark_status_callback(False)
+                except Exception as e:
+                    logger.warning(f"mark_status_callback failed during spec validation: {e}")
+            return {"status": "validation_failed", "returncode": 1, "errors": spec_result.errors}
+
+        if spec_result.warnings:
+            for warn in spec_result.warnings:
+                logger.warning(f"Spec validation warning for {file_path}: {warn}")
+
+        # Pass metadata downstream (especially has_existing_output)
+        spec_metadata = spec_result.metadata
+
+        # --- Task-level classify (hint for decomposer) ---
         classification = await self.classifier.classify(user_request, self.project_path)
         task_type = classification.task_type
-        logger.info(f"Task classified as: {task_type} (confidence: {classification.confidence})")
+        operation_mode = classification.operation_mode
+        logger.info(
+            f"Task classified as: {task_type} (confidence: {classification.confidence}, "
+            f"operation_mode: {operation_mode})"
+        )
 
         # --- Search vector memory for context ---
         rag_context = ""
@@ -210,7 +251,49 @@ class OrchestratorV2:
             task_type=task_type,
             working_directory=task_working_directory,
             rag_context=rag_context,
+            spec_metadata=spec_metadata,
         )
+
+        # --- Per-story classification ---
+        # Each story is independently classified. The decomposer's suggested
+        # type is passed as a hint but the classifier's result takes precedence.
+        for story_schema in decompose_result.stories:
+            try:
+                story_classification = await self.classifier.classify_story(
+                    story_id=story_schema.id,
+                    story_title=story_schema.title,
+                    story_description=story_schema.description,
+                    acceptance_criteria=story_schema.acceptanceCriteria,
+                    output_path=story_schema.output_path,
+                    suggested_type=story_schema.type,
+                    working_directory=task_working_directory,
+                )
+                if story_classification.task_type != story_schema.type:
+                    logger.info(
+                        f"Story {story_schema.id} reclassified: "
+                        f"{story_schema.type} -> {story_classification.task_type} "
+                        f"(confidence: {story_classification.confidence:.2f})"
+                    )
+                story_schema.type = story_classification.task_type
+
+                # Apply operation_mode from classification
+                story_op_mode = story_classification.operation_mode
+                story_schema.operation_mode = story_op_mode
+
+                # Edit operations are harder — bump complexity by 1
+                # (capped at 10) to route to more capable models
+                if story_op_mode == "edit":
+                    old_complexity = story_schema.complexity
+                    story_schema.complexity = min(old_complexity + 1, 10)
+                    logger.info(
+                        f"Story {story_schema.id} is edit operation: "
+                        f"complexity {old_complexity} -> {story_schema.complexity}"
+                    )
+            except Exception as e:
+                # Fallback: keep decomposer's suggested type
+                logger.warning(
+                    f"Story {story_schema.id} classification failed, keeping suggested type '{story_schema.type}': {e}"
+                )
 
         stories = [s.model_dump() for s in decompose_result.stories]
         story_count = len(stories)
@@ -254,12 +337,14 @@ class OrchestratorV2:
                 # Skip already-completed stories (partial results from prior run)
                 if story_id in completed_stories:
                     logger.info(f"Skipping already-completed story {story_id}")
-                    results.append(StoryResult(
-                        story_id=story_id,
-                        success=True,
-                        attempts=0,
-                        reason="skipped (completed in prior run)",
-                    ))
+                    results.append(
+                        StoryResult(
+                            story_id=story_id,
+                            success=True,
+                            attempts=0,
+                            reason="skipped (completed in prior run)",
+                        )
+                    )
                     continue
 
                 story = next((s for s in stories if s["id"] == story_id), None)
@@ -287,11 +372,13 @@ class OrchestratorV2:
             for r in level_results:
                 if isinstance(r, Exception):
                     logger.error(f"Story execution error: {r}")
-                    results.append(StoryResult(
-                        story_id="unknown",
-                        success=False,
-                        reason=str(r),
-                    ))
+                    results.append(
+                        StoryResult(
+                            story_id="unknown",
+                            success=False,
+                            reason=str(r),
+                        )
+                    )
                 else:
                     results.append(r)
 
@@ -302,17 +389,20 @@ class OrchestratorV2:
 
         # Log each story result to audit journal
         import time as _time
+
         for r in results:
             try:
-                self.audit_journal.log(AuditRecord(
-                    timestamp=_time.strftime("%Y-%m-%dT%H:%M:%S"),
-                    task_file=file_path,
-                    story_id=r.story_id,
-                    success=r.success,
-                    duration_seconds=r.duration_seconds if hasattr(r, 'duration_seconds') else 0.0,
-                    exit_code=0 if r.success else 1,
-                    error_summary=r.reason[:200] if r.reason else None,
-                ))
+                self.audit_journal.log(
+                    AuditRecord(
+                        timestamp=_time.strftime("%Y-%m-%dT%H:%M:%S"),
+                        task_file=file_path,
+                        story_id=r.story_id,
+                        success=r.success,
+                        duration_seconds=r.duration_seconds if hasattr(r, "duration_seconds") else 0.0,
+                        exit_code=0 if r.success else 1,
+                        error_summary=r.reason[:200] if r.reason else None,
+                    )
+                )
             except Exception as e:
                 logger.warning(f"Failed to log audit record: {e}")
 
@@ -431,10 +521,10 @@ class OrchestratorV2:
 
     # Signal → (phase_number, template_key, phase_label, next_continuation_tag)
     PRD_SIGNAL_MAP = {
-        "plan":   (1, "discovery",      "Discovery",           "# <1>"),
-        "plan1":  (1, "single_phase",   "Single-Phase PRD",    "# <PRD>"),
-        "phase2": (2, "requirements",   "Requirements",        "# <2>"),
-        "phase3": (3, "architecture",   "Architecture",        "# <2>"),
+        "plan": (1, "discovery", "Discovery", "# <1>"),
+        "plan1": (1, "single_phase", "Single-Phase PRD", "# <PRD>"),
+        "phase2": (2, "requirements", "Requirements", "# <2>"),
+        "phase3": (3, "architecture", "Architecture", "# <2>"),
         "phase4": (4, "implementation", "Implementation Plan", "# <PRD>"),
     }
 
@@ -519,14 +609,18 @@ class OrchestratorV2:
             if benefits:
                 lines.append("### Benefits & Outcomes\n")
                 for b in benefits:
-                    lines.append(f"- **{b.get('id', '')}**: {b.get('description', '')} (Stakeholder: {b.get('stakeholder', '')}, Measured by: {b.get('measuredBy', '')})")
+                    lines.append(
+                        f"- **{b.get('id', '')}**: {b.get('description', '')} (Stakeholder: {b.get('stakeholder', '')}, Measured by: {b.get('measuredBy', '')})"
+                    )
                 lines.append("")
 
             frs = data.get("functionalRequirements", [])
             if frs:
                 lines.append("### Functional Requirements\n")
                 for fr in frs:
-                    lines.append(f"**{fr.get('id', '')}** — {fr.get('description', '')} [{fr.get('priority', '')}] (traces to {fr.get('tracesToBenefit', 'N/A')})")
+                    lines.append(
+                        f"**{fr.get('id', '')}** — {fr.get('description', '')} [{fr.get('priority', '')}] (traces to {fr.get('tracesToBenefit', 'N/A')})"
+                    )
                     for ac in fr.get("acceptanceCriteria", []):
                         lines.append(f"  - {ac}")
                     lines.append("")
@@ -536,7 +630,7 @@ class OrchestratorV2:
                 lines.append("### Non-Functional Requirements\n")
                 for category, items in nfr.items():
                     lines.append(f"**{category.title()}:**")
-                    for item in (items if isinstance(items, list) else [items]):
+                    for item in items if isinstance(items, list) else [items]:
                         lines.append(f"- {item}")
                     lines.append("")
 
@@ -544,7 +638,9 @@ class OrchestratorV2:
             if stories:
                 lines.append("### User Stories\n")
                 for us in stories:
-                    lines.append(f"> As a **{us.get('role', '')}**, I want **{us.get('capability', '')}**, so that **{us.get('benefit', '')}**.\n")
+                    lines.append(
+                        f"> As a **{us.get('role', '')}**, I want **{us.get('capability', '')}**, so that **{us.get('benefit', '')}**.\n"
+                    )
                     for ac in us.get("acceptanceCriteria", []):
                         lines.append(f"- {ac}")
                     lines.append("")
@@ -651,7 +747,9 @@ class OrchestratorV2:
                 lines.append("### Stories\n")
                 for s in stories:
                     deps = ", ".join(s.get("dependsOn", [])) or "None"
-                    lines.append(f"#### {s.get('id', '')} — {s.get('title', '')} [{s.get('type', '')}] (complexity: {s.get('complexity', '')})")
+                    lines.append(
+                        f"#### {s.get('id', '')} — {s.get('title', '')} [{s.get('type', '')}] (complexity: {s.get('complexity', '')})"
+                    )
                     lines.append(f"{s.get('description', '')}")
                     lines.append(f"**Depends on:** {deps}")
                     if s.get("techStack"):
@@ -675,7 +773,9 @@ class OrchestratorV2:
             if rm:
                 lines.append("### Risk Mitigation\n")
                 for r in rm:
-                    lines.append(f"- **{r.get('risk', '')}** → Addressed by {r.get('addressedBy', '')} (Fallback: {r.get('fallback', '')})")
+                    lines.append(
+                        f"- **{r.get('risk', '')}** → Addressed by {r.get('addressedBy', '')} (Fallback: {r.get('fallback', '')})"
+                    )
                 lines.append("")
 
             # Single-phase extras
@@ -685,7 +785,9 @@ class OrchestratorV2:
                     lines.insert(0, "### Benefits & Outcomes\n")
                     idx = 1
                     for b in benefits:
-                        lines.insert(idx, f"- **{b.get('id', '')}**: {b.get('description', '')} ({b.get('stakeholder', '')})")
+                        lines.insert(
+                            idx, f"- **{b.get('id', '')}**: {b.get('description', '')} ({b.get('stakeholder', '')})"
+                        )
                         idx += 1
                     lines.insert(idx, "")
 
@@ -710,7 +812,10 @@ class OrchestratorV2:
                     lines.insert(insert_at, "### Requirements\n")
                     insert_at += 1
                     for fr in reqs:
-                        lines.insert(insert_at, f"**{fr.get('id', '')}** — {fr.get('description', '')} [{fr.get('priority', '')}] (traces to {fr.get('tracesToBenefit', 'N/A')})")
+                        lines.insert(
+                            insert_at,
+                            f"**{fr.get('id', '')}** — {fr.get('description', '')} [{fr.get('priority', '')}] (traces to {fr.get('tracesToBenefit', 'N/A')})",
+                        )
                         insert_at += 1
                         for ac in fr.get("acceptanceCriteria", []):
                             lines.insert(insert_at, f"  - {ac}")
@@ -768,14 +873,10 @@ class OrchestratorV2:
 
         # Strip signal/status tags from content passed to LLM
         clean_content = re.sub(
-            r'^\s*<(?:Plan|Plan 1|Working|Pending|1|2|PRD)>\s*$',
-            '', full_content, flags=re.MULTILINE
+            r"^\s*<(?:Plan|Plan 1|Working|Pending|1|2|PRD)>\s*$", "", full_content, flags=re.MULTILINE
         ).strip()
         # Also strip the # <tag> options left from previous phase
-        clean_content = re.sub(
-            r'^#\s*<(?:Plan|Plan 1|1|2|PRD)>\s*$',
-            '', clean_content, flags=re.MULTILINE
-        ).strip()
+        clean_content = re.sub(r"^#\s*<(?:Plan|Plan 1|1|2|PRD)>\s*$", "", clean_content, flags=re.MULTILINE).strip()
 
         # DB tracking
         db = DatabaseManager()
@@ -787,7 +888,9 @@ class OrchestratorV2:
             db_task_id = tasks[0]["id"] if tasks else None
         else:
             db_task_id = db.create_task(
-                project=task_id, title=f"PRD: {task_id}", source_file=file_path,
+                project=task_id,
+                title=f"PRD: {task_id}",
+                source_file=file_path,
             )
             db.update_task_status(db_task_id, "working")
             session_id = db.create_prd_session(project=task_id, file_path=file_path)
@@ -899,7 +1002,7 @@ class OrchestratorV2:
         # Find the next available file number in the task directory
         existing_nums = []
         for fn in os.listdir(task_dir):
-            if fn.endswith('.md') and not fn.startswith('_'):
+            if fn.endswith(".md") and not fn.startswith("_"):
                 try:
                     existing_nums.append(int(fn[:3]))
                 except ValueError:
@@ -910,11 +1013,7 @@ class OrchestratorV2:
         phase_filepath = os.path.join(task_dir, phase_filename)
 
         phase_file_content = (
-            f"# Phase {phase_num}: {phase_label}\n\n"
-            f"{rendered_markdown}\n\n"
-            f"---\n\n"
-            f"# <Plan>\n"
-            f"{next_tag}\n"
+            f"# Phase {phase_num}: {phase_label}\n\n{rendered_markdown}\n\n---\n\n# <Plan>\n{next_tag}\n"
         )
 
         with open(phase_filepath, "w") as f:
@@ -973,8 +1072,7 @@ class OrchestratorV2:
         db = DatabaseManager()
         session = db.get_active_prd_session(task_id)
         if session:
-            db.update_prd_session(session["id"], status="complete",
-                                  prd_content="\n\n".join(prd_parts))
+            db.update_prd_session(session["id"], status="complete", prd_content="\n\n".join(prd_parts))
 
         # Embed PRD in vector memory
         if self.vector_store:
@@ -982,13 +1080,17 @@ class OrchestratorV2:
                 with open(file_path) as f:
                     user_request = f.read()
                 user_request = re.sub(
-                    r'^\s*<(?:Plan|Working|Pending|PRD|1|2)>\s*$',
-                    '', user_request, flags=re.MULTILINE
+                    r"^\s*<(?:Plan|Working|Pending|PRD|1|2)>\s*$", "", user_request, flags=re.MULTILINE
                 ).strip()[:2000]
                 doc = f"PRD for {task_id}: {user_request}\n\n{prd_parts[-1][:1000]}"
-                self.vector_store.add_document(doc, {
-                    "task_id": task_id, "task_type": "prd", "success": True,
-                })
+                self.vector_store.add_document(
+                    doc,
+                    {
+                        "task_id": task_id,
+                        "task_type": "prd",
+                        "success": True,
+                    },
+                )
             except Exception as e:
                 logger.warning(f"Failed to embed PRD: {e}")
 

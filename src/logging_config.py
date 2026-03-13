@@ -104,9 +104,7 @@ def configure_logging(level: int = logging.INFO):
 
     handler = logging.StreamHandler()
     handler.addFilter(CorrelationFilter())
-    formatter = logging.Formatter(
-        "%(asctime)s [%(correlation_id)s] %(levelname)s %(name)s — %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s [%(correlation_id)s] %(levelname)s %(name)s — %(message)s")
     handler.setFormatter(formatter)
     root.addHandler(handler)
     root.setLevel(level)

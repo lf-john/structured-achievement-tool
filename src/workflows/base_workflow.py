@@ -22,6 +22,7 @@ from langgraph.graph import StateGraph
 
 from src.agents.mediator_agent import MediatorAgent, categorize_files, save_intervention, should_trigger
 from src.execution.git_manager import auto_commit, get_diff, get_diff_stat, get_modified_files
+from src.execution.intent_verifier import IntentVerifier
 from src.execution.test_runner import get_test_command, run_tests
 from src.execution.verification_sdk import ConfigValidator
 from src.llm.cli_runner import invoke as cli_invoke
@@ -211,8 +212,14 @@ def phase_node(
 
     # Route to the right model
     story_complexity = story.get("complexity", 5)
+    story_type = story.get("type", "development")
     is_code = phase_name in ("CODE", "FIX", "EXECUTE")
-    provider = routing_engine.select(agent_name, story_complexity=story_complexity, is_code_task=is_code)
+    provider = routing_engine.select(
+        agent_name,
+        story_complexity=story_complexity,
+        is_code_task=is_code,
+        story_type=story_type,
+    )
     logger.info(f"Phase {phase_name} ({agent_name}) → {provider.name} (story: {story.get('id', '?')})")
 
     # Build prompt
@@ -344,6 +351,26 @@ def phase_node(
         )
     except Exception:
         pass  # Best-effort
+
+    # Record invocation in performance tracker for historical routing advice
+    if hasattr(routing_engine, "_perf_tracker") and routing_engine._perf_tracker:
+        try:
+            tokens = 0
+            if result is not None:
+                # Approximate tokens from output length (actual parsing in cli_runner)
+                tokens = len(output_text) // 4 if output_text else 0
+            quality = state.get("agent_self_confidence")
+            routing_engine._perf_tracker.record_invocation(
+                provider=provider.name,
+                agent=agent_name,
+                story_type=story_type,
+                success=(status == PhaseStatus.COMPLETE),
+                quality_score=quality,
+                tokens=tokens,
+                duration_seconds=duration,
+            )
+        except Exception as e:
+            logger.debug(f"Performance tracking failed: {e}")
 
     # Record phase output
     exit_code = result.exit_code if result is not None else -1
@@ -809,6 +836,44 @@ def parallel_verify_node(
             }
             all_passed = False
             failure_reasons.append(f"{agent_name}: error — {e}")
+
+    # --- Intent verification (pure Python, no LLM) ---
+    try:
+        intent_verifier = IntentVerifier()
+        diff_text = get_diff(working_dir)
+        modified = get_modified_files(working_dir)
+        ac_list = story.get("acceptanceCriteria", [])
+        description = story.get("description", story.get("title", ""))
+
+        intent_result = intent_verifier.verify_intent(
+            story_description=description,
+            acceptance_criteria=ac_list,
+            diff_text=diff_text,
+            modified_files=modified,
+        )
+
+        results["intent_verifier"] = {
+            "passed": intent_result.aligned,
+            "output": "; ".join(intent_result.issues) if intent_result.issues else "Intent aligned",
+            "provider": "heuristic",
+            "confidence": intent_result.confidence,
+        }
+
+        if not intent_result.aligned:
+            all_passed = False
+            failure_reasons.append(f"intent_verifier: {'; '.join(intent_result.issues)}")
+
+        # Log scope warnings (non-blocking)
+        if intent_result.scope_warnings:
+            logger.warning(f"Intent scope warnings for {story_id}: {intent_result.scope_warnings}")
+
+    except Exception as e:
+        logger.warning(f"Intent verification failed (non-fatal): {e}")
+        results["intent_verifier"] = {
+            "passed": True,
+            "output": f"Skipped due to error: {e}",
+            "provider": "heuristic",
+        }
 
     # Synthesize results
     state["verify_check_results"] = results
@@ -1340,7 +1405,39 @@ def _build_phase_context(state: StoryState, phase_name: str) -> dict:
         if state.get("test_results"):
             ctx["test_results"] = str(state["test_results"])
 
+    # For edit operations on content phases, inject existing file content
+    if phase_name in ("CONTENT_PLAN", "CONTENT_WRITE") and story.get("operation_mode") == "edit":
+        existing_content = _load_existing_file_for_edit(story, state.get("working_directory", "."))
+        if existing_content:
+            ctx["existing_file_content"] = existing_content
+
     return ctx
+
+
+def _load_existing_file_for_edit(story: dict, working_directory: str) -> str:
+    """Load existing file content for edit operations.
+
+    Reads the output file specified in the story and returns its content,
+    truncated to 15000 chars to avoid overwhelming the LLM context.
+
+    Returns empty string if the file doesn't exist or can't be read.
+    """
+    output_path = story.get("output_path")
+    if not output_path:
+        return ""
+
+    resolved = output_path if os.path.isabs(output_path) else os.path.join(working_directory, output_path)
+
+    try:
+        with open(resolved, encoding="utf-8") as f:
+            content = f.read()
+        if len(content) > 15000:
+            content = content[:15000] + "\n\n[...truncated at 15000 chars...]"
+        logger.info(f"Loaded existing file for edit: {resolved} ({len(content)} chars)")
+        return content
+    except (FileNotFoundError, OSError) as e:
+        logger.debug(f"Could not load existing file for edit: {resolved}: {e}")
+        return ""
 
 
 def write_output_node(state: StoryState) -> StoryState:

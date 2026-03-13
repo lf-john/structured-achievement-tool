@@ -21,37 +21,33 @@ logger = logging.getLogger(__name__)
 # Source: published API pricing as of 2026-03
 COST_PER_MTOK: dict[str, dict[str, float]] = {
     # Claude (Anthropic)
-    "claude-opus-4-6":           {"input": 15.00, "output": 75.00},
-    "claude-sonnet-4-6":         {"input":  3.00, "output": 15.00},
-    "claude-haiku-4-5-20251001": {"input":  0.80, "output":  4.00},
+    "claude-opus-4-6": {"input": 15.00, "output": 75.00},
+    "claude-sonnet-4-6": {"input": 3.00, "output": 15.00},
+    "claude-haiku-4-5-20251001": {"input": 0.80, "output": 4.00},
     # Gemini (Google)
-    "gemini-2.5-pro":            {"input":  1.25, "output":  5.00},
-    "gemini-3.1-pro-preview":    {"input":  1.25, "output":  5.00},
-    "gemini-3-flash-preview":    {"input":  0.15, "output":  0.60},
-    "gemini-2.5-flash":          {"input":  0.15, "output":  0.60},
+    "gemini-2.5-pro": {"input": 1.25, "output": 5.00},
+    "gemini-3.1-pro-preview": {"input": 1.25, "output": 5.00},
+    "gemini-3-flash-preview": {"input": 0.15, "output": 0.60},
+    "gemini-2.5-flash": {"input": 0.15, "output": 0.60},
     # GLM (z.ai proxy)
-    "glm-4.7":                   {"input":  0.50, "output":  2.00},
-    "glm-4.7-flash":             {"input":  0.10, "output":  0.40},
+    "glm-4.7": {"input": 0.50, "output": 2.00},
+    "glm-4.7-flash": {"input": 0.10, "output": 0.40},
     # Local (Ollama) — free
-    "qwen3:8b":                  {"input":  0.00, "output":  0.00},
-    "deepseek-r1:8b":            {"input":  0.00, "output":  0.00},
-    "qwen2.5-coder:7b":          {"input":  0.00, "output":  0.00},
-    "nemotron-mini":             {"input":  0.00, "output":  0.00},
+    "qwen3:8b": {"input": 0.00, "output": 0.00},
+    "deepseek-r1:8b": {"input": 0.00, "output": 0.00},
+    "qwen2.5-coder:7b": {"input": 0.00, "output": 0.00},
+    "nemotron-mini": {"input": 0.00, "output": 0.00},
 }
 
 # Legacy blended rates for backward compatibility
 COST_PER_1K_TOKENS = {
-    model_id: (rates["input"] + rates["output"]) / 2000.0
-    for model_id, rates in COST_PER_MTOK.items()
+    model_id: (rates["input"] + rates["output"]) / 2000.0 for model_id, rates in COST_PER_MTOK.items()
 }
 
 # Rough chars-per-token ratio for estimation
 CHARS_PER_TOKEN = 4.0
 
-DEFAULT_DB_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    ".memory", "llm_costs.db"
-)
+DEFAULT_DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".memory", "llm_costs.db")
 
 
 class LLMCostTracker:
@@ -124,16 +120,16 @@ class LLMCostTracker:
     def get_total_api_calls_for_day(self, date: datetime | None = None) -> dict[str, int]:
         """Count API calls by provider family for a given day."""
         d = date or datetime.now()
-        date_str = d.strftime('%Y-%m-%d')
+        date_str = d.strftime("%Y-%m-%d")
         import sqlite3
+
         counts: dict[str, int] = {}
         try:
             with sqlite3.connect(self.db.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT model_name, COUNT(*) FROM llm_costs "
-                    "WHERE substr(timestamp, 1, 10) = ? GROUP BY model_name",
-                    (date_str,)
+                    "SELECT model_name, COUNT(*) FROM llm_costs WHERE substr(timestamp, 1, 10) = ? GROUP BY model_name",
+                    (date_str,),
                 )
                 for row in cursor.fetchall():
                     family = row[0].split("/")[0] if "/" in row[0] else row[0]
@@ -145,8 +141,9 @@ class LLMCostTracker:
     def get_daily_cost_summary(self, date: datetime | None = None) -> dict[str, float]:
         """Get cost breakdown by provider for a given day."""
         d = date or datetime.now()
-        date_str = d.strftime('%Y-%m-%d')
+        date_str = d.strftime("%Y-%m-%d")
         import sqlite3
+
         costs: dict[str, float] = {}
         try:
             with sqlite3.connect(self.db.db_path) as conn:
@@ -154,7 +151,7 @@ class LLMCostTracker:
                 cursor.execute(
                     "SELECT model_name, SUM(estimated_cost) FROM llm_costs "
                     "WHERE substr(timestamp, 1, 10) = ? GROUP BY model_name",
-                    (date_str,)
+                    (date_str,),
                 )
                 for row in cursor.fetchall():
                     family = row[0].split("/")[0] if "/" in row[0] else row[0]
@@ -177,6 +174,7 @@ class LLMCostTracker:
 
     def _cost_range(self, start: datetime, end: datetime) -> dict[str, float]:
         import sqlite3
+
         costs: dict[str, float] = {}
         try:
             with sqlite3.connect(self.db.db_path) as conn:
@@ -184,7 +182,7 @@ class LLMCostTracker:
                 cursor.execute(
                     "SELECT model_name, SUM(estimated_cost) FROM llm_costs "
                     "WHERE timestamp >= ? AND timestamp <= ? GROUP BY model_name",
-                    (start.isoformat(), end.isoformat())
+                    (start.isoformat(), end.isoformat()),
                 )
                 for row in cursor.fetchall():
                     family = row[0].split("/")[0] if "/" in row[0] else row[0]

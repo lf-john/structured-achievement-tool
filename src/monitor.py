@@ -4,7 +4,7 @@ import os
 import subprocess
 import time
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 from src.core.paths import MONITOR_WATCH_DIRS, SAT_DB
 from src.core.paths import RETRY_COUNTS as RETRY_COUNTS_PATH
@@ -12,16 +12,19 @@ from src.core.paths import RETRY_COUNTS as RETRY_COUNTS_PATH
 # --- Task State Hub integration (Option D) ---
 _db_manager = None
 
+
 def _get_db_manager():
     """Lazy-initialize the DatabaseManager for state hub queries."""
     global _db_manager
     if _db_manager is None:
         try:
             from src.db.database_manager import DatabaseManager
+
             _db_manager = DatabaseManager(str(SAT_DB))
         except Exception as e:
             logging.warning(f"Could not initialize state hub: {e}")
     return _db_manager
+
 
 WATCH_DIRS = [str(d) for d in MONITOR_WATCH_DIRS]
 
@@ -57,12 +60,13 @@ def _save_retry_counts():
     """Save retry counts to persistent storage."""
     try:
         os.makedirs(os.path.dirname(RETRY_COUNT_FILE), exist_ok=True)
-        with open(RETRY_COUNT_FILE, 'w') as f:
+        with open(RETRY_COUNT_FILE, "w") as f:
             json.dump(retry_counts, f, indent=2)
             f.flush()
             os.fsync(f.fileno())
     except Exception as e:
         logging.warning(f"Could not save retry counts: {e}")
+
 
 def is_task_file(filename):
     """Return True if this is an actual task file, not a response file.
@@ -70,7 +74,8 @@ def is_task_file(filename):
     Task files have descriptive names like 001_health_check.md, 004_proactive_agency.md.
     Response files have names like 002_response.md, 003_response.md.
     """
-    return filename.endswith('.md') and not filename.startswith('_') and '_response' not in filename
+    return filename.endswith(".md") and not filename.startswith("_") and "_response" not in filename
+
 
 def is_service_active(service_name):
     try:
@@ -78,6 +83,7 @@ def is_service_active(service_name):
         return res.stdout.strip() == "active"
     except:
         return False
+
 
 PID_FILE = "/tmp/sat-daemon.pid"
 
@@ -122,13 +128,14 @@ def is_sat_busy():
                     else:
                         # Daemon is dead but file says <Working> — treat as stuck
                         logging.warning(
-                            "Task %s is <Working> but daemon PID is gone — "
-                            "treating as stuck, not busy", f,
+                            "Task %s is <Working> but daemon PID is gone — treating as stuck, not busy",
+                            f,
                         )
                         return False
             except:
                 pass
     return False
+
 
 def release_safety(file_path):
     """Remove # from '# <Pending>' to make the file ready for processing."""
@@ -137,7 +144,7 @@ def release_safety(file_path):
             content = f.read()
         if "# <Pending>" in content:
             new_content = content.replace("# <Pending>", "<Pending>")
-            with open(file_path, 'w') as f:
+            with open(file_path, "w") as f:
                 f.write(new_content)
                 f.flush()
                 os.fsync(f.fileno())
@@ -146,6 +153,7 @@ def release_safety(file_path):
     except Exception as e:
         logging.error(f"Error releasing safety: {e}")
     return False
+
 
 def handle_failed_task(file_path, content):
     """Handle a task file that is in <Failed> state.
@@ -175,7 +183,7 @@ def handle_failed_task(file_path, content):
                     f"**Monitor: This task has failed {count} times and will not be "
                     f"retried automatically. Manual intervention required.**\n"
                 )
-                with open(file_path, 'a') as f:
+                with open(file_path, "a") as f:
                     f.write(annotation)
                     f.flush()
                     os.fsync(f.fileno())
@@ -184,10 +192,7 @@ def handle_failed_task(file_path, content):
         return
 
     # Look for error details in response files
-    response_files = sorted([
-        f for f in os.listdir(task_dir)
-        if f.endswith('.md') and '_response' in f
-    ])
+    response_files = sorted([f for f in os.listdir(task_dir) if f.endswith(".md") and "_response" in f])
 
     error_info = ""
     for rf in response_files[-3:]:  # Check last 3 response files
@@ -215,13 +220,14 @@ def handle_failed_task(file_path, content):
     # Reset the task to queued state so it can be retried
     try:
         new_content = content.replace("<Failed>", "# <Pending>")
-        with open(file_path, 'w') as f:
+        with open(file_path, "w") as f:
             f.write(new_content)
             f.flush()
             os.fsync(f.fileno())
         logging.info(f"Reset failed task {task_name} to queued state for retry (attempt {count + 1}/{MAX_RETRIES})")
     except Exception as e:
         logging.error(f"Could not reset failed task {task_name}: {e}")
+
 
 def _is_waiting_for_human(file_path):
     """Check if a task's checkpoint status is 'waiting_for_human'.
@@ -232,10 +238,8 @@ def _is_waiting_for_human(file_path):
     """
     try:
         from src.core.checkpoint_manager import STATUS_WAITING_FOR_HUMAN, read_checkpoint
-        db_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            ".memory", "checkpoints.db"
-        )
+
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".memory", "checkpoints.db")
         if not os.path.exists(db_path):
             return False
         # Build task_id from file path (dir_name/filename_stem)
@@ -260,10 +264,7 @@ def handle_stuck_task(file_path, content):
     """
     # Don't mark tasks waiting for human input as stuck
     if _is_waiting_for_human(file_path):
-        logging.info(
-            f"Task in <Working> but waiting for human response — not stuck: "
-            f"{os.path.basename(file_path)}"
-        )
+        logging.info(f"Task in <Working> but waiting for human response — not stuck: {os.path.basename(file_path)}")
         return
 
     now = time.time()
@@ -275,10 +276,10 @@ def handle_stuck_task(file_path, content):
 
     elapsed = now - stuck_since[file_path]
     if elapsed > STUCK_TIMEOUT:
-        logging.error(f"Task stuck for {elapsed/60:.0f} min, marking as <Failed>: {os.path.basename(file_path)}")
+        logging.error(f"Task stuck for {elapsed / 60:.0f} min, marking as <Failed>: {os.path.basename(file_path)}")
         try:
             new_content = content.replace("<Working>", "<Failed>")
-            with open(file_path, 'w') as f:
+            with open(file_path, "w") as f:
                 f.write(new_content)
                 f.flush()
                 os.fsync(f.fileno())
@@ -286,7 +287,10 @@ def handle_stuck_task(file_path, content):
         except Exception as e:
             logging.error(f"Could not mark stuck task as failed: {e}")
     else:
-        logging.info(f"Task in <Working> for {elapsed/60:.0f} min (timeout at {STUCK_TIMEOUT/60:.0f} min): {os.path.basename(file_path)}")
+        logging.info(
+            f"Task in <Working> for {elapsed / 60:.0f} min (timeout at {STUCK_TIMEOUT / 60:.0f} min): {os.path.basename(file_path)}"
+        )
+
 
 def ensure_sat_running():
     """Make sure the SAT daemon is running. Restart if needed."""
@@ -300,6 +304,7 @@ def ensure_sat_running():
             logging.error("SAT service failed to restart")
             return False
     return True
+
 
 def check_queue():
     """Main monitoring cycle. Returns True if any action was taken."""
@@ -380,6 +385,7 @@ def check_queue():
 
     return False  # No action taken
 
+
 def _cleanup_retry_counts():
     """Remove retry count entries for tasks that are no longer in <Failed> state."""
     changed = False
@@ -401,8 +407,8 @@ def _cleanup_retry_counts():
         _save_retry_counts()
 
 
-BASE_INTERVAL = 120   # 2 minutes
-MAX_INTERVAL = 900    # 15 minutes
+BASE_INTERVAL = 120  # 2 minutes
+MAX_INTERVAL = 900  # 15 minutes
 
 # G-Eval scoring interval: only score every N idle cycles to avoid thrashing
 GEVAL_SCORE_INTERVAL = 3  # Score every 3rd idle cycle
@@ -412,6 +418,7 @@ def _run_idle_scoring():
     """Run G-Eval idle-time scoring if available."""
     try:
         from src.evaluation.geval_scorer import score_pending_invocations
+
         scored = score_pending_invocations()
         if scored > 0:
             logging.info(f"G-Eval: scored {scored} invocations during idle")
@@ -452,6 +459,7 @@ def main():
             logging.error(f"Monitor error: {e}")
             current_interval = BASE_INTERVAL  # Reset on error
         time.sleep(current_interval)
+
 
 if __name__ == "__main__":
     main()

@@ -21,6 +21,7 @@ class CostTier(str, Enum):
 
 class ProviderConfig(BaseModel):
     """Configuration for a single LLM provider/model."""
+
     name: str
     power: int  # Reasoning power rating (1-10)
     code_power: int  # Code generation power (1-10), defaults to power
@@ -48,7 +49,9 @@ class ProviderConfig(BaseModel):
 PROVIDERS: dict[str, ProviderConfig] = {
     "opus": ProviderConfig(
         name="opus",
-        power=9, code_power=9, speed=3,
+        power=9,
+        code_power=9,
+        speed=3,
         cost_tier=CostTier.HIGH,
         context_window=1_000_000,
         cli_command="claude",
@@ -57,7 +60,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
     ),
     "sonnet": ProviderConfig(
         name="sonnet",
-        power=8, code_power=8, speed=5,
+        power=8,
+        code_power=8,
+        speed=5,
         cost_tier=CostTier.MEDIUM,
         context_window=1_000_000,
         cli_command="claude",
@@ -66,7 +71,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
     ),
     "haiku": ProviderConfig(
         name="haiku",
-        power=7, code_power=7, speed=8,
+        power=7,
+        code_power=7,
+        speed=8,
         cost_tier=CostTier.LOW,
         context_window=200_000,
         cli_command="claude",
@@ -75,7 +82,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
     ),
     "gemini_31_pro": ProviderConfig(
         name="gemini_31_pro",
-        power=9, code_power=9, speed=5,
+        power=9,
+        code_power=9,
+        speed=5,
         cost_tier=CostTier.MEDIUM,
         context_window=1_000_000,
         cli_command="gemini",
@@ -84,7 +93,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
     ),
     "gemini_pro": ProviderConfig(
         name="gemini_pro",
-        power=9, code_power=9, speed=5,
+        power=9,
+        code_power=9,
+        speed=5,
         cost_tier=CostTier.MEDIUM,
         context_window=1_000_000,
         cli_command="gemini",
@@ -93,7 +104,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
     ),
     "glm5": ProviderConfig(
         name="glm5",
-        power=7, code_power=7, speed=5,
+        power=7,
+        code_power=7,
+        speed=5,
         cost_tier=CostTier.LOW,
         context_window=200_000,
         cli_command="claude",
@@ -103,7 +116,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
     ),
     "gemini_flash": ProviderConfig(
         name="gemini_flash",
-        power=7, code_power=7, speed=9,
+        power=7,
+        code_power=7,
+        speed=9,
         cost_tier=CostTier.MINIMAL,
         context_window=1_000_000,
         cli_command="gemini",
@@ -112,7 +127,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
     ),
     "gemini_25_flash": ProviderConfig(
         name="gemini_25_flash",
-        power=6, code_power=6, speed=9,
+        power=6,
+        code_power=6,
+        speed=9,
         cost_tier=CostTier.MINIMAL,
         context_window=1_000_000,
         cli_command="gemini",
@@ -121,7 +138,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
     ),
     "glm_flash": ProviderConfig(
         name="glm_flash",
-        power=5, code_power=5, speed=8,
+        power=5,
+        code_power=5,
+        speed=8,
         cost_tier=CostTier.MINIMAL,
         context_window=32_000,
         cli_command="claude",
@@ -131,7 +150,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
     ),
     "qwen3_8b": ProviderConfig(
         name="qwen3_8b",
-        power=5, code_power=5, speed=3,
+        power=5,
+        code_power=5,
+        speed=3,
         cost_tier=CostTier.FREE,
         context_window=32_000,
         cli_command="ollama",
@@ -140,7 +161,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
     ),
     "deepseek_r1": ProviderConfig(
         name="deepseek_r1",
-        power=5, code_power=4, speed=2,
+        power=5,
+        code_power=4,
+        speed=2,
         cost_tier=CostTier.FREE,
         context_window=32_000,
         cli_command="ollama",
@@ -149,7 +172,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
     ),
     "qwen25_coder": ProviderConfig(
         name="qwen25_coder",
-        power=4, code_power=6, speed=3,
+        power=4,
+        code_power=6,
+        speed=3,
         cost_tier=CostTier.FREE,
         context_window=32_000,
         cli_command="ollama",
@@ -158,7 +183,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
     ),
     "nemotron": ProviderConfig(
         name="nemotron",
-        power=3, code_power=3, speed=4,
+        power=3,
+        code_power=3,
+        speed=4,
         cost_tier=CostTier.FREE,
         context_window=32_000,
         cli_command="ollama",

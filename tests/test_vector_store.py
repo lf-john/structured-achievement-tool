@@ -38,10 +38,7 @@ class TestVectorStore:
     @pytest.fixture
     def vector_store(self, temp_db_path, mock_embedding_service):
         """Create a VectorStore instance for testing."""
-        return VectorStore(
-            db_path=temp_db_path,
-            embedding_service=mock_embedding_service
-        )
+        return VectorStore(db_path=temp_db_path, embedding_service=mock_embedding_service)
 
     def test_init_creates_database_file(self, temp_db_path, mock_embedding_service):
         """Test that VectorStore creates a database file on initialization."""
@@ -55,6 +52,7 @@ class TestVectorStore:
 
         # Verify tables exist by attempting to query them
         import sqlite3
+
         conn = sqlite3.connect(temp_db_path)
         cursor = conn.cursor()
 
@@ -68,8 +66,7 @@ class TestVectorStore:
     def test_add_document_stores_text_and_metadata(self, vector_store, mock_embedding_service):
         """Test that add_document stores text content and metadata."""
         doc_id = vector_store.add_document(
-            text="This is a test document",
-            metadata={"task_id": "task-001", "type": "request"}
+            text="This is a test document", metadata={"task_id": "task-001", "type": "request"}
         )
 
         assert doc_id is not None
@@ -103,10 +100,7 @@ class TestVectorStore:
 
     def test_search_returns_results_with_text_and_metadata(self, vector_store, mock_embedding_service):
         """Test that search results contain text content and metadata."""
-        vector_store.add_document(
-            "Test document",
-            {"task_id": "task-123", "timestamp": "2024-01-01"}
-        )
+        vector_store.add_document("Test document", {"task_id": "task-123", "timestamp": "2024-01-01"})
 
         results = vector_store.search("test", k=1)
 
@@ -148,7 +142,7 @@ class TestVectorStore:
             "float_field": 3.14,
             "bool_field": True,
             "list_field": [1, 2, 3],
-            "dict_field": {"nested": "value"}
+            "dict_field": {"nested": "value"},
         }
 
         doc_id = vector_store.add_document("Test", metadata)
@@ -192,6 +186,6 @@ class TestVectorStore:
         vector_store.add_document("test", {})
 
         # Should have a close method
-        if hasattr(vector_store, 'close'):
+        if hasattr(vector_store, "close"):
             vector_store.close()
             # After closing, operations should either fail or reconnect

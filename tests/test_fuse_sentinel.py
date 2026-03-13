@@ -92,9 +92,7 @@ class TestRcloneRCHealth:
         sentinel = FuseSentinel(sentinel_path=str(sentinel_file))
 
         mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps(
-            {"fatalErrors": 0, "errors": 0, "bytes": 1024}
-        ).encode()
+        mock_response.read.return_value = json.dumps({"fatalErrors": 0, "errors": 0, "bytes": 1024}).encode()
         mock_response.__enter__ = lambda s: s
         mock_response.__exit__ = MagicMock(return_value=False)
 
@@ -109,9 +107,7 @@ class TestRcloneRCHealth:
         sentinel = FuseSentinel(sentinel_path=str(sentinel_file))
 
         mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps(
-            {"fatalErrors": 3, "errors": 1}
-        ).encode()
+        mock_response.read.return_value = json.dumps({"fatalErrors": 3, "errors": 1}).encode()
         mock_response.__enter__ = lambda s: s
         mock_response.__exit__ = MagicMock(return_value=False)
 
@@ -126,6 +122,7 @@ class TestRcloneRCHealth:
         sentinel = FuseSentinel(sentinel_path=str(sentinel_file))
 
         import urllib.error
+
         with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("refused")):
             assert sentinel.is_healthy() is True
             assert sentinel._rc_available is False
@@ -137,6 +134,7 @@ class TestRcloneRCHealth:
         sentinel = FuseSentinel(sentinel_path=str(sentinel_file))
 
         import urllib.error
+
         with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("refused")):
             result = sentinel._check_rclone_rc()
             assert result is None
@@ -148,6 +146,7 @@ class TestTaskStateHubUnit:
     @pytest.fixture
     def db(self, tmp_path):
         from src.db.database_manager import DatabaseManager
+
         return DatabaseManager(str(tmp_path / "test.db"))
 
     def test_upsert_and_get(self, db):
@@ -184,9 +183,7 @@ class TestTaskStateHubUnit:
         """Failure transition."""
         db.upsert_task_state("/path/to/task.md", "pending")
         db.transition_task_state("/path/to/task.md", "working")
-        assert db.transition_task_state(
-            "/path/to/task.md", "failed", error_summary="test error"
-        ) is True
+        assert db.transition_task_state("/path/to/task.md", "failed", error_summary="test error") is True
         state = db.get_task_state("/path/to/task.md")
         assert state["status"] == "failed"
         assert state["error_summary"] == "test error"

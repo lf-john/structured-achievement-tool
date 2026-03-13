@@ -4,12 +4,14 @@ import re
 import default_api  # Import default_api directly
 
 # Configure logging for the module
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 class OllamaGPUMonitor:
     """
     Monitors Ollama GPU utilization by querying nvidia-smi.
     """
+
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
@@ -22,7 +24,7 @@ class OllamaGPUMonitor:
             # The test expects this specific command, so we must call it.
             command_result = default_api.run_shell_command(
                 command="nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits",
-                description="Get Ollama GPU utilization"
+                description="Get Ollama GPU utilization",
             )
 
             output = command_result.get("output", "").strip()
@@ -40,7 +42,7 @@ class OllamaGPUMonitor:
             # Regex to find the GPU utilization percentage in the nvidia-smi output.
             # We are looking for a line that contains a number followed by '%' and then 'Default'
             # This pattern targets the specific line format in the mocked output: '75%      Default '
-            match = re.search(r'\s+([0-9]+)%\s+Default', output, re.MULTILINE)
+            match = re.search(r"\s+([0-9]+)%\s+Default", output, re.MULTILINE)
             if match:
                 utilization_percentage = float(match.group(1))
                 return utilization_percentage / 100.0

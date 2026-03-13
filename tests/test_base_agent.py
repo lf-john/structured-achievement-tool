@@ -36,8 +36,10 @@ class TestBaseAgent:
             exit_code=0,
         )
 
-        with patch("src.agents.base_agent.cli_invoke", new_callable=AsyncMock, return_value=mock_result), \
-             patch("src.agents.base_agent.build_prompt", return_value="test prompt"):
+        with (
+            patch("src.agents.base_agent.cli_invoke", new_callable=AsyncMock, return_value=mock_result),
+            patch("src.agents.base_agent.build_prompt", return_value="test prompt"),
+        ):
             result = await agent.execute(
                 story={"id": "US-001"},
                 phase="CLASSIFY",
@@ -59,6 +61,7 @@ class TestBaseAgent:
         )
 
         call_count = 0
+
         async def mock_invoke(*args, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -66,8 +69,10 @@ class TestBaseAgent:
                 return bad_result
             return good_result
 
-        with patch("src.agents.base_agent.cli_invoke", side_effect=mock_invoke), \
-             patch("src.agents.base_agent.build_prompt", return_value="test prompt"):
+        with (
+            patch("src.agents.base_agent.cli_invoke", side_effect=mock_invoke),
+            patch("src.agents.base_agent.build_prompt", return_value="test prompt"),
+        ):
             result = await agent.execute(
                 story={"id": "US-001"},
                 phase="CLASSIFY",
@@ -81,10 +86,12 @@ class TestBaseAgent:
     async def test_execute_raises_after_double_failure(self):
         agent = ConcreteAgent()
 
-        bad_result = CLIResult(stdout='not json at all', exit_code=0)
+        bad_result = CLIResult(stdout="not json at all", exit_code=0)
 
-        with patch("src.agents.base_agent.cli_invoke", new_callable=AsyncMock, return_value=bad_result), \
-             patch("src.agents.base_agent.build_prompt", return_value="test prompt"):
+        with (
+            patch("src.agents.base_agent.cli_invoke", new_callable=AsyncMock, return_value=bad_result),
+            patch("src.agents.base_agent.build_prompt", return_value="test prompt"),
+        ):
             with pytest.raises(ValueError, match="Validation failed after retry"):
                 await agent.execute(
                     story={"id": "US-001"},
@@ -104,8 +111,10 @@ class TestBaseAgent:
             api_error_code=500,
         )
 
-        with patch("src.agents.base_agent.cli_invoke", new_callable=AsyncMock, return_value=error_result), \
-             patch("src.agents.base_agent.build_prompt", return_value="test prompt"):
+        with (
+            patch("src.agents.base_agent.cli_invoke", new_callable=AsyncMock, return_value=error_result),
+            patch("src.agents.base_agent.build_prompt", return_value="test prompt"),
+        ):
             with pytest.raises(RuntimeError, match="API error"):
                 await agent.execute(
                     story={"id": "US-001"},

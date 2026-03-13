@@ -15,10 +15,12 @@ from src.github.gh_cli import GHResult
 class TestGetReviewComments:
     @patch("src.github.feedback_handler.run_gh")
     def test_fetches_inline_comments(self, mock_gh):
-        inline_data = json.dumps([
-            {"body": "Fix this", "user": {"login": "reviewer1"}, "path": "src/auth.py", "line": 42},
-            {"body": "Add tests", "user": {"login": "reviewer2"}, "path": "src/auth.py", "line": 50},
-        ])
+        inline_data = json.dumps(
+            [
+                {"body": "Fix this", "user": {"login": "reviewer1"}, "path": "src/auth.py", "line": 42},
+                {"body": "Add tests", "user": {"login": "reviewer2"}, "path": "src/auth.py", "line": 50},
+            ]
+        )
         # First call: inline comments, second: reviews
         mock_gh.side_effect = [
             GHResult(stdout=inline_data, success=True),
@@ -36,10 +38,12 @@ class TestGetReviewComments:
 
     @patch("src.github.feedback_handler.run_gh")
     def test_fetches_general_review_comments(self, mock_gh):
-        review_data = json.dumps([
-            {"body": "Overall looks good but needs refactoring", "user": {"login": "lead"}},
-            {"body": "", "user": {"login": "lead"}},  # Empty body, should be skipped
-        ])
+        review_data = json.dumps(
+            [
+                {"body": "Overall looks good but needs refactoring", "user": {"login": "lead"}},
+                {"body": "", "user": {"login": "lead"}},  # Empty body, should be skipped
+            ]
+        )
         mock_gh.side_effect = [
             GHResult(stdout="[]", success=True),  # inline
             GHResult(stdout=review_data, success=True),  # reviews
@@ -141,8 +145,10 @@ class TestGenerateFollowUpStories:
         ]
 
         stories = handler.generate_follow_up_stories(
-            pr_number=7, source_story_id="US-015",
-            task_name="test", comments=comments,
+            pr_number=7,
+            source_story_id="US-015",
+            task_name="test",
+            comments=comments,
         )
 
         assert stories[0].story_type == "debug"
@@ -154,8 +160,10 @@ class TestGenerateFollowUpStories:
         ]
 
         stories = handler.generate_follow_up_stories(
-            pr_number=7, source_story_id="US-015",
-            task_name="test", comments=comments,
+            pr_number=7,
+            source_story_id="US-015",
+            task_name="test",
+            comments=comments,
         )
 
         assert stories[0].story_type == "maintenance"
@@ -167,8 +175,10 @@ class TestGenerateFollowUpStories:
         ]
 
         stories = handler.generate_follow_up_stories(
-            pr_number=7, source_story_id="US-015",
-            task_name="test", comments=comments,
+            pr_number=7,
+            source_story_id="US-015",
+            task_name="test",
+            comments=comments,
         )
 
         assert stories[0].story_type == "development"
@@ -180,8 +190,10 @@ class TestGenerateFollowUpStories:
         ]
 
         stories = handler.generate_follow_up_stories(
-            pr_number=7, source_story_id="US-015",
-            task_name="test", comments=comments,
+            pr_number=7,
+            source_story_id="US-015",
+            task_name="test",
+            comments=comments,
         )
 
         criteria = stories[0].acceptance_criteria

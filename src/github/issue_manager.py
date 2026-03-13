@@ -46,6 +46,7 @@ STATUS_LABELS = {
 @dataclass
 class IssueResult:
     """Result of a GitHub Issue operation."""
+
     success: bool
     issue_number: int | None = None
     issue_url: str | None = None
@@ -99,10 +100,14 @@ class IssueManager:
 
         # Build gh command
         args = [
-            "issue", "create",
-            "--title", title,
-            "--body", body,
-            "--label", f"{type_label},{status_label}",
+            "issue",
+            "create",
+            "--title",
+            title,
+            "--body",
+            body,
+            "--label",
+            f"{type_label},{status_label}",
         ]
         if milestone:
             args.extend(["--milestone", task_name])
@@ -148,13 +153,15 @@ class IssueManager:
             if status != new_status:
                 run_gh(
                     ["issue", "edit", str(issue_number), "--remove-label", label],
-                    repo=self.repo, cwd=self.cwd,
+                    repo=self.repo,
+                    cwd=self.cwd,
                 )
 
         # Add new status label
         result = run_gh(
             ["issue", "edit", str(issue_number), "--add-label", new_label],
-            repo=self.repo, cwd=self.cwd,
+            repo=self.repo,
+            cwd=self.cwd,
         )
 
         if result.success:
@@ -164,7 +171,8 @@ class IssueManager:
         if new_status == "complete":
             run_gh(
                 ["issue", "close", str(issue_number)],
-                repo=self.repo, cwd=self.cwd,
+                repo=self.repo,
+                cwd=self.cwd,
             )
 
         return result.success
@@ -179,7 +187,8 @@ class IssueManager:
         """
         result = run_gh(
             ["issue", "list", "--search", f"[{story_id}] in:title", "--json", "number", "--limit", "1"],
-            repo=self.repo, cwd=self.cwd,
+            repo=self.repo,
+            cwd=self.cwd,
         )
 
         if result.success:
@@ -210,7 +219,8 @@ class IssueManager:
         """Add a comment to a GitHub Issue."""
         result = run_gh(
             ["issue", "comment", str(issue_number), "--body", body],
-            repo=self.repo, cwd=self.cwd,
+            repo=self.repo,
+            cwd=self.cwd,
         )
         return result.success
 
@@ -264,7 +274,8 @@ class IssueManager:
             # Check if label exists
             result = run_gh(
                 ["label", "list", "--search", label, "--json", "name"],
-                repo=self.repo, cwd=self.cwd,
+                repo=self.repo,
+                cwd=self.cwd,
             )
 
             if result.success:
@@ -280,7 +291,8 @@ class IssueManager:
             color = self._label_color(label)
             create_result = run_gh(
                 ["label", "create", label, "--color", color, "--force"],
-                repo=self.repo, cwd=self.cwd,
+                repo=self.repo,
+                cwd=self.cwd,
             )
             if create_result.success:
                 self._label_cache.add(label)
@@ -293,9 +305,9 @@ class IssueManager:
 
         # Check if milestone exists
         result = run_gh(
-            ["api", "repos/:owner/:repo/milestones", "--jq",
-             f'.[] | select(.title == "{task_name}") | .number'],
-            repo=self.repo, cwd=self.cwd,
+            ["api", "repos/:owner/:repo/milestones", "--jq", f'.[] | select(.title == "{task_name}") | .number'],
+            repo=self.repo,
+            cwd=self.cwd,
         )
 
         if result.success and result.stdout.strip():
@@ -308,9 +320,9 @@ class IssueManager:
 
         # Create milestone
         create_result = run_gh(
-            ["api", "repos/:owner/:repo/milestones", "--method", "POST",
-             "--field", f"title={task_name}"],
-            repo=self.repo, cwd=self.cwd,
+            ["api", "repos/:owner/:repo/milestones", "--method", "POST", "--field", f"title={task_name}"],
+            repo=self.repo,
+            cwd=self.cwd,
         )
 
         if create_result.success:
@@ -328,7 +340,7 @@ class IssueManager:
 
     def _extract_issue_number(self, url: str) -> int | None:
         """Extract issue number from GitHub URL."""
-        match = re.search(r'/issues/(\d+)', url)
+        match = re.search(r"/issues/(\d+)", url)
         if match:
             return int(match.group(1))
         return None

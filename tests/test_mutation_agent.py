@@ -52,13 +52,7 @@ class TestGenerateMutationsForLine:
 class TestGenerateMutations:
     def test_generates_from_file(self, tmp_path):
         source = tmp_path / "example.py"
-        source.write_text(
-            "def add(a, b):\n"
-            "    return a + b\n"
-            "\n"
-            "def is_valid(x):\n"
-            "    return x == 5\n"
-        )
+        source.write_text("def add(a, b):\n    return a + b\n\ndef is_valid(x):\n    return x == 5\n")
         mutations = generate_mutations(str(source))
         assert len(mutations) > 0
 
@@ -157,7 +151,9 @@ class TestMutationReport:
         m2 = Mutation("f.py", 2, "c", "d", "test", detected=False)
         m3 = Mutation("f.py", 3, "e", "f", "test", detected=False)
         report = MutationReport(
-            total_mutations=3, detected=1, survived=2,
+            total_mutations=3,
+            detected=1,
+            survived=2,
             mutations=[m1, m2, m3],
         )
         assert len(report.survived_mutations) == 2

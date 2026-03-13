@@ -16,6 +16,7 @@ from typing import Any
 
 class CircularDependencyError(Exception):
     """Raised when a circular dependency is detected in the story graph."""
+
     pass
 
 
@@ -55,7 +56,7 @@ class DAGExecutor:
 
         for story in self.stories:
             story_id = story.get("id", "")
-            dependencies = story.get("dependsOn", []) # Map from 'dependsOn' in prd.json
+            dependencies = story.get("dependsOn", [])  # Map from 'dependsOn' in prd.json
 
             if story_id:
                 graph[story_id] = list(dependencies)
@@ -196,11 +197,7 @@ class DAGExecutor:
             Dictionary with execution result
         """
         story = self._stories_by_id.get(story_id, {})
-        result = {
-            "id": story_id,
-            "status": "completed",
-            "story": story
-        }
+        result = {"id": story_id, "status": "completed", "story": story}
         return result
 
     async def _execute_story_async(self, story_id: str) -> dict[str, Any]:

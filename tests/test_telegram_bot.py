@@ -19,18 +19,21 @@ class TestAuthorization:
 
     def test_allowed_users_parsing(self):
         from src.notifications.telegram_bot import _get_allowed_users
+
         with patch.dict(os.environ, {"TELEGRAM_ALLOWED_USERS": "111,222,333"}):
             users = _get_allowed_users()
             assert users == {111, 222, 333}
 
     def test_allowed_users_empty(self):
         from src.notifications.telegram_bot import _get_allowed_users
+
         with patch.dict(os.environ, {"TELEGRAM_ALLOWED_USERS": ""}):
             users = _get_allowed_users()
             assert users == set()
 
     def test_allowed_users_with_spaces(self):
         from src.notifications.telegram_bot import _get_allowed_users
+
         with patch.dict(os.environ, {"TELEGRAM_ALLOWED_USERS": " 111 , 222 "}):
             users = _get_allowed_users()
             assert users == {111, 222}
@@ -59,11 +62,13 @@ class TestTaskHelpers:
 
     def test_count_tasks_empty_dir(self, tmp_path):
         from src.notifications.telegram_bot import _count_tasks
+
         counts = _count_tasks(str(tmp_path))
         assert counts == {"pending": 0, "working": 0, "finished": 0, "failed": 0}
 
     def test_count_tasks_nonexistent(self):
         from src.notifications.telegram_bot import _count_tasks
+
         counts = _count_tasks("/nonexistent/path")
         assert counts == {"pending": 0, "working": 0, "finished": 0, "failed": 0}
 
@@ -108,12 +113,7 @@ class TestApprovalCommands:
     def test_approve_modifies_signal_file(self, tmp_path):
         """Verify approve replaces # <Pending> correctly."""
         signal_file = tmp_path / "US-001_approval.md"
-        signal_file.write_text(
-            "# Approval Required: US-001\n\n"
-            "## Your Response\n\n"
-            "---\n\n"
-            "# <Pending>\n"
-        )
+        signal_file.write_text("# Approval Required: US-001\n\n## Your Response\n\n---\n\n# <Pending>\n")
 
         # Read, modify, write — same as cmd_approve does
         content = signal_file.read_text()

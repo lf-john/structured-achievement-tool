@@ -134,6 +134,7 @@ def mechanical_verify_node(state: StoryState) -> StoryState:
 
     failures = []
     checks_run = []
+    content = ""
 
     # Check: File exists (always required)
     checks_run.append("file_exists")
@@ -145,7 +146,6 @@ def mechanical_verify_node(state: StoryState) -> StoryState:
                 content = f.read()
         except Exception as e:
             failures.append(f"Cannot read output file: {e}")
-            content = ""
 
         if content:
             word_count = len(content.split())
@@ -237,6 +237,37 @@ def mechanical_verify_node(state: StoryState) -> StoryState:
             elif expected_format == "html" and not output_path.endswith((".html", ".htm")):
                 failures.append(f"Expected HTML file but got: {output_path}")
 
+    # ------------------------------------------------------------------
+    # Semantic content validation (non-blocking warnings for critic)
+    # ------------------------------------------------------------------
+    semantic_warnings = []
+    if content:
+        try:
+            from src.workflows.content_validators import ContentValidator
+
+            # Look for project CLAUDE.md: check working_dir, then parent dirs
+            claude_md_path = None
+            search_dir = working_dir
+            for _ in range(5):  # walk up at most 5 levels
+                candidate = os.path.join(search_dir, "CLAUDE.md")
+                if os.path.isfile(candidate):
+                    claude_md_path = candidate
+                    break
+                parent = os.path.dirname(search_dir)
+                if parent == search_dir:
+                    break
+                search_dir = parent
+
+            validator = ContentValidator(claude_md_path)
+            semantic_warnings = validator.validate_all(content)
+            if semantic_warnings:
+                checks_run.append("semantic_validation")
+                logger.warning(
+                    f"Story {story_id}: Semantic warnings ({len(semantic_warnings)}): " + "; ".join(semantic_warnings)
+                )
+        except Exception as e:
+            logger.debug(f"Story {story_id}: Semantic validation skipped: {e}")
+
     # Record phase output
     passed = len(failures) == 0
     status = PhaseStatus.COMPLETE if passed else PhaseStatus.FAILED
@@ -246,6 +277,10 @@ def mechanical_verify_node(state: StoryState) -> StoryState:
         result_text += f"Failures ({len(failures)}):\n" + "\n".join(f"  - {f}" for f in failures)
     else:
         result_text += "All mechanical checks passed."
+    if semantic_warnings:
+        result_text += f"\nSemantic warnings ({len(semantic_warnings)}):\n" + "\n".join(
+            f"  - {w}" for w in semantic_warnings
+        )
 
     phase_output = PhaseOutput(
         phase="MECHANICAL_VERIFY",
@@ -259,8 +294,8 @@ def mechanical_verify_node(state: StoryState) -> StoryState:
 
     if not passed:
         state["failure_context"] = f"Mechanical verification failed:\n{result_text}"
-        retry_count = state.get("phase_retry_count", 0)
-        state["phase_retry_count"] = retry_count + 1
+        retry_count = state.get("verify_retry_count", 0)
+        state["verify_retry_count"] = retry_count + 1
 
     if failures:
         logger.info(
@@ -276,7 +311,7 @@ def mechanical_verify_node(state: StoryState) -> StoryState:
 def mechanical_verify_decision(state: StoryState) -> str:
     """Route after MECHANICAL_VERIFY: pass → critic_review, fail → write."""
     verify_passed = state.get("verify_passed")
-    retry_count = state.get("phase_retry_count", 0)
+    retry_count = state.get("verify_retry_count", 0)
 
     if verify_passed:
         return "critic_review"
@@ -412,7 +447,7 @@ def content_critic_decision(state: StoryState) -> str:
 def _detect_output_path(state: dict, working_dir: str) -> str:
     """Try to detect the output file path from WRITE phase output."""
     for po in reversed(state.get("phase_outputs", [])):
-        if po.get("phase") == "WRITE" and po.get("output"):
+        if po.get("phase") == "CONTENT_WRITE" and po.get("output"):
             output = po["output"]
             # Look for file paths in output
             try:
@@ -440,26 +475,27 @@ def _detect_output_path(state: dict, working_dir: str) -> str:
 class ContentWorkflow(BaseWorkflow):
     def build_graph(self) -> StateGraph:
         builder = StateGraph(StoryState)
-        re = self.routing_engine
+        routing = self.routing_engine
 
         # PLAN: produces outline, Group 1 rules, Group 2 qualities
         builder.add_node(
-            "plan", partial(phase_node, phase_name="CONTENT_PLAN", agent_name="content_planner", routing_engine=re)
+            "plan", partial(phase_node, phase_name="CONTENT_PLAN", agent_name="content_planner", routing_engine=routing)
         )
 
         # WRITE: produces the document
         builder.add_node(
-            "write", partial(phase_node, phase_name="CONTENT_WRITE", agent_name="content_writer", routing_engine=re)
+            "write",
+            partial(phase_node, phase_name="CONTENT_WRITE", agent_name="content_writer", routing_engine=routing),
         )
 
         # MECHANICAL_VERIFY: automated checks (no LLM)
         builder.add_node("mechanical_verify", mechanical_verify_node)
 
         # CRITIC_REVIEW: CriticAgent evaluates against acceptance criteria
-        builder.add_node("critic_review", partial(content_critic_node, routing_engine=re))
+        builder.add_node("critic_review", partial(content_critic_node, routing_engine=routing))
 
         # LEARN: extract learnings
-        builder.add_node("learn", partial(phase_node, phase_name="LEARN", agent_name="learner", routing_engine=re))
+        builder.add_node("learn", partial(phase_node, phase_name="LEARN", agent_name="learner", routing_engine=routing))
 
         # Edges
         builder.set_entry_point("plan")

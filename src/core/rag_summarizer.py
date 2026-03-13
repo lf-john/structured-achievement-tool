@@ -1,7 +1,7 @@
 """
 RAG Summary Layer — Phase 3 item 3.6.
 
-Summarizes top-K RAG search results using local Qwen3 8B before feeding
+Summarizes top-K RAG search results using local Qwen3 0.6B before feeding
 to the main LLM, reducing token consumption by condensing verbose results
 into a focused Context Brief.
 """
@@ -17,13 +17,13 @@ _MAX_CHARS_PER_RESULT = 1500
 
 
 class RAGSummarizer:
-    """Summarizes top-K RAG results using local Qwen3 8B before feeding to main LLM.
+    """Summarizes top-K RAG results using local Qwen3 0.6B before feeding to main LLM.
 
     Reduces token consumption by condensing verbose RAG results into a focused
-    Context Brief. Uses Ollama's qwen3:8b model (already installed locally).
+    Context Brief. Uses Ollama's qwen3:0.6b model (already installed locally).
     """
 
-    def __init__(self, model: str = "qwen3:8b", max_brief_tokens: int = 500):
+    def __init__(self, model: str = "qwen3:0.6b", max_brief_tokens: int = 500):
         """Initialize the RAG summarizer.
 
         Args:
@@ -54,9 +54,7 @@ class RAGSummarizer:
         if not summary:
             # Fallback: simple truncation when Ollama is unavailable
             summary = self._fallback_truncation(rag_results)
-            logger.warning(
-                "Ollama unavailable for RAG summarization; using truncation fallback"
-            )
+            logger.warning("Ollama unavailable for RAG summarization; using truncation fallback")
 
         return self._format_context_brief(summary, len(rag_results))
 
@@ -97,7 +95,7 @@ class RAGSummarizer:
         return "".join(parts)
 
     def _invoke_ollama(self, prompt: str) -> str:
-        """Call Ollama qwen3:8b via subprocess.
+        """Call Ollama qwen3:0.6b via subprocess.
 
         Uses stdin pipe to pass the prompt, avoiding shell escaping issues
         with long prompts.
@@ -121,9 +119,7 @@ class RAGSummarizer:
                 # Strip any <think>...</think> blocks Qwen3 may emit
                 response = self._strip_think_tags(response)
                 return response
-            logger.warning(
-                "Ollama returned exit code %d: %s", res.returncode, res.stderr
-            )
+            logger.warning("Ollama returned exit code %d: %s", res.returncode, res.stderr)
             return ""
         except subprocess.TimeoutExpired:
             logger.error("Ollama timed out during RAG summarization (30s)")
@@ -142,6 +138,7 @@ class RAGSummarizer:
             Text with thinking traces removed.
         """
         import re
+
         return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
     def _fallback_truncation(self, rag_results: list[dict]) -> str:
@@ -172,7 +169,4 @@ class RAGSummarizer:
         Returns:
             Formatted Context Brief string.
         """
-        return (
-            f"## Context Brief (from {result_count} similar task"
-            f"{'s' if result_count != 1 else ''})\n\n{summary}"
-        )
+        return f"## Context Brief (from {result_count} similar task{'s' if result_count != 1 else ''})\n\n{summary}"

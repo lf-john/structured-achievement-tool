@@ -13,12 +13,13 @@ from enum import Enum
 
 class DocType(str, Enum):
     """Document type taxonomy."""
-    TECHNICAL = "technical"       # API docs, architecture docs, READMEs
-    MARKETING = "marketing"       # Email sequences, landing pages, battlecards
-    REFERENCE = "reference"       # Guides, how-tos, runbooks, checklists
-    SEO = "seo"                   # Blog posts, web content optimized for search
-    POLICY = "policy"             # SOPs, compliance docs, governance
-    LEGAL = "legal"               # Contracts, terms of service, compliance, legal notices
+
+    TECHNICAL = "technical"  # API docs, architecture docs, READMEs
+    MARKETING = "marketing"  # Email sequences, landing pages, battlecards
+    REFERENCE = "reference"  # Guides, how-tos, runbooks, checklists
+    SEO = "seo"  # Blog posts, web content optimized for search
+    POLICY = "policy"  # SOPs, compliance docs, governance
+    LEGAL = "legal"  # Contracts, terms of service, compliance, legal notices
     INSTRUCTIONAL = "instructional"  # Tutorials, training materials, onboarding
 
 
@@ -29,10 +30,11 @@ class Group1Rule:
     These produce deterministic pass/fail via Python test code.
     Value of None means the rule is not applicable for this document.
     """
+
     name: str
     description: str
-    value: str | None = None      # Target value (e.g., "500-1000", ">=3", "markdown")
-    enabled: bool = True             # False means skip this rule entirely
+    value: str | None = None  # Target value (e.g., "500-1000", ">=3", "markdown")
+    enabled: bool = True  # False means skip this rule entirely
 
 
 @dataclass
@@ -41,10 +43,11 @@ class Group2Quality:
 
     These are evaluated by LLM review — pass/fail with reasoning.
     """
+
     name: str
     description: str
-    guidance: str = ""               # Specific guidance for the reviewer
-    enabled: bool = True             # False means skip (optional for this doc type)
+    guidance: str = ""  # Specific guidance for the reviewer
+    enabled: bool = True  # False means skip (optional for this doc type)
 
 
 @dataclass
@@ -54,11 +57,12 @@ class ContentPlan:
     Contains both the document outline and the verification criteria
     that the TEST and VERIFY phases will use.
     """
+
     doc_type: str = "technical"
     output_path: str = ""
     output_format: str = "markdown"
-    outline: str = ""                      # Document structure/outline
-    group1_rules: list = field(default_factory=list)   # List of Group1Rule dicts
+    outline: str = ""  # Document structure/outline
+    group1_rules: list = field(default_factory=list)  # List of Group1Rule dicts
     group2_qualities: list = field(default_factory=list)  # List of Group2Quality dicts
 
 
@@ -67,21 +71,21 @@ class ContentPlan:
 # ============================================================
 
 DEFAULT_GROUP1_RULES = [
-    Group1Rule("word_count",       "Total word count range",          "500-2000"),
-    Group1Rule("heading_count",    "Number of top-level headings",    ">=2"),
-    Group1Rule("sub_heading_count","Number of sub-headings",          ">=3"),
-    Group1Rule("outline_format",   "Document follows planned outline", "true"),
-    Group1Rule("bullet_points",    "Uses bullet points for lists",    "optional"),
-    Group1Rule("emojis",           "Emoji usage policy",              "none"),
-    Group1Rule("file_format",      "Output file format",              "markdown"),
-    Group1Rule("file_path",        "Output file exists at path",      "required"),
-    Group1Rule("sections",         "Required section names",          None),   # Set by plan
-    Group1Rule("code_blocks",      "Contains code blocks",            "optional"),
-    Group1Rule("links",            "Contains hyperlinks",             "optional"),
-    Group1Rule("tables",           "Contains tables",                 "optional"),
-    Group1Rule("images",           "References images",               "none"),
-    Group1Rule("placeholders",     "No unreplaced placeholders",      "none"),
-    Group1Rule("merge_tokens",     "No merge conflict markers",       "none"),
+    Group1Rule("word_count", "Total word count range", "500-2000"),
+    Group1Rule("heading_count", "Number of top-level headings", ">=2"),
+    Group1Rule("sub_heading_count", "Number of sub-headings", ">=3"),
+    Group1Rule("outline_format", "Document follows planned outline", "true"),
+    Group1Rule("bullet_points", "Uses bullet points for lists", "optional"),
+    Group1Rule("emojis", "Emoji usage policy", "none"),
+    Group1Rule("file_format", "Output file format", "markdown"),
+    Group1Rule("file_path", "Output file exists at path", "required"),
+    Group1Rule("sections", "Required section names", None),  # Set by plan
+    Group1Rule("code_blocks", "Contains code blocks", "optional"),
+    Group1Rule("links", "Contains hyperlinks", "optional"),
+    Group1Rule("tables", "Contains tables", "optional"),
+    Group1Rule("images", "References images", "none"),
+    Group1Rule("placeholders", "No unreplaced placeholders", "none"),
+    Group1Rule("merge_tokens", "No merge conflict markers", "none"),
 ]
 
 
@@ -90,26 +94,29 @@ DEFAULT_GROUP1_RULES = [
 # ============================================================
 
 DEFAULT_GROUP2_QUALITIES = [
-    Group2Quality("tone",            "Writing tone matches target audience",
-                  "Professional, clear, appropriate for the audience"),
-    Group2Quality("theme",           "Content stays on theme throughout",
-                  "No tangential sections, consistent focus"),
-    Group2Quality("purpose",         "Document achieves its stated purpose",
-                  "Reader can accomplish the goal after reading"),
-    Group2Quality("goal",            "Acceptance criteria are addressed",
-                  "Each criterion is directly covered in the content"),
-    Group2Quality("audience",        "Content is appropriate for target audience",
-                  "Vocabulary and depth match audience expertise level"),
-    Group2Quality("brand_voice",     "Consistent with brand/org voice",
-                  "Matches established tone and terminology", enabled=False),  # Optional
-    Group2Quality("data_accuracy",   "Facts and data are accurate",
-                  "No fabricated statistics, all claims verifiable"),
-    Group2Quality("persuasiveness",  "Content is persuasive where needed",
-                  "CTAs are clear, value propositions are compelling", enabled=False),  # Optional
-    Group2Quality("completeness",    "Content is complete, no gaps",
-                  "All sections from outline are present and substantive"),
-    Group2Quality("readability",     "Content is readable and well-structured",
-                  "Good flow, clear paragraphs, scannable format"),
+    Group2Quality("tone", "Writing tone matches target audience", "Professional, clear, appropriate for the audience"),
+    Group2Quality("theme", "Content stays on theme throughout", "No tangential sections, consistent focus"),
+    Group2Quality("purpose", "Document achieves its stated purpose", "Reader can accomplish the goal after reading"),
+    Group2Quality("goal", "Acceptance criteria are addressed", "Each criterion is directly covered in the content"),
+    Group2Quality(
+        "audience", "Content is appropriate for target audience", "Vocabulary and depth match audience expertise level"
+    ),
+    Group2Quality(
+        "brand_voice", "Consistent with brand/org voice", "Matches established tone and terminology", enabled=False
+    ),  # Optional
+    Group2Quality("data_accuracy", "Facts and data are accurate", "No fabricated statistics, all claims verifiable"),
+    Group2Quality(
+        "persuasiveness",
+        "Content is persuasive where needed",
+        "CTAs are clear, value propositions are compelling",
+        enabled=False,
+    ),  # Optional
+    Group2Quality(
+        "completeness", "Content is complete, no gaps", "All sections from outline are present and substantive"
+    ),
+    Group2Quality(
+        "readability", "Content is readable and well-structured", "Good flow, clear paragraphs, scannable format"
+    ),
 ]
 
 

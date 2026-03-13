@@ -28,40 +28,40 @@ class DashboardBuilder:
 
         # Build base dashboard structure
         dashboard = {
-            'type': 'dashboard',
-            'title': name,
-            'name': name,
-            'uid': uid,
-            'time': {'from': 'now-6h', 'to': 'now'},
-            'refresh': '30s',
-            'panels': panels if panels else [],
-            'templating': {
-                'list': [
+            "type": "dashboard",
+            "title": name,
+            "name": name,
+            "uid": uid,
+            "time": {"from": "now-6h", "to": "now"},
+            "refresh": "30s",
+            "panels": panels if panels else [],
+            "templating": {
+                "list": [
                     {
-                        'name': 'time_range',
-                        'type': 'interval',
-                        'current': {'value': '30s', 'text': '30s'},
-                        'options': [
-                            {'value': '5s', 'text': '5s'},
-                            {'value': '30s', 'text': '30s'},
-                            {'value': '1m', 'text': '1m'},
-                            {'value': '5m', 'text': '5m'},
-                            {'value': '10m', 'text': '10m'},
-                        ]
+                        "name": "time_range",
+                        "type": "interval",
+                        "current": {"value": "30s", "text": "30s"},
+                        "options": [
+                            {"value": "5s", "text": "5s"},
+                            {"value": "30s", "text": "30s"},
+                            {"value": "1m", "text": "1m"},
+                            {"value": "5m", "text": "5m"},
+                            {"value": "10m", "text": "10m"},
+                        ],
                     }
                 ]
-            }
+            },
         }
 
         # Override defaults with provided options
-        if 'time' in options:
-            dashboard['time'] = options['time']
-        if 'refresh' in options:
-            dashboard['refresh'] = options['refresh']
+        if "time" in options:
+            dashboard["time"] = options["time"]
+        if "refresh" in options:
+            dashboard["refresh"] = options["refresh"]
 
         # Apply any other custom options that aren't time or refresh
         for key, value in options.items():
-            if key not in ['time', 'refresh']:
+            if key not in ["time", "refresh"]:
                 dashboard[key] = value
 
         return dashboard
@@ -81,11 +81,7 @@ class DashboardBuilder:
         if options is None:
             options = {}
 
-        panel = {
-            'type': 'timeseries',
-            'title': title,
-            'targets': queries if queries else []
-        }
+        panel = {"type": "timeseries", "title": title, "targets": queries if queries else []}
 
         # Apply options
         for key, value in options.items():
@@ -108,11 +104,7 @@ class DashboardBuilder:
         if options is None:
             options = {}
 
-        panel = {
-            'type': 'stat',
-            'title': title,
-            'targets': queries if queries else []
-        }
+        panel = {"type": "stat", "title": title, "targets": queries if queries else []}
 
         # Apply options
         for key, value in options.items():
@@ -135,24 +127,20 @@ class DashboardBuilder:
         if options is None:
             options = {}
 
-        panel = {
-            'type': 'gauge',
-            'title': title,
-            'targets': queries if queries else []
-        }
+        panel = {"type": "gauge", "title": title, "targets": queries if queries else []}
 
         # Handle gauge-specific options
         if options:
             gauge_options = {}
             for key, value in options.items():
-                if key in ['min', 'max', 'value']:
+                if key in ["min", "max", "value"]:
                     gauge_options[key] = value
             if gauge_options:
-                panel['options'] = gauge_options
+                panel["options"] = gauge_options
 
             # Apply other options directly to panel
             for key, value in options.items():
-                if key not in ['min', 'max', 'value']:
+                if key not in ["min", "max", "value"]:
                     panel[key] = value
 
         return panel
@@ -172,24 +160,20 @@ class DashboardBuilder:
         if options is None:
             options = {}
 
-        panel = {
-            'type': 'piechart',
-            'title': title,
-            'targets': queries if queries else []
-        }
+        panel = {"type": "piechart", "title": title, "targets": queries if queries else []}
 
         # Handle pie chart-specific options
         if options:
             pie_options = {}
             for key, value in options.items():
-                if key in ['orientation']:
+                if key in ["orientation"]:
                     pie_options[key] = value
             if pie_options:
-                panel['options'] = pie_options
+                panel["options"] = pie_options
 
             # Apply other options directly to panel
             for key, value in options.items():
-                if key not in ['orientation']:
+                if key not in ["orientation"]:
                     panel[key] = value
 
         return panel
@@ -209,11 +193,7 @@ class DashboardBuilder:
         if options is None:
             options = {}
 
-        panel = {
-            'type': 'heatmap',
-            'title': title,
-            'targets': queries if queries else []
-        }
+        panel = {"type": "heatmap", "title": title, "targets": queries if queries else []}
 
         # Apply options
         for key, value in options.items():
@@ -222,13 +202,7 @@ class DashboardBuilder:
         return panel
 
     def create_queue_depth_panel(
-        self,
-        custom_title=None,
-        min=None,
-        max=None,
-        grid_pos=None,
-        datasource=None,
-        queries=None
+        self, custom_title=None, min=None, max=None, grid_pos=None, datasource=None, queries=None
     ):
         """
         Create a gauge panel showing sat_queue_depth metric.
@@ -245,48 +219,39 @@ class DashboardBuilder:
             Dictionary representing a Grafana gauge panel
         """
         if queries is None:
-            queries = [
-                {
-                    'expr': 'sat_queue_depth',
-                    'legendFormat': 'queue_depth'
-                }
-            ]
+            queries = [{"expr": "sat_queue_depth", "legendFormat": "queue_depth"}]
 
-        panel = {
-            'type': 'gauge',
-            'title': custom_title if custom_title else 'Queue Depth',
-            'targets': queries
-        }
+        panel = {"type": "gauge", "title": custom_title if custom_title else "Queue Depth", "targets": queries}
 
         # Apply optional parameters
         if grid_pos is not None:
-            panel['gridPos'] = grid_pos
+            panel["gridPos"] = grid_pos
         if datasource is not None:
-            panel['datasource'] = datasource
+            panel["datasource"] = datasource
 
         # Add fieldConfig with thresholds for color coding
-        panel['fieldConfig'] = {
-            'defaults': {
-                'thresholds': {
-                    'mode': 'absolute',
-                    'steps': [
-                        {'value': 0, 'color': 'green'},
-                        {'value': 10, 'color': 'yellow'},
-                        {'value': 50, 'color': 'orange'},
-                        {'value': 100, 'color': 'red'}
-                    ]
+        panel["fieldConfig"] = {
+            "defaults": {
+                "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                        {"value": 0, "color": "green"},
+                        {"value": 10, "color": "yellow"},
+                        {"value": 50, "color": "orange"},
+                        {"value": 100, "color": "red"},
+                    ],
                 }
             }
         }
 
         # Always add options for gauge formatting
-        panel['options'] = {}
+        panel["options"] = {}
 
         # Apply min/max values if provided
         if min is not None:
-            panel['options']['min'] = min
+            panel["options"]["min"] = min
         if max is not None:
-            panel['options']['max'] = max
+            panel["options"]["max"] = max
 
         return panel
 
@@ -303,15 +268,10 @@ class DashboardBuilder:
         Returns:
             Dictionary representing a Prometheus datasource configuration
         """
-        datasource = {
-            'name': name,
-            'type': 'prometheus',
-            'url': url,
-            'access': access
-        }
+        datasource = {"name": name, "type": "prometheus", "url": url, "access": access}
 
         if version is not None:
-            datasource['version'] = version
+            datasource["version"] = version
 
         return datasource
 
@@ -324,7 +284,7 @@ class DashboardBuilder:
         yaxis_max=None,
         time_range=None,
         queries=None,
-        legends=None
+        legends=None,
     ):
         """
         Create a stat panel showing Task Completion count metric.
@@ -343,63 +303,43 @@ class DashboardBuilder:
             Dictionary representing a Grafana stat panel
         """
         if queries is None:
-            queries = [
-                {
-                    'expr': 'sat_tasks_completed_total',
-                    'legendFormat': 'Completed'
-                }
-            ]
+            queries = [{"expr": "sat_tasks_completed_total", "legendFormat": "Completed"}]
 
-        panel = {
-            'type': 'stat',
-            'title': custom_title if custom_title else 'Task Completion Count',
-            'targets': queries
-        }
+        panel = {"type": "stat", "title": custom_title if custom_title else "Task Completion Count", "targets": queries}
 
         # Apply optional parameters
         if grid_pos is not None:
-            panel['gridPos'] = grid_pos
+            panel["gridPos"] = grid_pos
         if datasource is not None:
-            panel['datasource'] = datasource
+            panel["datasource"] = datasource
         if yaxis_min is not None:
-            panel['yaxis'] = panel.get('yaxis', {})
-            panel['yaxis']['min'] = yaxis_min
+            panel["yaxis"] = panel.get("yaxis", {})
+            panel["yaxis"]["min"] = yaxis_min
         if yaxis_max is not None:
-            panel['yaxis'] = panel.get('yaxis', {})
-            panel['yaxis']['max'] = yaxis_max
+            panel["yaxis"] = panel.get("yaxis", {})
+            panel["yaxis"]["max"] = yaxis_max
         if time_range is not None:
-            panel['timeRange'] = time_range
+            panel["timeRange"] = time_range
 
         # Add fieldConfig and options for proper Grafana stat formatting
-        panel['fieldConfig'] = {
-            'defaults': {
-                'custom': {
-                    'displayMode': 'color-background',
-                    'colorMode': 'value'
+        panel["fieldConfig"] = {
+            "defaults": {
+                "custom": {"displayMode": "color-background", "colorMode": "value"},
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                        {"value": 0, "color": "gray"},
+                        {"value": 100, "color": "green"},
+                        {"value": 500, "color": "yellow"},
+                        {"value": 1000, "color": "orange"},
+                        {"value": 5000, "color": "red"},
+                    ],
                 },
-                'color': {
-                    'mode': 'thresholds'
-                },
-                'thresholds': {
-                    'mode': 'absolute',
-                    'steps': [
-                        {'value': 0, 'color': 'gray'},
-                        {'value': 100, 'color': 'green'},
-                        {'value': 500, 'color': 'yellow'},
-                        {'value': 1000, 'color': 'orange'},
-                        {'value': 5000, 'color': 'red'}
-                    ]
-                }
             }
         }
 
-        panel['options'] = {
-            'graphMode': 'none',
-            'reduceOptions': {
-                'values': False,
-                'calcs': ['lastNotNull']
-            }
-        }
+        panel["options"] = {"graphMode": "none", "reduceOptions": {"values": False, "calcs": ["lastNotNull"]}}
 
         return panel
 
@@ -411,7 +351,7 @@ class DashboardBuilder:
         yaxis_min=None,
         yaxis_max=None,
         time_range=None,
-        queries=None
+        queries=None,
     ):
         """
         Create a time series panel showing Stories Success/Fail Rate metrics.
@@ -430,77 +370,50 @@ class DashboardBuilder:
         """
         if queries is None:
             queries = [
-                {
-                    'expr': 'sat_stories_succeeded_total',
-                    'legendFormat': 'Succeeded'
-                },
-                {
-                    'expr': 'sat_stories_failed_total',
-                    'legendFormat': 'Failed'
-                }
+                {"expr": "sat_stories_succeeded_total", "legendFormat": "Succeeded"},
+                {"expr": "sat_stories_failed_total", "legendFormat": "Failed"},
             ]
 
         panel = {
-            'type': 'timeseries',
-            'title': custom_title if custom_title else 'Stories Success/Fail Rate',
-            'targets': queries
+            "type": "timeseries",
+            "title": custom_title if custom_title else "Stories Success/Fail Rate",
+            "targets": queries,
         }
 
         # Apply optional parameters
         if grid_pos is not None:
-            panel['gridPos'] = grid_pos
+            panel["gridPos"] = grid_pos
         if datasource is not None:
-            panel['datasource'] = datasource
+            panel["datasource"] = datasource
         if yaxis_min is not None:
-            panel['yaxis'] = panel.get('yaxis', {})
-            panel['yaxis']['min'] = yaxis_min
+            panel["yaxis"] = panel.get("yaxis", {})
+            panel["yaxis"]["min"] = yaxis_min
         if yaxis_max is not None:
-            panel['yaxis'] = panel.get('yaxis', {})
-            panel['yaxis']['max'] = yaxis_max
+            panel["yaxis"] = panel.get("yaxis", {})
+            panel["yaxis"]["max"] = yaxis_max
         if time_range is not None:
-            panel['timeRange'] = time_range
+            panel["timeRange"] = time_range
 
         # Add fieldConfig and options for proper Grafana formatting
-        panel['fieldConfig'] = {
-            'defaults': {
-                'custom': {
-                    'lineWidth': 2,
-                    'pointRadius': 4,
-                    'fillOpacity': 20
+        panel["fieldConfig"] = {
+            "defaults": {
+                "custom": {"lineWidth": 2, "pointRadius": 4, "fillOpacity": 20},
+                "color": {"mode": "palette-classic"},
+                "thresholds": {
+                    "mode": "absolute",
+                    "steps": [{"value": 0, "color": "green"}, {"value": 1, "color": "yellow"}],
                 },
-                'color': {
-                    'mode': 'palette-classic'
-                },
-                'thresholds': {
-                    'mode': 'absolute',
-                    'steps': [
-                        {'value': 0, 'color': 'green'},
-                        {'value': 1, 'color': 'yellow'}
-                    ]
-                }
             }
         }
 
-        panel['options'] = {
-            'legend': {
-                'displayMode': 'list',
-                'placement': 'bottom'
-            },
-            'tooltip': {
-                'mode': 'multi',
-                'sort': 'none'
-            }
+        panel["options"] = {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "none"},
         }
 
         return panel
 
-    def create_provider_usage_panel(
-        self,
-        custom_title=None,
-        grid_pos=None,
-        datasource=None,
-        queries=None
-    ):
+    def create_provider_usage_panel(self, custom_title=None, grid_pos=None, datasource=None, queries=None):
         """
         Create a pie chart panel showing Provider Usage Breakdown metric.
 
@@ -514,59 +427,36 @@ class DashboardBuilder:
             Dictionary representing a Grafana pie chart panel
         """
         if queries is None:
-            queries = [
-                {
-                    'expr': 'sum by (provider) (sat_provider_requests_total)',
-                    'legendFormat': '{{provider}}'
-                }
-            ]
+            queries = [{"expr": "sum by (provider) (sat_provider_requests_total)", "legendFormat": "{{provider}}"}]
 
         panel = {
-            'type': 'piechart',
-            'title': custom_title if custom_title else 'Provider Usage Breakdown',
-            'targets': queries
+            "type": "piechart",
+            "title": custom_title if custom_title else "Provider Usage Breakdown",
+            "targets": queries,
         }
 
         # Apply optional parameters
         if grid_pos is not None:
-            panel['gridPos'] = grid_pos
+            panel["gridPos"] = grid_pos
         if datasource is not None:
-            panel['datasource'] = datasource
+            panel["datasource"] = datasource
 
         # Add fieldConfig and options for proper Grafana pie chart formatting
-        panel['fieldConfig'] = {
-            'defaults': {
-                'color': {
-                    'mode': 'palette-classic'
-                },
-                'custom': {
-                    'displayMode': 'percent',
-                    'pieType': 'donut',
-                    'showLegend': True
-                }
+        panel["fieldConfig"] = {
+            "defaults": {
+                "color": {"mode": "palette-classic"},
+                "custom": {"displayMode": "percent", "pieType": "donut", "showLegend": True},
             }
         }
 
-        panel['options'] = {
-            'legend': {
-                'displayMode': 'list',
-                'placement': 'bottom'
-            },
-            'tooltip': {
-                'mode': 'single',
-                'sort': 'none'
-            }
+        panel["options"] = {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "single", "sort": "none"},
         }
 
         return panel
 
-    def create_response_time_histogram_panel(
-        self,
-        custom_title=None,
-        grid_pos=None,
-        datasource=None,
-        queries=None
-    ):
+    def create_response_time_histogram_panel(self, custom_title=None, grid_pos=None, datasource=None, queries=None):
         """
         Create a heatmap panel displaying sat_response_time_seconds_bucket metric.
 
@@ -580,70 +470,41 @@ class DashboardBuilder:
             Dictionary representing a Grafana heatmap panel
         """
         if queries is None:
-            queries = [
-                {
-                    'expr': 'sat_response_time_seconds_bucket',
-                    'legendFormat': '{{le}}'
-                }
-            ]
+            queries = [{"expr": "sat_response_time_seconds_bucket", "legendFormat": "{{le}}"}]
 
         panel = {
-            'type': 'heatmap',
-            'title': custom_title if custom_title else 'Response Time Histogram',
-            'targets': queries
+            "type": "heatmap",
+            "title": custom_title if custom_title else "Response Time Histogram",
+            "targets": queries,
         }
 
         # Apply optional parameters
         if grid_pos is not None:
-            panel['gridPos'] = grid_pos
+            panel["gridPos"] = grid_pos
         if datasource is not None:
-            panel['datasource'] = datasource
+            panel["datasource"] = datasource
 
         # Add fieldConfig for heatmap formatting
-        panel['fieldConfig'] = {
-            'defaults': {
-                'custom': {
-                    'scaleDistribution': {
-                        'type': 'linear'
-                    }
-                },
-                'color': {
-                    'scheme': 'Spectral'
-                },
-                'mappings': []
+        panel["fieldConfig"] = {
+            "defaults": {
+                "custom": {"scaleDistribution": {"type": "linear"}},
+                "color": {"scheme": "Spectral"},
+                "mappings": [],
             }
         }
 
         # Add options for heatmap visualization
-        panel['options'] = {
-            'calculate': False,
-            'color': {
-                'scale': {
-                    'mode': 'scheme',
-                    'scheme': 'Spectral'
-                }
+        panel["options"] = {
+            "calculate": False,
+            "color": {"scale": {"mode": "scheme", "scheme": "Spectral"}},
+            "dataFormat": "timeseries",
+            "dimensions": {
+                "x": {"field": "time"},
+                "y": {"field": "le", "displayMode": "legend"},
+                "z": {"field": "value", "displayMode": "color"},
             },
-            'dataFormat': 'timeseries',
-            'dimensions': {
-                'x': {
-                    'field': 'time'
-                },
-                'y': {
-                    'field': 'le',
-                    'displayMode': 'legend'
-                },
-                'z': {
-                    'field': 'value',
-                    'displayMode': 'color'
-                }
-            },
-            'tooltip': {
-                'mode': 'single',
-                'sort': 'none'
-            },
-            'yAxis': {
-                'unit': 's'
-            }
+            "tooltip": {"mode": "single", "sort": "none"},
+            "yAxis": {"unit": "s"},
         }
 
         return panel

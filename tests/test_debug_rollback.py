@@ -15,14 +15,13 @@ from src.execution.debug_rollback import DebugRollback, DebugRollbackError
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_completed_process(
     returncode: int = 0,
     stdout: str = "",
     stderr: str = "",
 ) -> subprocess.CompletedProcess:
-    return subprocess.CompletedProcess(
-        args=[], returncode=returncode, stdout=stdout, stderr=stderr
-    )
+    return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr=stderr)
 
 
 OK = _make_completed_process(returncode=0, stdout="")
@@ -32,6 +31,7 @@ FAIL = _make_completed_process(returncode=1, stderr="error")
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def rollback(tmp_path):
@@ -43,14 +43,13 @@ def rollback(tmp_path):
 # has_uncommitted_changes
 # ---------------------------------------------------------------------------
 
+
 class TestHasUncommittedChanges:
     @patch("src.execution.debug_rollback._run_git")
     def test_clean_working_tree(self, mock_git, rollback):
         mock_git.return_value = _make_completed_process(stdout="")
         assert rollback.has_uncommitted_changes() is False
-        mock_git.assert_called_once_with(
-            ["status", "--porcelain"], rollback.working_directory
-        )
+        mock_git.assert_called_once_with(["status", "--porcelain"], rollback.working_directory)
 
     @patch("src.execution.debug_rollback._run_git")
     def test_dirty_working_tree(self, mock_git, rollback):
@@ -67,6 +66,7 @@ class TestHasUncommittedChanges:
 # ---------------------------------------------------------------------------
 # stash / pop
 # ---------------------------------------------------------------------------
+
 
 class TestStash:
     @patch("src.execution.debug_rollback._run_git")
@@ -103,21 +103,18 @@ class TestStash:
     def test_pop_success(self, mock_git, rollback):
         mock_git.return_value = _make_completed_process()
         assert rollback.pop_stash() is True
-        mock_git.assert_called_once_with(
-            ["stash", "pop"], rollback.working_directory
-        )
+        mock_git.assert_called_once_with(["stash", "pop"], rollback.working_directory)
 
     @patch("src.execution.debug_rollback._run_git")
     def test_pop_failure_conflict(self, mock_git, rollback):
-        mock_git.return_value = _make_completed_process(
-            returncode=1, stderr="CONFLICT"
-        )
+        mock_git.return_value = _make_completed_process(returncode=1, stderr="CONFLICT")
         assert rollback.pop_stash() is False
 
 
 # ---------------------------------------------------------------------------
 # Tag creation — pre-fix
 # ---------------------------------------------------------------------------
+
 
 class TestCreatePreFixTag:
     @patch("src.execution.debug_rollback.get_current_commit", return_value="abc123")
@@ -127,9 +124,9 @@ class TestCreatePreFixTag:
         # rev-parse --verify (tag exists check) => not found
         # tag -a => ok
         mock_git.side_effect = [
-            _make_completed_process(stdout=""),   # status
-            FAIL,                                  # tag does not exist
-            _make_completed_process(),             # tag -a
+            _make_completed_process(stdout=""),  # status
+            FAIL,  # tag does not exist
+            _make_completed_process(),  # tag -a
         ]
         tag = rollback.create_pre_fix_tag("SAT-1", 1)
         assert tag == "debug-SAT-1-attempt-1-pre"
@@ -145,10 +142,10 @@ class TestCreatePreFixTag:
     def test_overwrites_existing_tag(self, mock_git, _mock_commit, rollback):
         # status => clean, tag exists => yes, delete => ok, create => ok
         mock_git.side_effect = [
-            _make_completed_process(stdout=""),   # status (clean)
-            _make_completed_process(),             # tag exists
-            _make_completed_process(),             # tag -d
-            _make_completed_process(),             # tag -a
+            _make_completed_process(stdout=""),  # status (clean)
+            _make_completed_process(),  # tag exists
+            _make_completed_process(),  # tag -d
+            _make_completed_process(),  # tag -a
         ]
         tag = rollback.create_pre_fix_tag("SAT-1", 2)
         assert tag == "debug-SAT-1-attempt-2-pre"
@@ -162,8 +159,8 @@ class TestCreatePreFixTag:
     @patch("src.execution.debug_rollback._run_git")
     def test_raises_on_tag_creation_failure(self, mock_git, _mock_commit, rollback):
         mock_git.side_effect = [
-            _make_completed_process(stdout=""),   # status clean
-            FAIL,                                  # tag does not exist
+            _make_completed_process(stdout=""),  # status clean
+            FAIL,  # tag does not exist
             _make_completed_process(returncode=1, stderr="tag error"),  # tag -a fails
         ]
         with pytest.raises(DebugRollbackError, match="Failed to create tag"):
@@ -174,12 +171,13 @@ class TestCreatePreFixTag:
 # Tag creation — post-fix
 # ---------------------------------------------------------------------------
 
+
 class TestCreatePostFixTag:
     @patch("src.execution.debug_rollback.get_current_commit", return_value="def456")
     @patch("src.execution.debug_rollback._run_git")
     def test_creates_post_tag(self, mock_git, _mock_commit, rollback):
         mock_git.side_effect = [
-            FAIL,                      # tag does not exist
+            FAIL,  # tag does not exist
             _make_completed_process(),  # tag -a
         ]
         tag = rollback.create_post_fix_tag("SAT-1", 3)
@@ -190,6 +188,7 @@ class TestCreatePostFixTag:
 # Rollback
 # ---------------------------------------------------------------------------
 
+
 class TestRollback:
     @patch("src.execution.debug_rollback.reset_to_commit", return_value=True)
     @patch("src.execution.debug_rollback._run_git")
@@ -198,7 +197,7 @@ class TestRollback:
         # tag exists check => yes
         # rev-list => commit hash
         mock_git.side_effect = [
-            _make_completed_process(),                  # tag exists
+            _make_completed_process(),  # tag exists
             _make_completed_process(stdout="abc123\n"),  # rev-list
         ]
         assert rollback.rollback(tag) is True
@@ -213,7 +212,7 @@ class TestRollback:
     @patch("src.execution.debug_rollback._run_git")
     def test_rollback_reset_fails(self, mock_git, mock_reset, rollback):
         mock_git.side_effect = [
-            _make_completed_process(),                  # tag exists
+            _make_completed_process(),  # tag exists
             _make_completed_process(stdout="abc123\n"),  # rev-list
         ]
         assert rollback.rollback("debug-SAT-1-attempt-1-pre") is False
@@ -222,7 +221,7 @@ class TestRollback:
     def test_rollback_revlist_fails(self, mock_git, rollback):
         mock_git.side_effect = [
             _make_completed_process(),  # tag exists
-            FAIL,                       # rev-list fails
+            FAIL,  # rev-list fails
         ]
         assert rollback.rollback("debug-SAT-1-attempt-1-pre") is False
 
@@ -230,6 +229,7 @@ class TestRollback:
 # ---------------------------------------------------------------------------
 # attempt_fix — full lifecycle
 # ---------------------------------------------------------------------------
+
 
 class TestAttemptFix:
     @patch("src.execution.debug_rollback.auto_commit", return_value="commit123")
@@ -249,12 +249,12 @@ class TestAttemptFix:
         # 5. tag exists check (post) => no
         # 6. tag -a (post) => ok
         mock_git.side_effect = [
-            _make_completed_process(stdout=""),   # status (attempt_fix check)
-            _make_completed_process(stdout=""),   # status (create_pre_fix_tag)
-            FAIL,                                  # pre tag doesn't exist
-            _make_completed_process(),             # create pre tag
-            FAIL,                                  # post tag doesn't exist
-            _make_completed_process(),             # create post tag
+            _make_completed_process(stdout=""),  # status (attempt_fix check)
+            _make_completed_process(stdout=""),  # status (create_pre_fix_tag)
+            FAIL,  # pre tag doesn't exist
+            _make_completed_process(),  # create pre tag
+            FAIL,  # post tag doesn't exist
+            _make_completed_process(),  # create post tag
         ]
 
         result = rb.attempt_fix("SAT-1", 1, apply_fn, validate_fn)
@@ -273,12 +273,12 @@ class TestAttemptFix:
         validate_fn = MagicMock(return_value=False)
 
         mock_git.side_effect = [
-            _make_completed_process(stdout=""),    # status (attempt_fix)
-            _make_completed_process(stdout=""),    # status (create_pre_fix_tag)
-            FAIL,                                   # pre tag doesn't exist
-            _make_completed_process(),              # create pre tag
+            _make_completed_process(stdout=""),  # status (attempt_fix)
+            _make_completed_process(stdout=""),  # status (create_pre_fix_tag)
+            FAIL,  # pre tag doesn't exist
+            _make_completed_process(),  # create pre tag
             # rollback sequence:
-            _make_completed_process(),              # tag exists check
+            _make_completed_process(),  # tag exists check
             _make_completed_process(stdout="abc123\n"),  # rev-list
         ]
 
@@ -296,12 +296,12 @@ class TestAttemptFix:
         validate_fn = MagicMock()
 
         mock_git.side_effect = [
-            _make_completed_process(stdout=""),    # status (attempt_fix)
-            _make_completed_process(stdout=""),    # status (create_pre_fix_tag)
-            FAIL,                                   # pre tag doesn't exist
-            _make_completed_process(),              # create pre tag
+            _make_completed_process(stdout=""),  # status (attempt_fix)
+            _make_completed_process(stdout=""),  # status (create_pre_fix_tag)
+            FAIL,  # pre tag doesn't exist
+            _make_completed_process(),  # create pre tag
             # rollback sequence:
-            _make_completed_process(),              # tag exists
+            _make_completed_process(),  # tag exists
             _make_completed_process(stdout="abc123\n"),  # rev-list
         ]
 
@@ -320,12 +320,12 @@ class TestAttemptFix:
         mock_git.side_effect = [
             _make_completed_process(stdout=" M x.py\n"),  # status dirty
             _make_completed_process(stdout=" M x.py\n"),  # status dirty (stash_changes check)
-            _make_completed_process(),                      # stash push ok
+            _make_completed_process(),  # stash push ok
             # But then create_pre_fix_tag will also check uncommitted
             # After stash, tree is clean
-            _make_completed_process(stdout=""),             # status clean
-            FAIL,                                           # pre tag doesn't exist
-            _make_completed_process(),                      # create pre tag
+            _make_completed_process(stdout=""),  # status clean
+            FAIL,  # pre tag doesn't exist
+            _make_completed_process(),  # create pre tag
         ]
 
         # Patch the rest to avoid more mock gymnastics
@@ -338,7 +338,7 @@ class TestAttemptFix:
 
             # Need post-fix tag calls too
             mock_git.side_effect = list(mock_git.side_effect) + [
-                FAIL,                      # post tag doesn't exist
+                FAIL,  # post tag doesn't exist
                 _make_completed_process(),  # create post tag
             ]
 
@@ -346,12 +346,12 @@ class TestAttemptFix:
             mock_git.side_effect = [
                 _make_completed_process(stdout=" M x.py\n"),  # status dirty
                 _make_completed_process(stdout=" M x.py\n"),  # stash check
-                _make_completed_process(),                      # stash push
-                _make_completed_process(stdout=""),             # create_pre status
-                FAIL,                                           # pre tag no exist
-                _make_completed_process(),                      # tag -a pre
-                FAIL,                                           # post tag no exist
-                _make_completed_process(),                      # tag -a post
+                _make_completed_process(),  # stash push
+                _make_completed_process(stdout=""),  # create_pre status
+                FAIL,  # pre tag no exist
+                _make_completed_process(),  # tag -a pre
+                FAIL,  # post tag no exist
+                _make_completed_process(),  # tag -a post
             ]
 
             result = rb.attempt_fix("SAT-1", 1, apply_fn, validate_fn)
@@ -361,6 +361,7 @@ class TestAttemptFix:
 # ---------------------------------------------------------------------------
 # Tag name generation
 # ---------------------------------------------------------------------------
+
 
 class TestTagName:
     def test_pre_tag_format(self):

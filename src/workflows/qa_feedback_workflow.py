@@ -53,6 +53,7 @@ class QAFeedbackWorkflow:
         config: ApprovalConfig = None,
     ):
         from src.llm.routing_engine import RoutingEngine
+
         self.routing_engine = routing_engine or RoutingEngine()
         self.notifier = notifier or Notifier()
         self.config = config or ApprovalConfig()
@@ -76,24 +77,36 @@ class QAFeedbackWorkflow:
         builder.add_edge("prepare", "notify")
         builder.add_edge("notify", "pause")
 
-        builder.add_conditional_edges("pause", pause_initial_decision, {
-            "responded": "parse",
-            "follow_up": "follow_up",
-            "escalate": "escalation",
-        })
+        builder.add_conditional_edges(
+            "pause",
+            pause_initial_decision,
+            {
+                "responded": "parse",
+                "follow_up": "follow_up",
+                "escalate": "escalation",
+            },
+        )
 
-        builder.add_conditional_edges("follow_up", follow_up_decision, {
-            "responded": "parse",
-            "escalate": "escalation",
-        })
+        builder.add_conditional_edges(
+            "follow_up",
+            follow_up_decision,
+            {
+                "responded": "parse",
+                "escalate": "escalation",
+            },
+        )
 
         builder.add_edge("escalation", "parse")
 
         # PARSE → ROUTE
-        builder.add_conditional_edges("parse", qa_route_decision, {
-            "pass": "learn",
-            "fail": END,  # Feedback stored; orchestrator creates follow-up stories
-        })
+        builder.add_conditional_edges(
+            "parse",
+            qa_route_decision,
+            {
+                "pass": "learn",
+                "fail": END,  # Feedback stored; orchestrator creates follow-up stories
+            },
+        )
 
         builder.add_edge("learn", END)
 

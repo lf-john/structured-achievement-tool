@@ -59,7 +59,7 @@ class TestExtractJson:
             extract_json("This has no JSON at all.")
 
     def test_invalid_json_in_fence_raises(self):
-        text = '```json\n{bad json here}\n```'
+        text = "```json\n{bad json here}\n```"
         with pytest.raises(ValueError, match="No valid JSON found"):
             extract_json(text)
 

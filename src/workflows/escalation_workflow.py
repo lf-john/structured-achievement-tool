@@ -44,6 +44,7 @@ class EscalationWorkflow:
         config: ApprovalConfig = None,
     ):
         from src.llm.routing_engine import RoutingEngine
+
         self.routing_engine = routing_engine or RoutingEngine()
         self.notifier = notifier or Notifier()
         self.config = config or ApprovalConfig()
@@ -72,16 +73,24 @@ class EscalationWorkflow:
         builder.add_edge("notify", "pause")
 
         # PAUSE → responded/follow_up/escalate
-        builder.add_conditional_edges("pause", pause_initial_decision, {
-            "responded": "learn",
-            "follow_up": "follow_up",
-            "escalate": "escalation",
-        })
+        builder.add_conditional_edges(
+            "pause",
+            pause_initial_decision,
+            {
+                "responded": "learn",
+                "follow_up": "follow_up",
+                "escalate": "escalation",
+            },
+        )
 
-        builder.add_conditional_edges("follow_up", follow_up_decision, {
-            "responded": "learn",
-            "escalate": "escalation",
-        })
+        builder.add_conditional_edges(
+            "follow_up",
+            follow_up_decision,
+            {
+                "responded": "learn",
+                "escalate": "escalation",
+            },
+        )
 
         # Escalation → learn (capture whatever guidance we got)
         builder.add_edge("escalation", "learn")

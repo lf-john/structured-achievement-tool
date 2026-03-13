@@ -73,14 +73,8 @@ class TestShouldTrigger:
 
 class TestInterventionTracking:
     def test_save_and_read(self, tmp_path):
-        save_intervention(
-            str(tmp_path), "US-001", "CODE",
-            "test_in_code_phase", "REVERT", ["tests/test_x.py"]
-        )
-        save_intervention(
-            str(tmp_path), "US-002", "VERIFY",
-            "verify_changes", "ACCEPT", ["main.py"]
-        )
+        save_intervention(str(tmp_path), "US-001", "CODE", "test_in_code_phase", "REVERT", ["tests/test_x.py"])
+        save_intervention(str(tmp_path), "US-002", "VERIFY", "verify_changes", "ACCEPT", ["main.py"])
 
         stats = get_intervention_stats(str(tmp_path))
         assert stats["total"] == 2

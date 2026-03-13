@@ -42,9 +42,7 @@ class Notifier:
         self.ntfy_topic = ntfy_topic or os.environ.get("NTFY_TOPIC", "")
         self.ntfy_server = ntfy_server or os.environ.get("NTFY_SERVER", "https://ntfy.sh")
         self.ntfy_min_priority = (
-            ntfy_min_priority
-            or config.get("ntfy_min_priority")
-            or os.environ.get("SAT_NTFY_MIN_PRIORITY", "default")
+            ntfy_min_priority or config.get("ntfy_min_priority") or os.environ.get("SAT_NTFY_MIN_PRIORITY", "default")
         )
         self.smtp_host = smtp_host or os.environ.get("SAT_SMTP_HOST", "")
         self.smtp_port = smtp_port
@@ -58,6 +56,7 @@ class Notifier:
         """Load the notifications section from config.json."""
         try:
             from src.core.paths import CONFIG_JSON
+
             config_path = str(CONFIG_JSON)
         except ImportError:
             config_path = os.path.join(
@@ -216,7 +215,11 @@ class Notifier:
             )
 
     def notify_human_action_required(
-        self, story_id: str, story_title: str, story_type: str, signal_path: str,
+        self,
+        story_id: str,
+        story_title: str,
+        story_type: str,
+        signal_path: str,
     ):
         """Notify that a human story requires action."""
         type_tags = {
@@ -256,9 +259,7 @@ class Notifier:
         )
         if self.smtp_host:
             html = (
-                f"<h2>Escalation: {story_id}</h2>"
-                f"<p><strong>Story:</strong> {story_title}</p>"
-                f"<p>{failure_summary}</p>"
+                f"<h2>Escalation: {story_id}</h2><p><strong>Story:</strong> {story_title}</p><p>{failure_summary}</p>"
             )
             self.send_email(
                 subject=f"SAT: ESCALATION - {story_id}",
@@ -320,11 +321,7 @@ class Notifier:
     def notify_debug_budget_exhausted(self, task_id: str, attempts: int, last_error_summary: str):
         """Notify that a task has exhausted its debug budget."""
         error_summary = last_error_summary if last_error_summary else "(No summary provided)"
-        message = (
-            f"Task: {task_id}\n"
-            f"Attempts: {attempts}\n"
-            f"Last Error: {error_summary}"
-        )
+        message = f"Task: {task_id}\nAttempts: {attempts}\nLast Error: {error_summary}"
         self.send_ntfy(
             title=f"SAT: Debug Budget Exhausted ({task_id})",
             message=message,

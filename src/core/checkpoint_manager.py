@@ -80,7 +80,7 @@ class Checkpoint:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> 'Checkpoint':
+    def from_dict(cls, data: dict[str, Any]) -> "Checkpoint":
         """Create Checkpoint from dictionary."""
         return cls(
             task_id=data.get("task_id", ""),
@@ -97,13 +97,13 @@ class Checkpoint:
         if not isinstance(other, Checkpoint):
             return False
         return (
-            self.task_id == other.task_id and
-            self.current_phase == other.current_phase and
-            self.completed_stories == other.completed_stories and
-            self.pending_stories == other.pending_stories and
-            self.timestamp == other.timestamp and
-            self.metadata == other.metadata and
-            self.status == other.status
+            self.task_id == other.task_id
+            and self.current_phase == other.current_phase
+            and self.completed_stories == other.completed_stories
+            and self.pending_stories == other.pending_stories
+            and self.timestamp == other.timestamp
+            and self.metadata == other.metadata
+            and self.status == other.status
         )
 
     def __repr__(self):
@@ -238,7 +238,8 @@ def write_checkpoint(db_path: str, checkpoint: Checkpoint):
         metadata_json = json.dumps(checkpoint.metadata)
 
         # Upsert checkpoint (insert or replace)
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO checkpoints (
                 task_id, current_phase, completed_stories,
                 pending_stories, timestamp, metadata, status
@@ -251,15 +252,17 @@ def write_checkpoint(db_path: str, checkpoint: Checkpoint):
                 metadata = excluded.metadata,
                 status = excluded.status,
                 updated_at = CURRENT_TIMESTAMP
-        """, (
-            checkpoint.task_id,
-            checkpoint.current_phase,
-            completed_stories_json,
-            pending_stories_json,
-            checkpoint.timestamp,
-            metadata_json,
-            checkpoint.status,
-        ))
+        """,
+            (
+                checkpoint.task_id,
+                checkpoint.current_phase,
+                completed_stories_json,
+                pending_stories_json,
+                checkpoint.timestamp,
+                metadata_json,
+                checkpoint.status,
+            ),
+        )
 
         conn.commit()
         logger.debug(f"Saved checkpoint for task {checkpoint.task_id}")
@@ -289,12 +292,15 @@ def read_checkpoint(db_path: str, task_id: str) -> Checkpoint | None:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT task_id, current_phase, completed_stories,
                    pending_stories, timestamp, metadata, status
             FROM checkpoints
             WHERE task_id = ?
-        """, (task_id,))
+        """,
+            (task_id,),
+        )
 
         row = cursor.fetchone()
         conn.close()
@@ -357,15 +363,17 @@ def list_checkpoints(db_path: str) -> list[Checkpoint]:
             pending_stories = json.loads(pending_stories_json) if pending_stories_json else []
             metadata = json.loads(metadata_json) if metadata_json else {}
 
-            checkpoints.append(Checkpoint(
-                task_id=task_id,
-                current_phase=current_phase,
-                completed_stories=completed_stories,
-                pending_stories=pending_stories,
-                timestamp=timestamp,
-                metadata=metadata,
-                status=status or STATUS_IN_PROGRESS,
-            ))
+            checkpoints.append(
+                Checkpoint(
+                    task_id=task_id,
+                    current_phase=current_phase,
+                    completed_stories=completed_stories,
+                    pending_stories=pending_stories,
+                    timestamp=timestamp,
+                    metadata=metadata,
+                    status=status or STATUS_IN_PROGRESS,
+                )
+            )
 
         conn.close()
         return checkpoints

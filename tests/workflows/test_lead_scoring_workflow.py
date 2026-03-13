@@ -7,21 +7,20 @@ from src.workflows.lead_scoring_workflow import LeadScoringWorkflow
 
 
 class TestLeadScoringWorkflow(unittest.TestCase):
-
     def setUp(self):
         # Create a dummy config for tests
         self.config = {
             "ollama_api_url": "http://fake-ollama",
             "ollama_model": "fake-model",
             "mautic_api_url": "http://fake-mautic",
-            "mautic_api_token": "fake-token"
+            "mautic_api_token": "fake-token",
         }
         with open("test_config.json", "w") as f:
             json.dump(self.config, f)
 
         # Patch the clients within the workflow's scope
-        self.ollama_client_patcher = patch('src.workflows.lead_scoring_workflow.OllamaClient')
-        self.mautic_client_patcher = patch('src.workflows.lead_scoring_workflow.MauticClient')
+        self.ollama_client_patcher = patch("src.workflows.lead_scoring_workflow.OllamaClient")
+        self.mautic_client_patcher = patch("src.workflows.lead_scoring_workflow.MauticClient")
 
         self.MockOllamaClient = self.ollama_client_patcher.start()
         self.MockMauticClient = self.mautic_client_patcher.start()
@@ -31,6 +30,7 @@ class TestLeadScoringWorkflow(unittest.TestCase):
 
     def tearDown(self):
         import os
+
         os.remove("test_config.json")
         self.ollama_client_patcher.stop()
         self.mautic_client_patcher.stop()
@@ -84,5 +84,5 @@ class TestLeadScoringWorkflow(unittest.TestCase):
         self.mock_mautic_instance.update_contact_score.assert_called_once_with(contact_id, 70)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class MetricsSnapshot:
     """A point-in-time snapshot of all SAT metrics."""
+
     stories_succeeded: int = 0
     stories_failed: int = 0
     stories_total: int = 0
@@ -72,9 +73,7 @@ def collect_metrics(
             if not r.success and r.error_summary:
                 # Simple classification by first word of error
                 error_type = _classify_error(r.error_summary)
-                snapshot.failure_type_counts[error_type] = (
-                    snapshot.failure_type_counts.get(error_type, 0) + 1
-                )
+                snapshot.failure_type_counts[error_type] = snapshot.failure_type_counts.get(error_type, 0) + 1
 
         # Count unique tasks
         task_files = set()
@@ -92,14 +91,14 @@ def collect_metrics(
         try:
             for item in os.listdir(queue_dir):
                 item_path = os.path.join(queue_dir, item)
-                if os.path.isdir(item_path) and not item.startswith('_'):
+                if os.path.isdir(item_path) and not item.startswith("_"):
                     for f in os.listdir(item_path):
-                        if f.endswith('.md') and not f.startswith('_'):
+                        if f.endswith(".md") and not f.startswith("_"):
                             filepath = os.path.join(item_path, f)
                             try:
                                 with open(filepath) as fh:
                                     content = fh.read(500)
-                                if '<Pending>' in content and '# <Pending>' not in content:
+                                if "<Pending>" in content and "# <Pending>" not in content:
                                     snapshot.queue_depth += 1
                             except (OSError, UnicodeDecodeError):
                                 pass

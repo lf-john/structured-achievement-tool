@@ -29,6 +29,7 @@ DEFAULT_COOLDOWN_SECONDS = 300  # 5 minutes before auto-recovery attempt
 @dataclass
 class ProviderHealth:
     """In-memory health state for a single provider."""
+
     consecutive_failures: int = 0
     last_failure_time: float = 0.0
     last_success_time: float = 0.0
@@ -40,6 +41,7 @@ class ProviderHealth:
 @dataclass
 class InvocationResult:
     """Result of a multi-invoker execution, wrapping CLIResult with metadata."""
+
     cli_result: CLIResult
     provider_name: str
     was_failover: bool = False
@@ -49,9 +51,7 @@ class InvocationResult:
     @property
     def success(self) -> bool:
         return (
-            self.cli_result.exit_code == 0
-            and not self.cli_result.is_api_error
-            and not self.cli_result.is_environmental
+            self.cli_result.exit_code == 0 and not self.cli_result.is_api_error and not self.cli_result.is_environmental
         )
 
     @property
@@ -100,10 +100,7 @@ class MultiInvoker:
         # Auto-recover after cooldown
         elapsed = time.monotonic() - health.last_failure_time
         if elapsed >= self.cooldown_seconds:
-            logger.info(
-                f"Provider {provider_name} auto-recovered after "
-                f"{elapsed:.0f}s cooldown"
-            )
+            logger.info(f"Provider {provider_name} auto-recovered after {elapsed:.0f}s cooldown")
             health.is_healthy = True
             health.consecutive_failures = 0
             return True
@@ -129,8 +126,7 @@ class MultiInvoker:
         if health.consecutive_failures >= self.failure_threshold:
             health.is_healthy = False
             logger.warning(
-                f"Provider {provider_name} marked unhealthy after "
-                f"{health.consecutive_failures} consecutive failures"
+                f"Provider {provider_name} marked unhealthy after {health.consecutive_failures} consecutive failures"
             )
 
     def get_health_summary(self) -> dict[str, dict]:
@@ -147,11 +143,7 @@ class MultiInvoker:
 
     def _is_result_failure(self, result: CLIResult) -> bool:
         """Determine if a CLIResult represents a failure."""
-        return (
-            result.exit_code != 0
-            or result.is_api_error
-            or result.is_environmental
-        )
+        return result.exit_code != 0 or result.is_api_error or result.is_environmental
 
     async def execute_with_provider(
         self,
@@ -231,13 +223,9 @@ class MultiInvoker:
             candidates.append(fallback)
 
         # Prefer healthy providers but don't exclude all if none are healthy
-        healthy_candidates = [
-            c for c in candidates if self.is_provider_healthy(c.name)
-        ]
+        healthy_candidates = [c for c in candidates if self.is_provider_healthy(c.name)]
         if healthy_candidates:
-            candidates = healthy_candidates + [
-                c for c in candidates if c not in healthy_candidates
-            ]
+            candidates = healthy_candidates + [c for c in candidates if c not in healthy_candidates]
 
         first_provider_name = None
         attempts = 0
@@ -267,10 +255,7 @@ class MultiInvoker:
 
             # Record failure and try next
             self._record_failure(provider.name)
-            logger.warning(
-                f"Provider {provider.name} failed for {agent_name}, "
-                f"trying next candidate"
-            )
+            logger.warning(f"Provider {provider.name} failed for {agent_name}, trying next candidate")
 
         # All candidates exhausted — return last result
         return InvocationResult(
@@ -339,10 +324,7 @@ class MultiInvoker:
 
         # Local failed — record and fall back to cloud
         self._record_failure(local_provider.name)
-        logger.info(
-            f"Local provider {local_provider.name} failed, "
-            f"falling back to cloud ({cloud_fallback})"
-        )
+        logger.info(f"Local provider {local_provider.name} failed, falling back to cloud ({cloud_fallback})")
 
         cloud_result = await self.execute_with_provider(
             provider_name=cloud_fallback,
@@ -364,10 +346,7 @@ class MultiInvoker:
         local_providers = list_providers(local_only=True)
 
         # Filter to healthy providers
-        healthy = [
-            p for p in local_providers
-            if self.is_provider_healthy(p.name)
-        ]
+        healthy = [p for p in local_providers if self.is_provider_healthy(p.name)]
 
         if not healthy:
             # All unhealthy — return highest-power local anyway (let caller decide)

@@ -23,6 +23,7 @@ CLI_OUTPUT_EXAMPLE_JSON = """
 ```
 """
 
+
 def _execute_aws_cli_command(domain: str, region: str) -> str:
     """
     Executes the AWS CLI command to verify a domain's DKIM settings.
@@ -31,7 +32,10 @@ def _execute_aws_cli_command(domain: str, region: str) -> str:
     """
     # Placeholder for actual CLI execution. In a real scenario, this would use default_api.run_shell_command
     # For now, it will raise an error if not mocked, as per test expectation.
-    raise NotImplementedError("This function should be mocked for testing or use run_shell_command in a real execution.")
+    raise NotImplementedError(
+        "This function should be mocked for testing or use run_shell_command in a real execution."
+    )
+
 
 def _parse_dkim_cname_records(cli_output: str, domain: str) -> list[dict]:
     """
@@ -48,11 +52,9 @@ def _parse_dkim_cname_records(cli_output: str, domain: str) -> list[dict]:
 
     cname_records = []
     for token in dkim_tokens:
-        cname_records.append({
-            "Host": f"{token}._domainkey.{domain}",
-            "Value": f"{token}.dkim.awsapps.com"
-        })
+        cname_records.append({"Host": f"{token}._domainkey.{domain}", "Value": f"{token}.dkim.awsapps.com"})
     return cname_records
+
 
 def _format_documentation(cli_output: str, parsed_records: list[dict], domain: str, region: str) -> str:
     """
@@ -103,15 +105,19 @@ These records need to be added to your domain's DNS settings. It may take some t
         records_str = ""
         for i, record in enumerate(parsed_records):
             records_str += f"""
-**Record {i+1}:**
-    Host: {record['Host']}
-    Value: {record['Value']}
+**Record {i + 1}:**
+    Host: {record["Host"]}
+    Value: {record["Value"]}
 """
-        documentation = documentation.replace('_records_placeholder_', records_str)
+        documentation = documentation.replace("_records_placeholder_", records_str)
     else:
-        documentation = documentation.replace('_records_placeholder_', "\n**No DKIM tokens found in the AWS CLI output. Please verify your domain and region, and ensure the `aws ses verify-domain-dkim` command returns valid tokens.**\n")
+        documentation = documentation.replace(
+            "_records_placeholder_",
+            "\n**No DKIM tokens found in the AWS CLI output. Please verify your domain and region, and ensure the `aws ses verify-domain-dkim` command returns valid tokens.**\n",
+        )
 
     return documentation
+
 
 def generate_dkim_setup_documentation(domain: str, region: str) -> str:
     """

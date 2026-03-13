@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DryRunResult:
     """Result of a dry-run verification cycle."""
+
     dry_run_passed: bool
     full_run_passed: bool | None  # None if dry-run failed and no full run happened
     dry_run_results: list[VerifyResult] = field(default_factory=list)
@@ -39,7 +40,7 @@ class DryRunVerifier:
     def run(
         self,
         dry_run_checks: list[tuple],  # [(checker_method, *args), ...]
-        full_checks: list[tuple],     # [(checker_method, *args), ...]
+        full_checks: list[tuple],  # [(checker_method, *args), ...]
     ) -> DryRunResult:
         """Execute dry-run then full verification.
 
@@ -113,16 +114,16 @@ class DryRunVerifier:
                 results.append(result)
             except Exception as e:
                 method_name = getattr(method, "__name__", str(method))
-                logger.error(
-                    "Check %s raised exception: %s", method_name, e
+                logger.error("Check %s raised exception: %s", method_name, e)
+                results.append(
+                    VerifyResult(
+                        passed=False,
+                        checker="unknown",
+                        target=str(args) if args else method_name,
+                        message=f"check raised exception: {e}",
+                        details={"error": str(e), "method": method_name},
+                    )
                 )
-                results.append(VerifyResult(
-                    passed=False,
-                    checker="unknown",
-                    target=str(args) if args else method_name,
-                    message=f"check raised exception: {e}",
-                    details={"error": str(e), "method": method_name},
-                ))
         return results
 
     def _build_feedback(self, results: list[VerifyResult]) -> str:

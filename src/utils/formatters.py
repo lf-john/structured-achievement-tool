@@ -1,4 +1,3 @@
-
 def format_duration(seconds: float) -> str:
     """
     Formats a duration in seconds into a human-readable string (e.g., "1h 2m 3s").

@@ -8,7 +8,6 @@ from src.utils.ollama_client import OllamaClient
 
 
 class TestOllamaClient(unittest.TestCase):
-
     def setUp(self):
         self.client = OllamaClient(api_url="http://fake-ollama:11434/api", model="test-model")
         self.contact_data = {
@@ -17,19 +16,17 @@ class TestOllamaClient(unittest.TestCase):
             "company": "Innovate LLC",
             "industry": "Technology",
             "company_size": 150,
-            "location": "London, UK"
+            "location": "London, UK",
         }
 
-    @patch('requests.post')
+    @patch("requests.post")
     def test_score_lead_success(self, mock_post):
         # Arrange
         mock_response = MagicMock()
         mock_response.status_code = 200
         # The response from Ollama is a JSON object where the 'response' key contains a string,
         # which itself is the JSON payload we want.
-        mock_response.json.return_value = {
-            "response": '{"score": 92, "confidence": "high"}'
-        }
+        mock_response.json.return_value = {"response": '{"score": 92, "confidence": "high"}'}
         mock_post.return_value = mock_response
 
         # Act
@@ -40,7 +37,7 @@ class TestOllamaClient(unittest.TestCase):
         mock_post.assert_called_once()
         # You could add more assertions here to check the prompt sent to Ollama
 
-    @patch('requests.post')
+    @patch("requests.post")
     def test_score_lead_api_error(self, mock_post):
         # Arrange
         mock_post.side_effect = requests.RequestException("Connection error")
@@ -49,13 +46,15 @@ class TestOllamaClient(unittest.TestCase):
         result = self.client.score_lead(self.contact_data)
 
         # Assert
-        self.assertEqual(result['score'], 0)
-        self.assertEqual(result['confidence'], 'low')
-        self.assertIn('error', result)
+        self.assertEqual(result["score"], 0)
+        self.assertEqual(result["confidence"], "low")
+        self.assertIn("error", result)
 
     def test_parse_response_valid(self):
         # Arrange
-        response_text = 'Here is the JSON you requested: {"score": 78, "confidence": "medium"}. Let me know if you need more.'
+        response_text = (
+            'Here is the JSON you requested: {"score": 78, "confidence": "medium"}. Let me know if you need more.'
+        )
 
         # Act
         result = self.client._parse_response(response_text)
@@ -65,14 +64,14 @@ class TestOllamaClient(unittest.TestCase):
 
     def test_parse_response_invalid_json(self):
         # Arrange
-        response_text = 'I am unable to provide a score. The format is wrong.'
+        response_text = "I am unable to provide a score. The format is wrong."
 
         # Act
         result = self.client._parse_response(response_text)
 
         # Assert
-        self.assertEqual(result['score'], 0)
-        self.assertIn('Failed to parse response', result['error'])
+        self.assertEqual(result["score"], 0)
+        self.assertIn("Failed to parse response", result["error"])
 
     def test_parse_response_incomplete_json(self):
         # Arrange
@@ -82,8 +81,8 @@ class TestOllamaClient(unittest.TestCase):
         result = self.client._parse_response(response_text)
 
         # Assert
-        self.assertEqual(result['score'], 0)
-        self.assertIn('Failed to parse response', result['error'])
+        self.assertEqual(result["score"], 0)
+        self.assertIn("Failed to parse response", result["error"])
 
     def test_build_prompt(self):
         # Arrange
@@ -107,12 +106,12 @@ class TestOllamaClient(unittest.TestCase):
         - Geography: North America, Europe.
 
         Contact Details:
-        - Name: {self.contact_data.get('name', 'N/A')}
-        - Title: {self.contact_data.get('title', 'N/A')}
-        - Company: {self.contact_data.get('company', 'N/A')}
-        - Industry: {self.contact_data.get('industry', 'N/A')}
-        - Company Size: {self.contact_data.get('company_size', 'N/A')}
-        - Location: {self.contact_data.get('location', 'N/A')}
+        - Name: {self.contact_data.get("name", "N/A")}
+        - Title: {self.contact_data.get("title", "N/A")}
+        - Company: {self.contact_data.get("company", "N/A")}
+        - Industry: {self.contact_data.get("industry", "N/A")}
+        - Company Size: {self.contact_data.get("company_size", "N/A")}
+        - Location: {self.contact_data.get("location", "N/A")}
 
         Output your response as a JSON object with two keys: "score" (an integer from 1 to 100) and "confidence" (a string: "high", "medium", or "low").
         Do not include any other text or explanation.
@@ -123,5 +122,6 @@ class TestOllamaClient(unittest.TestCase):
         JSON Response:
         """
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

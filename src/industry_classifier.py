@@ -1,4 +1,3 @@
-
 """
 This module implements the IndustryClassifier class for classifying company descriptions
 into predefined industry categories using Ollama embeddings.
@@ -15,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class IndustryClassificationError(Exception):
     """Custom exception for errors during industry classification."""
+
     pass
 
 
@@ -58,9 +58,7 @@ class IndustryClassifier:
                 self._industry_embeddings[industry] = embedding
             except Exception as e:
                 logger.error(f"Failed to generate embedding for industry '{industry}': {e}")
-                raise IndustryClassificationError(
-                    f"Failed to initialize embeddings for industry: {industry}"
-                ) from e
+                raise IndustryClassificationError(f"Failed to initialize embeddings for industry: {industry}") from e
 
     def classify_industry(self, company_description: str) -> str:
         """
@@ -78,15 +76,13 @@ class IndustryClassifier:
         """
         if not company_description or not company_description.strip():
             # Allow embed_text to be called as expected by test mock
-            pass # Fall through to embedding generation and classification
+            pass  # Fall through to embedding generation and classification
 
         try:
             company_embedding = self.embedding_service.embed_text(company_description)
         except Exception as e:
             logger.error(f"Failed to generate embedding for company description: {e}")
-            raise IndustryClassificationError(
-                "Failed to get embeddings"
-            ) from e
+            raise IndustryClassificationError("Failed to get embeddings") from e
 
         if not company_embedding:
             raise IndustryClassificationError("Generated company embedding is empty.")
@@ -124,12 +120,10 @@ class IndustryClassifier:
             The cosine similarity as a float.
         """
         dot_product = sum(v1 * v2 for v1, v2 in zip(vec1, vec2, strict=False))
-        magnitude1 = (sum(v1**2 for v1 in vec1))**0.5
-        magnitude2 = (sum(v2**2 for v2 in vec2))**0.5
+        magnitude1 = (sum(v1**2 for v1 in vec1)) ** 0.5
+        magnitude2 = (sum(v2**2 for v2 in vec2)) ** 0.5
 
         if magnitude1 == 0 or magnitude2 == 0:
             return 0.0
 
         return dot_product / (magnitude1 * magnitude2)
-
-

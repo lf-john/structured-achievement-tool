@@ -117,6 +117,4 @@ class N8NCredentialManager:
             resp.raise_for_status()
             return resp.json()
         except Exception as exc:
-            raise N8NCredentialError(
-                f"Failed to fetch workflow '{workflow_id}': {exc}"
-            ) from exc
+            raise N8NCredentialError(f"Failed to fetch workflow '{workflow_id}': {exc}") from exc

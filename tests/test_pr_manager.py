@@ -101,7 +101,9 @@ class TestPRManagerCreate:
     @patch("src.github.pr_manager.run_gh")
     def test_failed_creation(self, mock_gh):
         mock_gh.return_value = GHResult(
-            stderr="branch not found", success=False, exit_code=1,
+            stderr="branch not found",
+            success=False,
+            exit_code=1,
         )
         mgr = PRManager(repo="owner/repo")
 
@@ -139,7 +141,8 @@ class TestPRManagerFind:
     @patch("src.github.pr_manager.run_gh")
     def test_finds_existing_pr(self, mock_gh):
         mock_gh.return_value = GHResult(
-            stdout='[{"number": 7}]', success=True,
+            stdout='[{"number": 7}]',
+            success=True,
         )
         mgr = PRManager(repo="owner/repo")
 

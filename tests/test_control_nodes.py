@@ -187,12 +187,18 @@ class TestNotifyNode:
         """Context from phase output should be truncated to 200 chars."""
         long_output = "A" * 500
         state = _make_state(
-            phase_outputs=[{
-                "phase": "CODE", "status": "complete", "output": long_output,
-                "exit_code": 0, "provider_used": "claude",
-                "duration_seconds": 1.0, "timestamp": "2026-02-26T10:00:00",
-                "artifacts": {},
-            }]
+            phase_outputs=[
+                {
+                    "phase": "CODE",
+                    "status": "complete",
+                    "output": long_output,
+                    "exit_code": 0,
+                    "provider_used": "claude",
+                    "duration_seconds": 1.0,
+                    "timestamp": "2026-02-26T10:00:00",
+                    "artifacts": {},
+                }
+            ]
         )
         notifier = _make_notifier()
 
@@ -241,7 +247,8 @@ class TestPauseNode:
             return "approved\n\n---\n\napproved\n<Pending>\n"
 
         pause_node(
-            state, notifier,
+            state,
+            notifier,
             signal_dir="/tmp/test-sat",
             _sleep_fn=lambda x: None,
             _write_fn=mock_write,
@@ -262,7 +269,8 @@ class TestPauseNode:
             return "ok\n<Pending>\n"
 
         pause_node(
-            state, notifier,
+            state,
+            notifier,
             signal_dir="/tmp/test-sat",
             _sleep_fn=lambda x: None,
             _write_fn=lambda p, c: None,
@@ -288,7 +296,8 @@ class TestPauseNode:
             return None  # Still waiting
 
         result = pause_node(
-            state, notifier,
+            state,
+            notifier,
             signal_dir="/tmp/test-sat",
             escalation_timeout=300,
             poll_interval=10,
@@ -314,7 +323,8 @@ class TestPauseNode:
             return None
 
         result = pause_node(
-            state, notifier,
+            state,
+            notifier,
             signal_dir="/tmp/test-sat",
             escalation_timeout=30,  # 3 polls of 10s each
             poll_interval=10,
@@ -340,7 +350,8 @@ class TestPauseNode:
             return None  # Never responds
 
         result = pause_node(
-            state, notifier,
+            state,
+            notifier,
             signal_dir="/tmp/test-sat",
             escalation_timeout=20,
             poll_interval=10,
@@ -362,7 +373,8 @@ class TestPauseNode:
             return "approved\n<Pending>\n"
 
         result = pause_node(
-            state, notifier,
+            state,
+            notifier,
             signal_dir="/tmp/test-sat",
             _sleep_fn=lambda x: None,
             _write_fn=lambda p, c: None,
@@ -384,7 +396,8 @@ class TestPauseNode:
             return "Header\n\n---\n\napproved\n\n<Pending>\n"
 
         result = pause_node(
-            state, notifier,
+            state,
+            notifier,
             signal_dir="/tmp/test-sat",
             _sleep_fn=lambda x: None,
             _write_fn=lambda p, c: None,
@@ -407,7 +420,8 @@ class TestPauseNode:
             return "ok\n<Pending>\n"
 
         pause_node(
-            state, notifier,
+            state,
+            notifier,
             signal_dir="~/my-tasks",
             _sleep_fn=lambda x: None,
             _write_fn=mock_write,
@@ -452,23 +466,13 @@ class TestSignalFileHelpers:
 
     def test_extract_response_approved(self):
         """Should extract approval text after separator."""
-        content = (
-            "# Approval Required: S-001\n\n"
-            "Some context...\n\n"
-            "---\n\n"
-            "This looks great, ship it!\n\n"
-            "<Pending>\n"
-        )
+        content = "# Approval Required: S-001\n\nSome context...\n\n---\n\nThis looks great, ship it!\n\n<Pending>\n"
         response = _extract_human_response(content)
         assert response == "This looks great, ship it!"
 
     def test_extract_response_rejection(self):
         """Should extract rejection text."""
-        content = (
-            "Header...\n\n---\n\n"
-            "REJECTED: The approach is wrong, use a different algorithm.\n\n"
-            "<Pending>\n"
-        )
+        content = "Header...\n\n---\n\nREJECTED: The approach is wrong, use a different algorithm.\n\n<Pending>\n"
         response = _extract_human_response(content)
         assert response.startswith("REJECTED:")
 

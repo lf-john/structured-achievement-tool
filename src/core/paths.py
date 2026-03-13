@@ -15,21 +15,27 @@ from pathlib import Path
 # --- Core paths ---
 
 # Project root: prefer env var, fall back to auto-detection from this file's location
-SAT_PROJECT_DIR = Path(os.environ.get(
-    "SAT_PROJECT_DIR",
-    str(Path(__file__).resolve().parent.parent.parent),
-))
+SAT_PROJECT_DIR = Path(
+    os.environ.get(
+        "SAT_PROJECT_DIR",
+        str(Path(__file__).resolve().parent.parent.parent),
+    )
+)
 
 # Google Drive roots
-SAT_GDRIVE_ROOT = Path(os.environ.get(
-    "SAT_GDRIVE_ROOT",
-    str(Path.home() / "GoogleDrive" / "DriveSyncFiles"),
-))
+SAT_GDRIVE_ROOT = Path(
+    os.environ.get(
+        "SAT_GDRIVE_ROOT",
+        str(Path.home() / "GoogleDrive" / "DriveSyncFiles"),
+    )
+)
 
-SAT_TASKS_DIR = Path(os.environ.get(
-    "SAT_TASKS_DIR",
-    str(SAT_GDRIVE_ROOT / "sat-tasks"),
-))
+SAT_TASKS_DIR = Path(
+    os.environ.get(
+        "SAT_TASKS_DIR",
+        str(SAT_GDRIVE_ROOT / "sat-tasks"),
+    )
+)
 
 # --- Derived paths ---
 

@@ -58,7 +58,8 @@ class SessionContinuator:
         try:
             result = subprocess.run(
                 ["claude", "--resume", session_id],
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
                 cwd=working_dir,
                 timeout=600,  # 10 minute timeout
             )
@@ -71,13 +72,17 @@ class SessionContinuator:
             )
         except subprocess.TimeoutExpired:
             return ContinuationResult(
-                success=False, session_id=session_id,
-                continuation_count=count, error="Continuation timed out",
+                success=False,
+                session_id=session_id,
+                continuation_count=count,
+                error="Continuation timed out",
             )
         except Exception as e:
             return ContinuationResult(
-                success=False, session_id=session_id,
-                continuation_count=count, error=str(e),
+                success=False,
+                session_id=session_id,
+                continuation_count=count,
+                error=str(e),
             )
 
     def reset_count(self, task_id: str):

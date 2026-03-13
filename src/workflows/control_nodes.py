@@ -25,6 +25,7 @@ DEFAULT_SIGNAL_DIR = "~/GoogleDrive/DriveSyncFiles/sat-tasks"
 
 # --- NOTIFY Node ---
 
+
 def notify_node(
     state: StoryState,
     notifier: Notifier,
@@ -130,6 +131,7 @@ def notify_node(
 
 
 # --- PAUSE Node ---
+
 
 def _build_signal_content(state: StoryState) -> str:
     """Build the markdown content for a PAUSE signal file."""
@@ -353,6 +355,7 @@ def _record_pause_output(state: dict, response: str, escalated: bool) -> None:
 
 
 # --- Decision Functions ---
+
 
 def pause_decision(state: StoryState) -> Literal["approved", "rejected", "timeout"]:
     """Route after PAUSE node based on human response.

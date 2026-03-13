@@ -22,12 +22,7 @@ def get_memory_usage():
     """
     try:
         # Execute free -h command
-        result = subprocess.run(
-            ['free', '-h'],
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        result = subprocess.run(["free", "-h"], capture_output=True, text=True, check=True)
 
         output = result.stdout.strip()
 
@@ -40,27 +35,27 @@ def get_memory_usage():
         # total        used        free      shared  buff/cache   available
         # 7.7Gi       4.2Gi       3.5Gi       1.1Gi       0.4Gi       5.2Gi
         # Mem:          7896       4200       3500       1100        400        5200
-        lines = output.split('\n')
+        lines = output.split("\n")
 
         for line in lines:
-            if line.startswith('Mem:') or line.strip().startswith('Mem:'):
+            if line.startswith("Mem:") or line.strip().startswith("Mem:"):
                 parts = line.split()
                 # Skip header, find Mem: line
                 if len(parts) >= 7:
                     memory_info = {
-                        'total': parts[1],
-                        'used': parts[2],
-                        'free': parts[3],
-                        'shared': parts[4],
-                        'buff/cache': parts[5],
-                        'available': parts[6]
+                        "total": parts[1],
+                        "used": parts[2],
+                        "free": parts[3],
+                        "shared": parts[4],
+                        "buff/cache": parts[5],
+                        "available": parts[6],
                     }
                     # Return only the keys expected by tests
                     return {
-                        'total': memory_info['total'],
-                        'used': memory_info['used'],
-                        'free': memory_info['free'],
-                        'available': memory_info['available']
+                        "total": memory_info["total"],
+                        "used": memory_info["used"],
+                        "free": memory_info["free"],
+                        "available": memory_info["available"],
                     }
                 break
 
@@ -83,30 +78,19 @@ def get_cpu_load():
     """
     try:
         # Try uptime first
-        result = subprocess.run(
-            ['uptime'],
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        result = subprocess.run(["uptime"], capture_output=True, text=True, check=True)
 
         output = result.stdout.strip()
 
         # Parse load averages from uptime output
         # Expected format:
         # 12:34:56 up 45 days,  3:21,  2 users,  load average: 1.23, 1.45, 1.67
-        match = re.search(r'load average:\s*([0-9.]+),\s*([0-9.]+),\s*([0-9.]+)', output)
+        match = re.search(r"load average:\s*([0-9.]+),\s*([0-9.]+),\s*([0-9.]+)", output)
 
         if match:
-            load_averages = [
-                float(match.group(1)),
-                float(match.group(2)),
-                float(match.group(3))
-            ]
+            load_averages = [float(match.group(1)), float(match.group(2)), float(match.group(3))]
 
-            return {
-                'load': load_averages
-            }
+            return {"load": load_averages}
 
         return None
 

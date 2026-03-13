@@ -27,9 +27,9 @@ TRIGGER_PHASES = {"TDD_RED", "CODE", "VERIFY", "FIX"}
 
 # File categorization patterns
 TEST_FILE_PATTERNS = [
-    re.compile(r'\.(test|spec)\.(js|ts|php|py)$'),
-    re.compile(r'^tests[/\\]'),
-    re.compile(r'^test[/\\]'),
+    re.compile(r"\.(test|spec)\.(js|ts|php|py)$"),
+    re.compile(r"^tests[/\\]"),
+    re.compile(r"^test[/\\]"),
 ]
 
 
@@ -96,7 +96,6 @@ def should_trigger(phase: str, modified_files: list[str]) -> dict:
 
 
 class MediatorAgent(BaseAgent):
-
     @property
     def agent_name(self) -> str:
         return "mediator"

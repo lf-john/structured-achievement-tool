@@ -94,8 +94,8 @@ PHASE_CONTEXT: dict[str, list[str]] = {
     "VERIFY_TEST": ["diff", "test_results", "acceptance_criteria"],
     "VERIFY_SECURITY": ["diff", "test_results", "acceptance_criteria"],
     "VERIFY_ARCH": ["diff", "test_results", "acceptance_criteria"],
-    "CONTENT_PLAN": ["task_description", "acceptance_criteria", "rag_context"],
-    "CONTENT_WRITE": ["plan_output", "acceptance_criteria", "failure_context"],
+    "CONTENT_PLAN": ["task_description", "acceptance_criteria", "rag_context", "existing_file_content"],
+    "CONTENT_WRITE": ["plan_output", "acceptance_criteria", "failure_context", "existing_file_content"],
     "AGENTIC_VERIFY": ["plan_output", "acceptance_criteria"],
     # Document assembly workflow phases
     "GATHER_INPUTS": ["task_description", "acceptance_criteria"],

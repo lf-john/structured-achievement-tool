@@ -22,6 +22,7 @@ class TestHoursSince:
 
     def test_recent_timestamp(self):
         import datetime
+
         now = datetime.datetime.now().isoformat()
         assert _hours_since(now) < 1
 
@@ -72,29 +73,33 @@ class TestProactiveState:
 class TestRunProactiveChecks:
     def test_disabled_returns_empty(self, tmp_path):
         config_path = tmp_path / "config.json"
-        config_path.write_text(json.dumps({
-            "proactive_agency": {"enabled": False}
-        }))
+        config_path.write_text(json.dumps({"proactive_agency": {"enabled": False}}))
         with patch("src.health_check.PROJECT_PATH", str(tmp_path)):
             result = run_proactive_checks()
             assert result == []
 
     def test_creates_config_story_on_missing_config(self, tmp_path):
         config_path = tmp_path / "config.json"
-        config_path.write_text(json.dumps({
-            "proactive_agency": {
-                "enabled": True,
-                "config_validation_interval_hours": 0,
-                "story_output_dir": str(tmp_path / "output"),
-            }
-        }))
+        config_path.write_text(
+            json.dumps(
+                {
+                    "proactive_agency": {
+                        "enabled": True,
+                        "config_validation_interval_hours": 0,
+                        "story_output_dir": str(tmp_path / "output"),
+                    }
+                }
+            )
+        )
         state_file = tmp_path / ".memory" / "proactive_state.json"
         os.makedirs(state_file.parent, exist_ok=True)
 
         # Remove config to trigger the check
-        with patch("src.health_check.PROJECT_PATH", str(tmp_path)), \
-             patch("src.health_check.PROACTIVE_STATE_FILE", str(state_file)), \
-             patch("src.health_check.notify"):
+        with (
+            patch("src.health_check.PROJECT_PATH", str(tmp_path)),
+            patch("src.health_check.PROACTIVE_STATE_FILE", str(state_file)),
+            patch("src.health_check.notify"),
+        ):
             # Config exists but routing_rules_enabled is not set
             result = run_proactive_checks()
             # Should create at least one story since routing_rules_enabled is missing

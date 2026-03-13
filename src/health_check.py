@@ -8,11 +8,13 @@ Checks:
 4. No tasks stuck in <Working> or <Failed>
 5. Google Drive mount is accessible
 6. Dashboard is responding
+7. CLAUDE.md integrity (SHA-256 hash monitoring)
 
 Outputs a status report and takes corrective action where possible.
 Sends ntfy notification on failures.
 """
 
+import hashlib
 import json
 import os
 import subprocess
@@ -33,14 +35,30 @@ os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{UID}")
 os.environ.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{UID}/bus")
 
 try:
-    from src.core.paths import FUSE_SENTINEL, PROACTIVE_STATE, SAT_DB, SAT_PROJECT_DIR, SAT_TASKS_DIR
+    from src.core.paths import (
+        FUSE_SENTINEL,
+        MEMORY_DIR,
+        MONITOR_WATCH_DIRS,
+        PROACTIVE_STATE,
+        SAT_DB,
+        SAT_PROJECT_DIR,
+        SAT_TASKS_DIR,
+    )
 except ImportError:
     from pathlib import Path
+
     SAT_PROJECT_DIR = Path(_PROJECT_ROOT)
     SAT_TASKS_DIR = Path(os.path.expanduser("~/GoogleDrive/DriveSyncFiles/sat-tasks"))
     FUSE_SENTINEL = SAT_TASKS_DIR / "CLAUDE.md"
-    PROACTIVE_STATE = SAT_PROJECT_DIR / ".memory" / "proactive_state.json"
-    SAT_DB = SAT_PROJECT_DIR / ".memory" / "sat.db"
+    MEMORY_DIR = SAT_PROJECT_DIR / ".memory"
+    PROACTIVE_STATE = MEMORY_DIR / "proactive_state.json"
+    SAT_DB = MEMORY_DIR / "sat.db"
+    MONITOR_WATCH_DIRS = [
+        SAT_TASKS_DIR / "sat-enhancements",
+        SAT_TASKS_DIR / "marketing-automation",
+        SAT_TASKS_DIR / "other",
+        SAT_TASKS_DIR / "maintenance",
+    ]
 
 WATCH_DIRS = [str(SAT_TASKS_DIR)]
 # Read from env (set in ~/.config/sat/env, loaded by systemd)
@@ -49,6 +67,7 @@ NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
 NTFY_MIN_PRIORITY = os.environ.get("SAT_NTFY_MIN_PRIORITY", "default")
 PRIORITY_LEVELS = {"min": 0, "low": 1, "default": 2, "high": 3, "urgent": 4}
 PROJECT_PATH = str(SAT_PROJECT_DIR)
+
 
 def notify(title, message, priority="default", tags=""):
     if not NTFY_TOPIC:
@@ -64,25 +83,19 @@ def notify(title, message, priority="default", tags=""):
             headers["Priority"] = priority
         if tags:
             headers["Tags"] = tags
-        requests.post(
-            f"{NTFY_SERVER}/{NTFY_TOPIC}",
-            data=message.encode("utf-8"),
-            headers=headers,
-            timeout=5
-        )
+        requests.post(f"{NTFY_SERVER}/{NTFY_TOPIC}", data=message.encode("utf-8"), headers=headers, timeout=5)
     except:
         pass
+
 
 def check_service(name):
     """Check if a systemd user service is active."""
     try:
-        res = subprocess.run(
-            ["systemctl", "--user", "is-active", name],
-            capture_output=True, text=True
-        )
+        res = subprocess.run(["systemctl", "--user", "is-active", name], capture_output=True, text=True)
         return res.stdout.strip() == "active"
     except:
         return False
+
 
 def restart_service(name):
     """Restart a systemd user service."""
@@ -93,16 +106,15 @@ def restart_service(name):
     except:
         return False
 
+
 def check_ollama():
     """Check if Ollama is responding."""
     try:
-        res = subprocess.run(
-            ["ollama", "list"],
-            capture_output=True, text=True, timeout=10
-        )
+        res = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=10)
         return res.returncode == 0
     except:
         return False
+
 
 def check_gdrive():
     """Check if Google Drive mount is accessible.
@@ -117,6 +129,7 @@ def check_gdrive():
     except OSError:
         return False
 
+
 def check_dashboard():
     """Check if the SAT dashboard is responding."""
     try:
@@ -124,6 +137,99 @@ def check_dashboard():
         return res.status_code == 200
     except:
         return False
+
+
+# --- CLAUDE.md integrity monitoring ---
+
+CLAUDE_MD_HASHES_FILE = str(MEMORY_DIR / "claude_md_hashes.json")
+
+# Explicit list of project CLAUDE.md files to monitor
+CLAUDE_MD_WATCHED_PATHS = [
+    os.path.expanduser("~/projects/marketing-automation/CLAUDE.md"),
+    os.path.expanduser("~/projects/structured-achievement-tool/CLAUDE.md"),
+]
+# Also monitor any CLAUDE.md in sat-tasks subdirectories
+for _watch_dir in MONITOR_WATCH_DIRS:
+    _claude_md = os.path.join(str(_watch_dir), "CLAUDE.md")
+    if _claude_md not in CLAUDE_MD_WATCHED_PATHS:
+        CLAUDE_MD_WATCHED_PATHS.append(_claude_md)
+# And the sat-tasks root CLAUDE.md (FUSE sentinel)
+_sentinel_str = str(FUSE_SENTINEL)
+if _sentinel_str not in CLAUDE_MD_WATCHED_PATHS:
+    CLAUDE_MD_WATCHED_PATHS.append(_sentinel_str)
+
+
+def _sha256_file(filepath):
+    """Compute SHA-256 hex digest of a file. Returns None if file is unreadable."""
+    try:
+        h = hashlib.sha256()
+        with open(filepath, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
+def _load_claude_md_hashes():
+    """Load stored CLAUDE.md hashes from disk."""
+    if os.path.exists(CLAUDE_MD_HASHES_FILE):
+        try:
+            with open(CLAUDE_MD_HASHES_FILE) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+def _save_claude_md_hashes(hashes):
+    """Persist CLAUDE.md hashes to disk."""
+    os.makedirs(os.path.dirname(CLAUDE_MD_HASHES_FILE), exist_ok=True)
+    with open(CLAUDE_MD_HASHES_FILE, "w") as f:
+        json.dump(hashes, f, indent=2)
+
+
+def check_claude_md_integrity():
+    """Verify CLAUDE.md files have not been modified unexpectedly.
+
+    On first run (no stored hash for a file), stores the baseline hash
+    without alerting. On subsequent runs, compares current hash to stored
+    and reports any changes.
+
+    Returns:
+        list of str: Warning messages for any changed files (empty if all OK).
+    """
+    stored = _load_claude_md_hashes()
+    warnings = []
+    updated = False
+
+    for filepath in CLAUDE_MD_WATCHED_PATHS:
+        current_hash = _sha256_file(filepath)
+        if current_hash is None:
+            # File doesn't exist or is unreadable — skip silently
+            # (could be an unmounted drive or optional project)
+            continue
+
+        previous_hash = stored.get(filepath)
+        if previous_hash is None:
+            # First time seeing this file — store baseline, no alert
+            stored[filepath] = current_hash
+            updated = True
+            print(f"  CLAUDE.md baseline stored: {filepath}")
+        elif current_hash != previous_hash:
+            # Hash changed — alert
+            short_path = os.path.basename(os.path.dirname(filepath)) + "/CLAUDE.md"
+            msg = f"CLAUDE.md CHANGED: {short_path} ({filepath})"
+            warnings.append(msg)
+            print(f"  WARNING: {msg}")
+            # Update stored hash so we don't re-alert every cycle
+            stored[filepath] = current_hash
+            updated = True
+
+    if updated:
+        _save_claude_md_hashes(stored)
+
+    return warnings
 
 
 def maintain_checkpoint_db():
@@ -162,9 +268,7 @@ def maintain_checkpoint_db():
                                 f"AND status IN ('completed', 'failed')"
                             )
                         else:
-                            cursor.execute(
-                                f"DELETE FROM {table} WHERE {ts_col} < datetime('now', '-24 hours')"
-                            )
+                            cursor.execute(f"DELETE FROM {table} WHERE {ts_col} < datetime('now', '-24 hours')")
                         deleted = cursor.rowcount
                         if deleted:
                             print(f"  Checkpoint DB: pruned {deleted} rows from {table}")
@@ -184,6 +288,7 @@ def maintain_checkpoint_db():
         conn.close()
     except Exception as e:
         print(f"  Checkpoint DB maintenance failed: {e}")
+
 
 def cleanup_orphan_worktrees():
     """Remove git worktrees that are older than 24 hours (Failure State 12).
@@ -209,13 +314,16 @@ def cleanup_orphan_worktrees():
                     result = subprocess.run(
                         ["git", "worktree", "remove", wt_path, "--force"],
                         cwd=PROJECT_PATH,
-                        capture_output=True, text=True, timeout=15,
+                        capture_output=True,
+                        text=True,
+                        timeout=15,
                     )
                     if result.returncode == 0:
                         print(f"  Cleaned orphan worktree: {name}")
                     else:
                         # Fallback: remove directory manually
                         import shutil
+
                         shutil.rmtree(wt_path, ignore_errors=True)
                         print(f"  Removed orphan worktree dir: {name}")
                 except Exception as e:
@@ -242,16 +350,16 @@ def scan_tasks():
             continue
         for task_dir_name in sorted(os.listdir(watch_dir)):
             task_dir = os.path.join(watch_dir, task_dir_name)
-            if not os.path.isdir(task_dir) or task_dir_name.startswith('_') or task_dir_name.startswith('tmp'):
+            if not os.path.isdir(task_dir) or task_dir_name.startswith("_") or task_dir_name.startswith("tmp"):
                 continue
             for f in sorted(os.listdir(task_dir)):
-                if not f.endswith('.md') or f.startswith('_') or '_response' in f:
+                if not f.endswith(".md") or f.startswith("_") or "_response" in f:
                     continue
                 path = os.path.join(task_dir, f)
                 try:
                     with open(path) as file:
                         content = file.read()
-                    if '<!-- CLAUDE-RESPONSE -->' in content[:200]:
+                    if "<!-- CLAUDE-RESPONSE -->" in content[:200]:
                         continue
                     if "<Finished>" in content:
                         status["finished"] += 1
@@ -273,6 +381,7 @@ def scan_tasks():
                     pass
 
     return status, issues
+
 
 def main():
     problems = []
@@ -330,12 +439,23 @@ def main():
     # 5c. Git worktree cleanup (Failure State 12)
     cleanup_orphan_worktrees()
 
+    # 5d. CLAUDE.md integrity check
+    claude_md_warnings = check_claude_md_integrity()
+    if claude_md_warnings:
+        problems.extend(claude_md_warnings)
+        notify(
+            "SAT: CLAUDE.md Integrity Alert",
+            "\n".join(claude_md_warnings),
+            priority="high",
+            tags="warning,lock",
+        )
+
     # 6. Scan tasks
     task_status, task_issues = scan_tasks()
 
     # Build report
     report = "SAT Health Check Report\n"
-    report += f"{'='*40}\n"
+    report += f"{'=' * 40}\n"
     report += f"Services: sat={'OK' if check_service('sat.service') else 'DOWN'}, "
     report += f"monitor={'OK' if check_service('sat-monitor.service') else 'DOWN'}, "
     report += f"ollama={'OK' if check_ollama() else 'DOWN'}\n"
@@ -362,20 +482,11 @@ def main():
 
     # Send notification if there are problems
     if problems or task_issues:
-        notify(
-            "SAT Health Alert",
-            report,
-            priority="high",
-            tags="warning,robot"
-        )
+        notify("SAT Health Alert", report, priority="high", tags="warning,robot")
     else:
         # Periodic success notification (only if run with --verbose)
         if "--verbose" in sys.argv:
-            notify(
-                "SAT Health OK",
-                report,
-                tags="white_check_mark"
-            )
+            notify("SAT Health OK", report, tags="white_check_mark")
 
     # Create debug stories for persistent problems that couldn't be auto-fixed
     unfixed = [a for a in actions if "FAILED" in a]
@@ -400,9 +511,11 @@ def main():
 
     return 0 if not problems else 1
 
+
 ## --- Proactive Agency ---
 
 PROACTIVE_STATE_FILE = str(PROACTIVE_STATE)
+
 
 def _load_proactive_state():
     """Load last-run timestamps for proactive checks."""
@@ -414,10 +527,12 @@ def _load_proactive_state():
             pass
     return {}
 
+
 def _save_proactive_state(state):
     os.makedirs(os.path.dirname(PROACTIVE_STATE_FILE), exist_ok=True)
     with open(PROACTIVE_STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
+
 
 def _hours_since(timestamp_str):
     """Return hours since a timestamp string, or float('inf') if missing."""
@@ -425,11 +540,13 @@ def _hours_since(timestamp_str):
         return float("inf")
     try:
         import datetime
+
         last = datetime.datetime.fromisoformat(timestamp_str)
         now = datetime.datetime.now()
         return (now - last).total_seconds() / 3600
     except (ValueError, TypeError):
         return float("inf")
+
 
 def _get_project_stories(project=None, db_path=None):
     """Query task_states for stories belonging to a specific project.
@@ -459,8 +576,7 @@ def _get_project_stories(project=None, db_path=None):
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         rows = conn.execute(
-            "SELECT task_path, status FROM task_states "
-            "WHERE project=? AND status IN ('working', 'pending')",
+            "SELECT task_path, status FROM task_states WHERE project=? AND status IN ('working', 'pending')",
             (project,),
         ).fetchall()
         for row in rows:
@@ -482,8 +598,9 @@ def _get_sat_editing_stories(db_path=None):
     return _get_project_stories(project="structured-achievement-tool", db_path=db_path)
 
 
-def _create_maintenance_story(title, description, story_type="maintenance",
-                              output_dir=None, priority="normal", depends_on=None):
+def _create_maintenance_story(
+    title, description, story_type="maintenance", output_dir=None, priority="normal", depends_on=None
+):
     """Create a story file for proactive maintenance.
 
     Args:
@@ -497,6 +614,7 @@ def _create_maintenance_story(title, description, story_type="maintenance",
             does not enforce this; priority ordering is used instead.
     """
     import datetime
+
     if output_dir is None:
         output_dir = os.path.expanduser("~/GoogleDrive/DriveSyncFiles/sat-tasks/maintenance")
     os.makedirs(output_dir, exist_ok=True)
@@ -531,8 +649,7 @@ def _create_maintenance_story(title, description, story_type="maintenance",
     return filepath
 
 
-def _create_debug_story_with_deps(title, description, db_path=None, output_dir=None,
-                                   project=None):
+def _create_debug_story_with_deps(title, description, db_path=None, output_dir=None, project=None):
     """Create a Debug story with project-scoped prerequisite chains.
 
     Queries the task_states DB for in-progress and queued stories for the
@@ -640,6 +757,7 @@ def _create_debug_story_with_deps(title, description, db_path=None, output_dir=N
                     ).fetchone()
                     if row:
                         import json as _json
+
                         try:
                             current = _json.loads(row[0] or "[]")
                         except (_json.JSONDecodeError, TypeError):
@@ -657,6 +775,7 @@ def _create_debug_story_with_deps(title, description, db_path=None, output_dir=N
             print(f"  Could not update queued story prerequisites: {e}")
 
     return filepath
+
 
 def run_proactive_checks():
     """Run proactive checks and create maintenance stories if needed.
@@ -680,10 +799,9 @@ def run_proactive_checks():
     if not pa_config.get("enabled", False):
         return []
 
-    output_dir = os.path.expanduser(pa_config.get(
-        "story_output_dir",
-        "~/GoogleDrive/DriveSyncFiles/sat-tasks/maintenance"
-    ))
+    output_dir = os.path.expanduser(
+        pa_config.get("story_output_dir", "~/GoogleDrive/DriveSyncFiles/sat-tasks/maintenance")
+    )
 
     state = _load_proactive_state()
     created = []
@@ -710,8 +828,7 @@ def run_proactive_checks():
         if issues:
             filepath = _create_debug_story_with_deps(
                 "Config Validation Issues",
-                "Proactive check found configuration issues:\n\n" +
-                "\n".join(f"- {i}" for i in issues),
+                "Proactive check found configuration issues:\n\n" + "\n".join(f"- {i}" for i in issues),
                 output_dir=output_dir,
             )
             created.append(filepath)
@@ -757,8 +874,7 @@ def run_proactive_checks():
         if cleanup_items:
             filepath = _create_debug_story_with_deps(
                 "Scheduled Maintenance",
-                "Scheduled maintenance review:\n\n" +
-                "\n".join(f"- {i}" for i in cleanup_items),
+                "Scheduled maintenance review:\n\n" + "\n".join(f"- {i}" for i in cleanup_items),
                 output_dir=output_dir,
             )
             created.append(filepath)

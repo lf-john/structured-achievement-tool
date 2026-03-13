@@ -9,7 +9,7 @@ import json
 import os
 import sqlite3
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -27,6 +27,7 @@ ENV_FILE = Path.home() / ".config" / "sat" / "env"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def load_env(env_path: Path) -> None:
     """Read a systemd-style env file (KEY=VALUE) and inject into os.environ."""
     if not env_path.exists():
@@ -42,7 +43,7 @@ def load_env(env_path: Path) -> None:
 
 def cutoff_iso() -> str:
     """Return the ISO-8601 timestamp for 24 hours ago (UTC, no tz suffix)."""
-    return (datetime.now(timezone.utc) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
+    return (datetime.now(UTC) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def query_sat_db(cutoff: str) -> dict:
@@ -62,9 +63,7 @@ def query_sat_db(cutoff: str) -> dict:
         conn.row_factory = sqlite3.Row
 
         # Tasks created in window
-        row = conn.execute(
-            "SELECT COUNT(*) AS n FROM tasks WHERE created_at >= ?", (cutoff,)
-        ).fetchone()
+        row = conn.execute("SELECT COUNT(*) AS n FROM tasks WHERE created_at >= ?", (cutoff,)).fetchone()
         result["tasks_created"] = row["n"] if row else 0
 
         # Tasks moved to a completed-like status in window
@@ -75,9 +74,7 @@ def query_sat_db(cutoff: str) -> dict:
         result["tasks_completed"] = row["n"] if row else 0
 
         # Stories updated in window
-        row = conn.execute(
-            "SELECT COUNT(*) AS n FROM stories WHERE updated_at >= ?", (cutoff,)
-        ).fetchone()
+        row = conn.execute("SELECT COUNT(*) AS n FROM stories WHERE updated_at >= ?", (cutoff,)).fetchone()
         result["stories_total"] = row["n"] if row else 0
 
         row = conn.execute(
@@ -93,9 +90,7 @@ def query_sat_db(cutoff: str) -> dict:
         result["stories_failed"] = row["n"] if row else 0
 
         # Events logged in window
-        row = conn.execute(
-            "SELECT COUNT(*) AS n FROM events WHERE timestamp >= ?", (cutoff,)
-        ).fetchone()
+        row = conn.execute("SELECT COUNT(*) AS n FROM events WHERE timestamp >= ?", (cutoff,)).fetchone()
         result["events_total"] = row["n"] if row else 0
 
         conn.close()
@@ -176,7 +171,7 @@ def read_audit_journal(cutoff: str) -> dict:
 
 def format_digest(sat: dict, costs: dict, audit: dict) -> str:
     """Build a human-readable digest message."""
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     total_activity = sat["events_total"] + audit["total"] + costs["calls"]
 
     if total_activity == 0:
@@ -248,6 +243,7 @@ def send_ntfy(title: str, message: str, priority: str = "default") -> None:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     load_env(ENV_FILE)

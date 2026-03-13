@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Mutation:
     """A single code mutation."""
+
     file_path: str
     line_number: int
     original: str
@@ -38,6 +39,7 @@ class Mutation:
 @dataclass
 class MutationReport:
     """Results of mutation testing."""
+
     total_mutations: int = 0
     detected: int = 0
     survived: int = 0
@@ -57,34 +59,34 @@ class MutationReport:
 
 # Mutation operators
 ARITHMETIC_MUTATIONS = [
-    (r'(?<!\w)\+(?!=)', '-'),    # + → -
-    (r'(?<!\w)-(?!=)', '+'),     # - → +
-    (r'(?<!\w)\*(?!=)', '/'),    # * → /
-    (r'(?<!\w)/(?!=)', '*'),     # / → *
+    (r"(?<!\w)\+(?!=)", "-"),  # + → -
+    (r"(?<!\w)-(?!=)", "+"),  # - → +
+    (r"(?<!\w)\*(?!=)", "/"),  # * → /
+    (r"(?<!\w)/(?!=)", "*"),  # / → *
 ]
 
 COMPARISON_MUTATIONS = [
-    (r'==', '!='),
-    (r'!=', '=='),
-    (r'<=', '>'),
-    (r'>=', '<'),
-    (r'(?<!=)<(?!=)', '>='),
-    (r'(?<!=)>(?!=)', '<='),
+    (r"==", "!="),
+    (r"!=", "=="),
+    (r"<=", ">"),
+    (r">=", "<"),
+    (r"(?<!=)<(?!=)", ">="),
+    (r"(?<!=)>(?!=)", "<="),
 ]
 
 BOOLEAN_MUTATIONS = [
-    (r'\bTrue\b', 'False'),
-    (r'\bFalse\b', 'True'),
-    (r'\band\b', 'or'),
-    (r'\bor\b', 'and'),
+    (r"\bTrue\b", "False"),
+    (r"\bFalse\b", "True"),
+    (r"\band\b", "or"),
+    (r"\bor\b", "and"),
 ]
 
 RETURN_MUTATIONS = [
-    (r'return\s+(\S+)', 'return None'),
+    (r"return\s+(\S+)", "return None"),
 ]
 
 BOUNDARY_MUTATIONS = [
-    (r'\b(\d+)\b', lambda m: str(int(m.group(1)) + 1)),  # n → n+1
+    (r"\b(\d+)\b", lambda m: str(int(m.group(1)) + 1)),  # n → n+1
 ]
 
 
@@ -98,11 +100,11 @@ def _generate_mutations_for_line(
 
     # Skip comments, blank lines, docstrings
     stripped = line.strip()
-    if not stripped or stripped.startswith('#') or stripped.startswith('"""') or stripped.startswith("'''"):
+    if not stripped or stripped.startswith("#") or stripped.startswith('"""') or stripped.startswith("'''"):
         return []
 
     # Skip imports and decorators
-    if stripped.startswith(('import ', 'from ', '@')):
+    if stripped.startswith(("import ", "from ", "@")):
         return []
 
     # Apply arithmetic mutations
@@ -110,52 +112,60 @@ def _generate_mutations_for_line(
         if re.search(pattern, line):
             mutated = re.sub(pattern, replacement, line, count=1)
             if mutated != line:
-                mutations.append(Mutation(
-                    file_path=file_path,
-                    line_number=line_number,
-                    original=line,
-                    mutated=mutated,
-                    mutation_type="arithmetic",
-                ))
+                mutations.append(
+                    Mutation(
+                        file_path=file_path,
+                        line_number=line_number,
+                        original=line,
+                        mutated=mutated,
+                        mutation_type="arithmetic",
+                    )
+                )
 
     # Apply comparison mutations
     for pattern, replacement in COMPARISON_MUTATIONS:
         if re.search(pattern, line):
             mutated = re.sub(pattern, replacement, line, count=1)
             if mutated != line:
-                mutations.append(Mutation(
-                    file_path=file_path,
-                    line_number=line_number,
-                    original=line,
-                    mutated=mutated,
-                    mutation_type="comparison",
-                ))
+                mutations.append(
+                    Mutation(
+                        file_path=file_path,
+                        line_number=line_number,
+                        original=line,
+                        mutated=mutated,
+                        mutation_type="comparison",
+                    )
+                )
 
     # Apply boolean mutations
     for pattern, replacement in BOOLEAN_MUTATIONS:
         if re.search(pattern, line):
             mutated = re.sub(pattern, replacement, line, count=1)
             if mutated != line:
-                mutations.append(Mutation(
-                    file_path=file_path,
-                    line_number=line_number,
-                    original=line,
-                    mutated=mutated,
-                    mutation_type="boolean",
-                ))
+                mutations.append(
+                    Mutation(
+                        file_path=file_path,
+                        line_number=line_number,
+                        original=line,
+                        mutated=mutated,
+                        mutation_type="boolean",
+                    )
+                )
 
     # Apply return mutations
     for pattern, replacement in RETURN_MUTATIONS:
-        if re.search(pattern, line) and 'return None' not in line:
+        if re.search(pattern, line) and "return None" not in line:
             mutated = re.sub(pattern, replacement, line, count=1)
             if mutated != line:
-                mutations.append(Mutation(
-                    file_path=file_path,
-                    line_number=line_number,
-                    original=line,
-                    mutated=mutated,
-                    mutation_type="return_value",
-                ))
+                mutations.append(
+                    Mutation(
+                        file_path=file_path,
+                        line_number=line_number,
+                        original=line,
+                        mutated=mutated,
+                        mutation_type="return_value",
+                    )
+                )
 
     return mutations
 
@@ -222,19 +232,19 @@ def run_mutation_test(
     with open(mutation.file_path) as f:
         original_content = f.read()
 
-    original_lines = original_content.split('\n')
+    original_lines = original_content.split("\n")
 
     # Apply mutation (line_number is 1-indexed)
     idx = mutation.line_number - 1
     if idx >= len(original_lines):
         return True  # Can't apply, treat as detected
 
-    original_lines[idx] = mutation.mutated.rstrip('\n')
-    mutated_content = '\n'.join(original_lines)
+    original_lines[idx] = mutation.mutated.rstrip("\n")
+    mutated_content = "\n".join(original_lines)
 
     try:
         # Write mutated file
-        with open(mutation.file_path, 'w') as f:
+        with open(mutation.file_path, "w") as f:
             f.write(mutated_content)
 
         # Run tests
@@ -260,7 +270,7 @@ def run_mutation_test(
         return True
     finally:
         # Restore original file
-        with open(mutation.file_path, 'w') as f:
+        with open(mutation.file_path, "w") as f:
             f.write(original_content)
 
 
@@ -290,9 +300,7 @@ def run_mutation_suite(
 
         for mutation in mutations:
             report.total_mutations += 1
-            detected = run_mutation_test(
-                mutation, test_command, working_directory, timeout
-            )
+            detected = run_mutation_test(mutation, test_command, working_directory, timeout)
 
             if mutation.detected is True:
                 report.detected += 1

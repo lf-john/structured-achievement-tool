@@ -6,7 +6,6 @@ for domains using Amazon SES.
 """
 
 
-
 def generate_spf_record(domain: str, includes: list[str]) -> str:
     """
     Constructs a base SPF record string.

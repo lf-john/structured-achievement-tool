@@ -1,4 +1,3 @@
-
 class DebugSessionManager:
     _active_session_id: str | None = None
 

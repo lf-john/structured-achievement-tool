@@ -26,4 +26,4 @@ You are a Task Classifier. Analyze the user request below and classify it.
 
 You MUST respond with ONLY a JSON object. No explanation, no markdown, no text before or after. Just the JSON:
 
-{"task_type": "<one of: development, content, config, maintenance, debug, research, review, conversation>", "confidence": <0.0-1.0>, "reasoning": "<brief explanation>"}
+{"task_type": "<one of: development, content, config, maintenance, debug, research, review, conversation>", "operation_mode": "<create or edit>", "confidence": <0.0-1.0>, "reasoning": "<brief explanation>"}

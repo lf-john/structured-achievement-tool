@@ -47,9 +47,7 @@ class TestDetectApiError:
 
     def test_429_in_stdout_not_false_positive(self):
         """LLM output containing '429' should NOT trigger rate limit detection."""
-        is_error, code = _detect_api_error(
-            '{"stories": [{"description": "Handle HTTP 429 status codes"}]}', ""
-        )
+        is_error, code = _detect_api_error('{"stories": [{"description": "Handle HTTP 429 status codes"}]}', "")
         assert not is_error
         assert code is None
 
@@ -83,10 +81,16 @@ class TestBuildCommand:
 
     def test_unknown_cli_raises(self):
         from src.llm.providers import CostTier, ProviderConfig
+
         provider = ProviderConfig(
-            name="test", power=5, code_power=5, speed=5,
-            cost_tier=CostTier.FREE, context_window=1000,
-            cli_command="unknown_cli", model_id="test",
+            name="test",
+            power=5,
+            code_power=5,
+            speed=5,
+            cost_tier=CostTier.FREE,
+            context_window=1000,
+            cli_command="unknown_cli",
+            model_id="test",
         )
         with pytest.raises(ValueError, match="Unknown CLI command"):
             _build_command(provider, prompt="test")
@@ -110,9 +114,11 @@ class TestInvoke:
 
         async def mock_create_subprocess_exec(*args, **kwargs):
             proc = AsyncMock()
+
             async def slow_communicate(*a, **kw):
                 await asyncio.sleep(100)
                 return b"", b""
+
             proc.communicate = slow_communicate
             proc.returncode = None
             proc.terminate = MagicMock()

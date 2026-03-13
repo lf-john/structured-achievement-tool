@@ -25,10 +25,11 @@ logger = logging.getLogger(__name__)
 @dataclass
 class VerifyResult:
     """Standardized result from any verification check."""
+
     passed: bool
-    checker: str    # "file", "port", "service", "config"
-    target: str     # what was checked
-    message: str    # human-readable result
+    checker: str  # "file", "port", "service", "config"
+    target: str  # what was checked
+    message: str  # human-readable result
     details: dict = field(default_factory=dict)
 
     def __str__(self) -> str:
@@ -94,11 +95,7 @@ class FileChecker:
                 passed=match is not None,
                 checker=self.CHECKER_NAME,
                 target=path,
-                message=(
-                    f"pattern '{pattern}' found"
-                    if match
-                    else f"pattern '{pattern}' not found"
-                ),
+                message=(f"pattern '{pattern}' found" if match else f"pattern '{pattern}' not found"),
                 details={"pattern": pattern, "matched": match.group(0) if match else None},
             )
         except Exception as e:
@@ -245,9 +242,7 @@ class ServiceChecker:
         cmd.extend(["is-active", service_name])
 
         try:
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=10
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             state = result.stdout.strip()
             passed = state == "active"
             return VerifyResult(
@@ -282,21 +277,14 @@ class ServiceChecker:
     def check_process(self, process_name: str) -> VerifyResult:
         """Verify a process is running via pgrep."""
         try:
-            result = subprocess.run(
-                ["pgrep", "-f", process_name],
-                capture_output=True, text=True, timeout=10
-            )
+            result = subprocess.run(["pgrep", "-f", process_name], capture_output=True, text=True, timeout=10)
             pids = [p.strip() for p in result.stdout.strip().split("\n") if p.strip()]
             passed = result.returncode == 0 and len(pids) > 0
             return VerifyResult(
                 passed=passed,
                 checker=self.CHECKER_NAME,
                 target=process_name,
-                message=(
-                    f"process running (PIDs: {', '.join(pids)})"
-                    if passed
-                    else "process not found"
-                ),
+                message=(f"process running (PIDs: {', '.join(pids)})" if passed else "process not found"),
                 details={
                     "process": process_name,
                     "pids": pids if passed else [],
@@ -473,7 +461,7 @@ class ConfigValidator:
                 if not key:
                     errors.append(f"line {lineno}: empty key")
                     continue
-                if not re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', key):
+                if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", key):
                     errors.append(f"line {lineno}: invalid key '{key}'")
                     continue
                 key_count += 1
@@ -546,11 +534,13 @@ def run_checks(checks: list[tuple]) -> list[VerifyResult]:
             results.append(result)
         except Exception as e:
             logger.error("Verification check %s failed with exception: %s", method, e)
-            results.append(VerifyResult(
-                passed=False,
-                checker="unknown",
-                target=str(args),
-                message=f"check raised exception: {e}",
-                details={"error": str(e), "method": str(method)},
-            ))
+            results.append(
+                VerifyResult(
+                    passed=False,
+                    checker="unknown",
+                    target=str(args),
+                    message=f"check raised exception: {e}",
+                    details={"error": str(e), "method": str(method)},
+                )
+            )
     return results

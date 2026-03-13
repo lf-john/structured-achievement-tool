@@ -74,8 +74,9 @@ class AuditJournal:
                 try:
                     record_data = json.loads(line)
                     record = AuditRecord(**record_data)
-                    if (success is None or record.success == success) and \
-                       (task_file is None or record.task_file == task_file):
+                    if (success is None or record.success == success) and (
+                        task_file is None or record.task_file == task_file
+                    ):
                         records.append(record)
                 except (json.JSONDecodeError, Exception):
                     continue
@@ -85,7 +86,13 @@ class AuditJournal:
         records = self.query()
         total_count = len(records)
         if total_count == 0:
-            return {"total_count": 0, "successful_count": 0, "failed_count": 0, "success_rate": 0.0, "average_duration_seconds": 0.0}
+            return {
+                "total_count": 0,
+                "successful_count": 0,
+                "failed_count": 0,
+                "success_rate": 0.0,
+                "average_duration_seconds": 0.0,
+            }
 
         successful_records = [r for r in records if r.success]
         success_count = len(successful_records)

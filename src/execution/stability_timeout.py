@@ -92,8 +92,7 @@ class StabilityTimeout:
         elapsed = now - first_seen_at
         if elapsed >= self.timeout_seconds:
             logger.info(
-                "Stability timeout triggered for %s after %.0f seconds "
-                "(timeout=%d). Auto-processing as ready.",
+                "Stability timeout triggered for %s after %.0f seconds (timeout=%d). Auto-processing as ready.",
                 file_path,
                 elapsed,
                 self.timeout_seconds,

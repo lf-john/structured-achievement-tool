@@ -24,7 +24,12 @@ Determine the document type from the description. Valid types:
 - **legal**: Contracts, terms of service, compliance, legal notices
 - **instructional**: Tutorials, training materials, onboarding
 
+## Existing File Content (if editing)
+{{EXISTING_FILE_CONTENT}}
+
 ## Instructions
+
+**Operation Mode:** If existing file content is provided above, you are EDITING an existing document. Plan targeted changes — do NOT plan a full rewrite. Identify which sections need modification and preserve the rest. If no existing content is shown, you are creating a new document from scratch.
 
 ### 1. Analyze the Request
 - What kind of document is being requested?

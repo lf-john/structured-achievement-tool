@@ -11,14 +11,8 @@ class LeadScoringWorkflow:
         with open(config_path) as f:
             config = json.load(f)
 
-        self.ollama_client = OllamaClient(
-            api_url=config["ollama_api_url"],
-            model=config["ollama_model"]
-        )
-        self.mautic_client = MauticClient(
-            api_url=config["mautic_api_url"],
-            token=config["mautic_api_token"]
-        )
+        self.ollama_client = OllamaClient(api_url=config["ollama_api_url"], model=config["ollama_model"])
+        self.mautic_client = MauticClient(api_url=config["mautic_api_url"], token=config["mautic_api_token"])
 
     def run(self, contact_id: int, contact_data: dict[str, Any]) -> bool:
         """
@@ -43,6 +37,7 @@ class LeadScoringWorkflow:
 
         return success
 
+
 def main():
     """
     Example usage of the workflow.
@@ -56,7 +51,7 @@ def main():
         "company": "TechCorp",
         "industry": "SaaS",
         "company_size": 250,
-        "location": "San Francisco, USA"
+        "location": "San Francisco, USA",
     }
 
     workflow = LeadScoringWorkflow()
@@ -66,6 +61,7 @@ def main():
         print("Lead scoring workflow completed successfully.")
     else:
         print("Lead scoring workflow failed.")
+
 
 if __name__ == "__main__":
     main()

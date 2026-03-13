@@ -20,6 +20,7 @@ DEFAULT_TEST_TIMEOUT = 120  # 2 minutes
 @dataclass
 class TestResult:
     """Result of a test execution."""
+
     passed: bool
     output: str = ""
     exit_code: int = 0
@@ -31,6 +32,7 @@ class TestResult:
 @dataclass
 class VerificationResult:
     """Result of all verification checks for a story."""
+
     all_passed: bool
     results: list = field(default_factory=list)
 
@@ -100,15 +102,15 @@ def run_tests(
 def _parse_test_counts(output: str) -> tuple[int, int]:
     """Extract test counts from output. Returns (total, failures)."""
     # pytest format: "5 passed, 2 failed"
-    pytest_match = re.search(r'(\d+) passed', output)
-    pytest_fail = re.search(r'(\d+) failed', output)
+    pytest_match = re.search(r"(\d+) passed", output)
+    pytest_fail = re.search(r"(\d+) failed", output)
     if pytest_match:
         passed = int(pytest_match.group(1))
         failed = int(pytest_fail.group(1)) if pytest_fail else 0
         return passed + failed, failed
 
     # npm/jest format: "Tests: 2 failed, 5 passed, 7 total"
-    jest_match = re.search(r'Tests:\s*(?:(\d+) failed,\s*)?(\d+) passed,\s*(\d+) total', output)
+    jest_match = re.search(r"Tests:\s*(?:(\d+) failed,\s*)?(\d+) passed,\s*(\d+) total", output)
     if jest_match:
         total = int(jest_match.group(3))
         failed = int(jest_match.group(1)) if jest_match.group(1) else 0
@@ -158,11 +160,26 @@ def get_test_command(
     title_terms = []
     if story_title:
         # Extract meaningful keywords from title (skip common words)
-        skip = {"implement", "create", "add", "update", "fix", "write", "test", "build", "make", "the", "for", "and", "with"}
-        title_terms = [w.lower() for w in re.split(r'\W+', story_title) if len(w) > 3 and w.lower() not in skip]
+        skip = {
+            "implement",
+            "create",
+            "add",
+            "update",
+            "fix",
+            "write",
+            "test",
+            "build",
+            "make",
+            "the",
+            "for",
+            "and",
+            "with",
+        }
+        title_terms = [w.lower() for w in re.split(r"\W+", story_title) if len(w) > 3 and w.lower() not in skip]
 
     # Also check for recently created test files (within last 5 minutes)
     import time
+
     recent_cutoff = time.time() - 300  # 5 minutes ago
 
     candidates = []
@@ -183,7 +200,9 @@ def get_test_command(
                 f_lower = f.lower()
 
                 # Check story ID match (e.g., "US-001" in filename)
-                id_match = story_id.lower().replace("-", "_") in f_lower or story_id.lower() in f_lower if story_id else False
+                id_match = (
+                    story_id.lower().replace("-", "_") in f_lower or story_id.lower() in f_lower if story_id else False
+                )
 
                 # Check title keyword match
                 title_match = any(term in f_lower for term in title_terms) if title_terms else False
@@ -229,6 +248,7 @@ def get_test_command(
     # Try to load from project DB
     try:
         from src.db.database_manager import DatabaseManager
+
         db = DatabaseManager()
         projects = db.get_all_projects()
         for proj in projects:
@@ -273,12 +293,14 @@ def execute_verifications(
         if v_type in ("command", "test", "tdd_test"):
             cmd = v.get("command", get_test_command(story, working_directory, project_test_command))
             result = run_tests(working_directory, cmd)
-            results.append({
-                "type": v_type,
-                "command": cmd,
-                "passed": result.passed,
-                "output": result.output[:2000],
-            })
+            results.append(
+                {
+                    "type": v_type,
+                    "command": cmd,
+                    "passed": result.passed,
+                    "output": result.output[:2000],
+                }
+            )
             if not result.passed:
                 all_passed = False
 
@@ -286,27 +308,33 @@ def execute_verifications(
             files = v.get("files", [])
             for f in files:
                 exists = os.path.exists(os.path.join(working_directory, f))
-                results.append({
-                    "type": "file_exists",
-                    "file": f,
-                    "passed": exists,
-                })
+                results.append(
+                    {
+                        "type": "file_exists",
+                        "file": f,
+                        "passed": exists,
+                    }
+                )
                 if not exists:
                     all_passed = False
 
         elif v_type == "manual":
-            results.append({
-                "type": "manual",
-                "description": v.get("description", "Manual verification"),
-                "passed": True,  # Delegated to VERIFY phase
-            })
+            results.append(
+                {
+                    "type": "manual",
+                    "description": v.get("description", "Manual verification"),
+                    "passed": True,  # Delegated to VERIFY phase
+                }
+            )
 
         else:
             logger.debug(f"Unknown verification type: {v_type}, skipping")
-            results.append({
-                "type": v_type,
-                "passed": True,
-                "note": "Skipped: unknown type",
-            })
+            results.append(
+                {
+                    "type": v_type,
+                    "passed": True,
+                    "note": "Skipped: unknown type",
+                }
+            )
 
     return VerificationResult(all_passed=all_passed, results=results)

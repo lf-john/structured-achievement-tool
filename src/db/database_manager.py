@@ -144,6 +144,24 @@ CREATE TABLE IF NOT EXISTS projects (
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name);
+
+CREATE TABLE IF NOT EXISTS approvals (
+    id TEXT PRIMARY KEY,
+    task_id TEXT,
+    story_id TEXT,
+    approval_type TEXT NOT NULL DEFAULT 'human_action',
+    title TEXT NOT NULL DEFAULT '',
+    instructions TEXT NOT NULL DEFAULT '',
+    form_fields TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'pending',
+    response_data TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now','utc')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','utc'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
+CREATE INDEX IF NOT EXISTS idx_approvals_task_id ON approvals(task_id);
+CREATE INDEX IF NOT EXISTS idx_approvals_story_id ON approvals(story_id);
 """
 
 TASK_TRANSITIONS = {
@@ -169,7 +187,8 @@ class DatabaseManager:
         if db_path is None:
             db_path = os.path.join(
                 os.path.expanduser("~/projects/structured-achievement-tool"),
-                ".memory", "sat.db",
+                ".memory",
+                "sat.db",
             )
         self.db_path = db_path
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -255,8 +274,12 @@ class DatabaseManager:
     # --- Stories ---
 
     def create_story(
-        self, task_id: str, title: str, story_type: str = "development",
-        complexity: int = 5, depends_on: list[str] = None,
+        self,
+        task_id: str,
+        title: str,
+        story_type: str = "development",
+        complexity: int = 5,
+        depends_on: list[str] = None,
         acceptance_criteria: list[str] = None,
         verification_agents: list[str] = None,
         outcome_verification: bool = False,
@@ -269,12 +292,17 @@ class DatabaseManager:
                 "depends_on, acceptance_criteria, verification_agents, outcome_verification, "
                 "created_at, updated_at) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    story_id, task_id, title, story_type, complexity,
+                    story_id,
+                    task_id,
+                    title,
+                    story_type,
+                    complexity,
                     json.dumps(depends_on or []),
                     json.dumps(acceptance_criteria or []),
                     json.dumps(verification_agents or []),
                     1 if outcome_verification else 0,
-                    now, now,
+                    now,
+                    now,
                 ),
             )
             self._log_event(conn, "story_created", story_id=story_id, task_id=task_id)
@@ -296,8 +324,13 @@ class DatabaseManager:
                 "UPDATE stories SET status=?, updated_at=? WHERE id=?",
                 (new_status, now, story_id),
             )
-            self._log_event(conn, "story_status_change", story_id=story_id, task_id=row["task_id"],
-                            detail=f"{old_status}->{new_status}")
+            self._log_event(
+                conn,
+                "story_status_change",
+                story_id=story_id,
+                task_id=row["task_id"],
+                detail=f"{old_status}->{new_status}",
+            )
         return True
 
     def update_story_phase(self, story_id: str, phase: str):
@@ -339,9 +372,7 @@ class DatabaseManager:
 
     def get_stories_for_task(self, task_id: str) -> list[dict]:
         with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM stories WHERE task_id=? ORDER BY created_at", (task_id,)
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM stories WHERE task_id=? ORDER BY created_at", (task_id,)).fetchall()
             result = []
             for row in rows:
                 d = dict(row)
@@ -359,19 +390,14 @@ class DatabaseManager:
         for s in stories:
             if s["status"] == "pending":
                 deps = s.get("depends_on", [])
-                if all(
-                    d.get("status") == "complete"
-                    for d in stories
-                    if d["id"] in deps
-                ):
+                if all(d.get("status") == "complete" for d in stories if d["id"] in deps):
                     ready.append(s)
         return ready
 
     def get_stuck_stories(self, timeout_minutes: int = 30) -> list[dict]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM stories WHERE status='working' "
-                "AND updated_at < datetime('now', '-' || ? || ' minutes')",
+                "SELECT * FROM stories WHERE status='working' AND updated_at < datetime('now', '-' || ? || ' minutes')",
                 (timeout_minutes,),
             ).fetchall()
             return [dict(r) for r in rows]
@@ -379,26 +405,36 @@ class DatabaseManager:
     # --- Events ---
 
     def _log_event(
-        self, conn: sqlite3.Connection, event_type: str,
-        story_id: str = None, task_id: str = None, phase: str = None,
-        provider: str = None, detail: str = None,
-        tokens_used: int = None, cost_estimate: float = None,
+        self,
+        conn: sqlite3.Connection,
+        event_type: str,
+        story_id: str = None,
+        task_id: str = None,
+        phase: str = None,
+        provider: str = None,
+        detail: str = None,
+        tokens_used: int = None,
+        cost_estimate: float = None,
     ):
         conn.execute(
             "INSERT INTO events (story_id, task_id, event_type, phase, provider, detail, "
             "tokens_used, cost_estimate, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (story_id, task_id, event_type, phase, provider, detail,
-             tokens_used, cost_estimate, self._now()),
+            (story_id, task_id, event_type, phase, provider, detail, tokens_used, cost_estimate, self._now()),
         )
 
     def log_event(
-        self, event_type: str, story_id: str = None, task_id: str = None,
-        phase: str = None, provider: str = None, detail: str = None,
-        tokens_used: int = None, cost_estimate: float = None,
+        self,
+        event_type: str,
+        story_id: str = None,
+        task_id: str = None,
+        phase: str = None,
+        provider: str = None,
+        detail: str = None,
+        tokens_used: int = None,
+        cost_estimate: float = None,
     ):
         with self._connect() as conn:
-            self._log_event(conn, event_type, story_id, task_id, phase,
-                            provider, detail, tokens_used, cost_estimate)
+            self._log_event(conn, event_type, story_id, task_id, phase, provider, detail, tokens_used, cost_estimate)
 
     def get_recent_events(self, limit: int = 50, story_id: str = None, task_id: str = None) -> list[dict]:
         with self._connect() as conn:
@@ -418,8 +454,12 @@ class DatabaseManager:
     # --- Error Signatures ---
 
     def store_error_signature(
-        self, error_hash: str, error_pattern: str,
-        fix_applied: str = None, success: bool = False, story_id: str = None,
+        self,
+        error_hash: str,
+        error_pattern: str,
+        fix_applied: str = None,
+        success: bool = False,
+        story_id: str = None,
     ) -> int:
         with self._connect() as conn:
             cursor = conn.execute(
@@ -440,7 +480,10 @@ class DatabaseManager:
     # --- Learnings ---
 
     def store_learning(
-        self, story_id: str, category: str, content: str,
+        self,
+        story_id: str,
+        category: str,
+        content: str,
         anti_patterns: list[str] = None,
     ) -> int:
         with self._connect() as conn:
@@ -453,8 +496,7 @@ class DatabaseManager:
     def get_recent_anti_patterns(self, limit: int = 10) -> list[str]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT anti_patterns FROM learnings WHERE anti_patterns != '[]' "
-                "ORDER BY timestamp DESC LIMIT ?",
+                "SELECT anti_patterns FROM learnings WHERE anti_patterns != '[]' ORDER BY timestamp DESC LIMIT ?",
                 (limit,),
             ).fetchall()
             patterns = []
@@ -465,8 +507,14 @@ class DatabaseManager:
     # --- Notifications ---
 
     def log_notification(
-        self, notification_type: str, channel: str, title: str, message: str,
-        task_id: str = None, story_id: str = None, recipient: str = None,
+        self,
+        notification_type: str,
+        channel: str,
+        title: str,
+        message: str,
+        task_id: str = None,
+        story_id: str = None,
+        recipient: str = None,
         status: str = "sent",
     ) -> int:
         with self._connect() as conn:
@@ -491,8 +539,11 @@ class DatabaseManager:
         return session_id
 
     def update_prd_session(
-        self, session_id: str, phase: int = None,
-        status: str = None, prd_content: str = None,
+        self,
+        session_id: str,
+        phase: int = None,
+        status: str = None,
+        prd_content: str = None,
     ):
         with self._connect() as conn:
             updates = []
@@ -517,8 +568,7 @@ class DatabaseManager:
     def get_active_prd_session(self, project: str) -> dict | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT * FROM prd_sessions WHERE project=? AND status='active' "
-                "ORDER BY created_at DESC LIMIT 1",
+                "SELECT * FROM prd_sessions WHERE project=? AND status='active' ORDER BY created_at DESC LIMIT 1",
                 (project,),
             ).fetchone()
             return dict(row) if row else None
@@ -550,10 +600,16 @@ class DatabaseManager:
     }
 
     def upsert_task_state(
-        self, task_path: str, status: str, signal: str = "pending",
-        error_summary: str = None, last_worker: str = None,
-        priority: str = "normal", project: str = None,
-        test_command: str = None, depends_on: list = None,
+        self,
+        task_path: str,
+        status: str,
+        signal: str = "pending",
+        error_summary: str = None,
+        last_worker: str = None,
+        priority: str = "normal",
+        project: str = None,
+        test_command: str = None,
+        depends_on: list = None,
     ):
         """Insert or update a task's state in the hub.
 
@@ -576,7 +632,18 @@ class DatabaseManager:
                 "project=COALESCE(excluded.project, task_states.project), "
                 "test_command=COALESCE(excluded.test_command, task_states.test_command), "
                 "depends_on=COALESCE(excluded.depends_on, task_states.depends_on)",
-                (task_path, status, signal, now, error_summary, last_worker, priority, project, test_command, depends_on_json),
+                (
+                    task_path,
+                    status,
+                    signal,
+                    now,
+                    error_summary,
+                    last_worker,
+                    priority,
+                    project,
+                    test_command,
+                    depends_on_json,
+                ),
             )
 
     def transition_task_state(self, task_path: str, new_status: str, **kwargs) -> bool:
@@ -585,9 +652,7 @@ class DatabaseManager:
         Returns True if transition succeeded, False if invalid.
         """
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT status FROM task_states WHERE task_path=?", (task_path,)
-            ).fetchone()
+            row = conn.execute("SELECT status FROM task_states WHERE task_path=?", (task_path,)).fetchone()
             if not row:
                 logger.warning(f"Task state not found for {task_path}, creating")
                 self.upsert_task_state(task_path, new_status, **kwargs)
@@ -624,17 +689,13 @@ class DatabaseManager:
                 "UPDATE task_states SET retry_count = retry_count + 1, updated_at=? WHERE task_path=?",
                 (self._now(), task_path),
             )
-            row = conn.execute(
-                "SELECT retry_count FROM task_states WHERE task_path=?", (task_path,)
-            ).fetchone()
+            row = conn.execute("SELECT retry_count FROM task_states WHERE task_path=?", (task_path,)).fetchone()
             return row["retry_count"] if row else 0
 
     def get_task_state(self, task_path: str) -> dict | None:
         """Get the current state of a task from the hub."""
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT * FROM task_states WHERE task_path=?", (task_path,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM task_states WHERE task_path=?", (task_path,)).fetchone()
             return dict(row) if row else None
 
     def get_tasks_by_state(self, status: str) -> list[dict]:
@@ -671,8 +732,7 @@ class DatabaseManager:
         with self._connect() as conn:
             placeholders = ",".join("?" for _ in statuses)
             rows = conn.execute(
-                f"SELECT * FROM task_states WHERE project=? AND status IN ({placeholders}) "
-                "ORDER BY updated_at",
+                f"SELECT * FROM task_states WHERE project=? AND status IN ({placeholders}) ORDER BY updated_at",
                 [project] + statuses,
             ).fetchall()
             return [dict(r) for r in rows]
@@ -695,9 +755,7 @@ class DatabaseManager:
         """
         with self._connect() as conn:
             # Try exact path match first
-            row = conn.execute(
-                "SELECT * FROM task_states WHERE task_path=?", (name,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM task_states WHERE task_path=?", (name,)).fetchone()
             if row:
                 return dict(row)
             # Fall back to basename match (LIKE %/name)
@@ -728,9 +786,7 @@ class DatabaseManager:
             True if the dependency was added.
         """
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT depends_on FROM task_states WHERE task_path=?", (task_path,)
-            ).fetchone()
+            row = conn.execute("SELECT depends_on FROM task_states WHERE task_path=?", (task_path,)).fetchone()
             if not row:
                 return False
             try:
@@ -753,9 +809,14 @@ class DatabaseManager:
     # --- Projects ---
 
     def create_project(
-        self, name: str, project_dir: str, test_dir: str = None,
-        source_dir: str = None, config_file: str = None,
-        git_repo: str = None, default_branch: str = "main",
+        self,
+        name: str,
+        project_dir: str,
+        test_dir: str = None,
+        source_dir: str = None,
+        config_file: str = None,
+        git_repo: str = None,
+        default_branch: str = "main",
         test_command: str = "pytest tests/ -v",
         worktree_base: str = None,
     ) -> str:
@@ -767,9 +828,20 @@ class DatabaseManager:
                 "config_file, git_repo, default_branch, test_command, worktree_base, "
                 "created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (project_id, name, project_dir, test_dir, source_dir,
-                 config_file, git_repo, default_branch, test_command,
-                 worktree_base, now, now),
+                (
+                    project_id,
+                    name,
+                    project_dir,
+                    test_dir,
+                    source_dir,
+                    config_file,
+                    git_repo,
+                    default_branch,
+                    test_command,
+                    worktree_base,
+                    now,
+                    now,
+                ),
             )
             self._log_event(conn, "project_created", detail=f"project={name}")
         return project_id
@@ -784,15 +856,21 @@ class DatabaseManager:
 
     def get_all_projects(self) -> list[dict]:
         with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM projects ORDER BY name"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM projects ORDER BY name").fetchall()
             return [dict(r) for r in rows]
 
     def update_project(self, project_id: str, **kwargs):
-        allowed = {"name", "project_dir", "test_dir", "source_dir",
-                    "config_file", "git_repo", "default_branch",
-                    "test_command", "worktree_base"}
+        allowed = {
+            "name",
+            "project_dir",
+            "test_dir",
+            "source_dir",
+            "config_file",
+            "git_repo",
+            "default_branch",
+            "test_command",
+            "worktree_base",
+        }
         updates = ["updated_at=?"]
         params = [self._now()]
         for key, value in kwargs.items():
@@ -812,12 +890,161 @@ class DatabaseManager:
     def get_project_for_task(self, task_id: str) -> dict | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT p.* FROM projects p "
-                "JOIN tasks t ON t.project = p.name "
-                "WHERE t.id=?",
+                "SELECT p.* FROM projects p JOIN tasks t ON t.project = p.name WHERE t.id=?",
                 (task_id,),
             ).fetchone()
             return dict(row) if row else None
+
+    # --- Approvals ---
+
+    def create_approval(
+        self,
+        task_id: str,
+        story_id: str,
+        approval_type: str = "human_action",
+        title: str = "",
+        instructions: str = "",
+        form_fields: list[dict] | None = None,
+    ) -> str:
+        """Create a pending approval record.
+
+        Args:
+            task_id: Parent task identifier.
+            story_id: Story that triggered this approval.
+            approval_type: One of 'human_action', 'plan_review', 'assignment'.
+            title: Human-readable title.
+            instructions: Markdown instructions for the human.
+            form_fields: List of form field dicts:
+                [{name, type, label, required, options}].
+
+        Returns:
+            The generated approval ID.
+        """
+        approval_id = self._gen_id()
+        now = self._now()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO approvals "
+                "(id, task_id, story_id, approval_type, title, instructions, "
+                "form_fields, status, response_data, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', '{}', ?, ?)",
+                (
+                    approval_id,
+                    task_id,
+                    story_id,
+                    approval_type,
+                    title,
+                    instructions,
+                    json.dumps(form_fields or []),
+                    now,
+                    now,
+                ),
+            )
+            self._log_event(
+                conn,
+                "approval_created",
+                task_id=task_id,
+                story_id=story_id,
+                detail=f"type={approval_type}, id={approval_id}",
+            )
+        return approval_id
+
+    def get_approval(self, approval_id: str) -> dict | None:
+        """Get a single approval by ID, deserializing JSON fields."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM approvals WHERE id=?", (approval_id,)).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            for field in ("form_fields", "response_data"):
+                try:
+                    d[field] = json.loads(d.get(field, "{}"))
+                except (json.JSONDecodeError, TypeError):
+                    d[field] = {} if field == "response_data" else []
+            return d
+
+    def get_pending_approvals(self) -> list[dict]:
+        """Get all approvals with status='pending', newest first."""
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM approvals WHERE status='pending' ORDER BY created_at DESC").fetchall()
+            results = []
+            for row in rows:
+                d = dict(row)
+                for field in ("form_fields", "response_data"):
+                    try:
+                        d[field] = json.loads(d.get(field, "{}"))
+                    except (json.JSONDecodeError, TypeError):
+                        d[field] = {} if field == "response_data" else []
+                results.append(d)
+            return results
+
+    def get_approvals_for_story(self, story_id: str) -> list[dict]:
+        """Get all approvals for a given story."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM approvals WHERE story_id=? ORDER BY created_at DESC",
+                (story_id,),
+            ).fetchall()
+            results = []
+            for row in rows:
+                d = dict(row)
+                for field in ("form_fields", "response_data"):
+                    try:
+                        d[field] = json.loads(d.get(field, "{}"))
+                    except (json.JSONDecodeError, TypeError):
+                        d[field] = {} if field == "response_data" else []
+                results.append(d)
+            return results
+
+    def respond_to_approval(
+        self,
+        approval_id: str,
+        status: str,
+        response_data: dict | None = None,
+    ) -> bool:
+        """Update an approval with the human's response.
+
+        Args:
+            approval_id: The approval to update.
+            status: New status — 'approved', 'rejected', or 'completed'.
+            response_data: Dict of submitted form data.
+
+        Returns:
+            True if the approval was found and updated.
+        """
+        now = self._now()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT status, task_id, story_id FROM approvals WHERE id=?",
+                (approval_id,),
+            ).fetchone()
+            if not row:
+                logger.error(f"Approval {approval_id} not found")
+                return False
+            if row["status"] != "pending":
+                logger.warning(f"Approval {approval_id} already resolved ({row['status']})")
+                return False
+            conn.execute(
+                "UPDATE approvals SET status=?, response_data=?, updated_at=? WHERE id=?",
+                (status, json.dumps(response_data or {}), now, approval_id),
+            )
+            self._log_event(
+                conn,
+                "approval_responded",
+                task_id=row["task_id"],
+                story_id=row["story_id"],
+                detail=f"id={approval_id}, status={status}",
+            )
+        return True
+
+    def poll_approval_status(self, approval_id: str) -> str | None:
+        """Check the current status of an approval (for workflow polling).
+
+        Returns the status string or None if the approval doesn't exist.
+        """
+        with self._connect() as conn:
+            row = conn.execute("SELECT status FROM approvals WHERE id=?", (approval_id,)).fetchone()
+            return row["status"] if row else None
 
     def get_system_status(self) -> dict:
         """Overall system status for monitoring."""
@@ -825,18 +1052,18 @@ class DatabaseManager:
             active_tasks = conn.execute(
                 "SELECT COUNT(*) as c FROM tasks WHERE status IN ('pending', 'working')"
             ).fetchone()["c"]
-            working_stories = conn.execute(
-                "SELECT COUNT(*) as c FROM stories WHERE status='working'"
-            ).fetchone()["c"]
-            failed_stories = conn.execute(
-                "SELECT COUNT(*) as c FROM stories WHERE status='failed'"
-            ).fetchone()["c"]
+            working_stories = conn.execute("SELECT COUNT(*) as c FROM stories WHERE status='working'").fetchone()["c"]
+            failed_stories = conn.execute("SELECT COUNT(*) as c FROM stories WHERE status='failed'").fetchone()["c"]
             recent_events = conn.execute(
                 "SELECT COUNT(*) as c FROM events WHERE timestamp > datetime('now', '-1 hour')"
             ).fetchone()["c"]
+            pending_approvals = conn.execute("SELECT COUNT(*) as c FROM approvals WHERE status='pending'").fetchone()[
+                "c"
+            ]
         return {
             "active_tasks": active_tasks,
             "working_stories": working_stories,
             "failed_stories": failed_stories,
             "events_last_hour": recent_events,
+            "pending_approvals": pending_approvals,
         }

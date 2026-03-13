@@ -30,11 +30,11 @@ class TestEmbeddingService:
         service = EmbeddingService()
         assert service.model_name == "nomic-embed-text"
 
-    @patch('ollama.embeddings')
+    @patch("ollama.embeddings")
     def test_embed_text_returns_vector(self, mock_embeddings, embedding_service):
         """Test that embed_text returns a numerical vector for valid input."""
         # Mock the ollama embeddings response
-        mock_embeddings.return_value = {'embedding': [0.1, 0.2, 0.3, 0.4]}
+        mock_embeddings.return_value = {"embedding": [0.1, 0.2, 0.3, 0.4]}
 
         result = embedding_service.embed_text("test text")
 
@@ -43,28 +43,28 @@ class TestEmbeddingService:
         assert all(isinstance(x, (int, float)) for x in result)
         assert result == [0.1, 0.2, 0.3, 0.4]
 
-    @patch('ollama.embeddings')
+    @patch("ollama.embeddings")
     def test_embed_text_calls_ollama_with_correct_params(self, mock_embeddings, embedding_service):
         """Test that embed_text calls ollama with the correct parameters."""
-        mock_embeddings.return_value = {'embedding': [0.1, 0.2]}
+        mock_embeddings.return_value = {"embedding": [0.1, 0.2]}
 
         embedding_service.embed_text("test text")
 
         # Verify ollama was called with correct arguments
         mock_embeddings.assert_called_once()
         call_args = mock_embeddings.call_args
-        assert call_args.kwargs['model'] == 'nomic-embed-text'
-        assert call_args.kwargs['prompt'] == 'test text'
+        assert call_args.kwargs["model"] == "nomic-embed-text"
+        assert call_args.kwargs["prompt"] == "test text"
 
-    @patch('ollama.embeddings')
+    @patch("ollama.embeddings")
     def test_embed_text_handles_empty_string(self, mock_embeddings, embedding_service):
         """Test that embed_text handles empty string input gracefully."""
-        mock_embeddings.return_value = {'embedding': [0.0]}
+        mock_embeddings.return_value = {"embedding": [0.0]}
 
         result = embedding_service.embed_text("")
         assert isinstance(result, list)
 
-    @patch('ollama.embeddings')
+    @patch("ollama.embeddings")
     def test_embed_text_raises_on_ollama_error(self, mock_embeddings, embedding_service):
         """Test that embed_text raises an exception when ollama fails."""
         mock_embeddings.side_effect = Exception("Model not found")
@@ -74,11 +74,11 @@ class TestEmbeddingService:
 
         assert "ollama" in str(exc_info.value).lower() or "model" in str(exc_info.value).lower()
 
-    @patch('ollama.embeddings')
+    @patch("ollama.embeddings")
     def test_embed_batch_returns_multiple_vectors(self, mock_embeddings, embedding_service):
         """Test that embed_batch returns vectors for multiple texts."""
         # Mock multiple calls
-        mock_embeddings.return_value = {'embedding': [0.1, 0.2]}
+        mock_embeddings.return_value = {"embedding": [0.1, 0.2]}
 
         texts = ["text1", "text2", "text3"]
         results = embedding_service.embed_batch(texts)
@@ -87,7 +87,7 @@ class TestEmbeddingService:
         assert len(results) == 3
         assert all(isinstance(vec, list) for vec in results)
 
-    @patch('ollama.embeddings')
+    @patch("ollama.embeddings")
     def test_embed_batch_handles_empty_list(self, mock_embeddings, embedding_service):
         """Test that embed_batch handles empty list gracefully."""
         results = embedding_service.embed_batch([])
@@ -142,49 +142,49 @@ class TestTruncation:
         result = EmbeddingService._truncate(text)
         assert len(result) == MAX_CHARS
 
-    @patch('ollama.embeddings')
+    @patch("ollama.embeddings")
     def test_embed_text_truncates_long_input(self, mock_embeddings):
         """embed_text truncates input before sending to Ollama."""
-        mock_embeddings.return_value = {'embedding': [0.1, 0.2]}
+        mock_embeddings.return_value = {"embedding": [0.1, 0.2]}
         service = EmbeddingService()
 
         long_text = "word " * 10000  # ~50k chars
         service.embed_text(long_text)
 
         call_args = mock_embeddings.call_args
-        sent_text = call_args.kwargs['prompt']
+        sent_text = call_args.kwargs["prompt"]
         assert len(sent_text) <= MAX_CHARS
 
 
 class TestHealthCheck:
     """Test suite for Ollama health check and auto-recovery."""
 
-    @patch('ollama.list')
+    @patch("ollama.list")
     def test_check_ollama_health_returns_true_when_healthy(self, mock_list):
         """Returns True when Ollama responds."""
-        mock_list.return_value = {'models': []}
+        mock_list.return_value = {"models": []}
         assert EmbeddingService.check_ollama_health() is True
 
-    @patch('ollama.list')
+    @patch("ollama.list")
     def test_check_ollama_health_returns_false_when_down(self, mock_list):
         """Returns False when Ollama is unreachable."""
         mock_list.side_effect = Exception("Connection refused")
         assert EmbeddingService.check_ollama_health() is False
 
-    @patch('subprocess.run')
-    @patch('ollama.list')
+    @patch("subprocess.run")
+    @patch("ollama.list")
     def test_restart_ollama_calls_systemctl(self, mock_list, mock_run):
         """restart_ollama calls systemctl restart."""
         mock_run.return_value = MagicMock(returncode=0)
-        mock_list.return_value = {'models': []}
+        mock_list.return_value = {"models": []}
 
         result = EmbeddingService.restart_ollama()
         assert result is True
         mock_run.assert_called_once()
-        assert 'ollama' in mock_run.call_args[0][0]
+        assert "ollama" in mock_run.call_args[0][0]
 
-    @patch('ollama.embeddings')
-    @patch('ollama.list')
+    @patch("ollama.embeddings")
+    @patch("ollama.list")
     def test_embed_text_retries_after_restart(self, mock_list, mock_embeddings):
         """embed_text retries after restarting Ollama on failure."""
         # First call fails, health check fails, but we can't actually restart in test
@@ -197,10 +197,10 @@ class TestHealthCheck:
         with pytest.raises(Exception):
             service.embed_text("test")
 
-    @patch('ollama.embeddings')
+    @patch("ollama.embeddings")
     def test_embed_text_succeeds_on_first_try(self, mock_embeddings):
         """Normal path: embed_text succeeds without needing recovery."""
-        mock_embeddings.return_value = {'embedding': [0.1, 0.2]}
+        mock_embeddings.return_value = {"embedding": [0.1, 0.2]}
         service = EmbeddingService()
         result = service.embed_text("test")
         assert result == [0.1, 0.2]

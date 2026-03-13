@@ -1,6 +1,5 @@
 """Tests for dry-run verification with retry feedback."""
 
-
 from src.execution.dry_run import DryRunVerifier
 from src.execution.verification_sdk import VerifyResult
 
@@ -8,16 +7,13 @@ from src.execution.verification_sdk import VerifyResult
 # Helpers — simple callables that return VerifyResult
 # ---------------------------------------------------------------------------
 
+
 def _pass_check(target: str = "test-target") -> VerifyResult:
-    return VerifyResult(
-        passed=True, checker="test", target=target, message="ok"
-    )
+    return VerifyResult(passed=True, checker="test", target=target, message="ok")
 
 
 def _fail_check(target: str = "test-target") -> VerifyResult:
-    return VerifyResult(
-        passed=False, checker="test", target=target, message="not ok"
-    )
+    return VerifyResult(passed=False, checker="test", target=target, message="not ok")
 
 
 def _raise_check() -> VerifyResult:
@@ -25,27 +21,27 @@ def _raise_check() -> VerifyResult:
 
 
 def _file_exists_pass(path: str) -> VerifyResult:
-    return VerifyResult(
-        passed=True, checker="file", target=path, message="file exists"
-    )
+    return VerifyResult(passed=True, checker="file", target=path, message="file exists")
 
 
 def _file_exists_fail(path: str) -> VerifyResult:
-    return VerifyResult(
-        passed=False, checker="file", target=path, message="path does not exist"
-    )
+    return VerifyResult(passed=False, checker="file", target=path, message="path does not exist")
 
 
 def _port_check_pass(host: str, port: int) -> VerifyResult:
     return VerifyResult(
-        passed=True, checker="port", target=f"{host}:{port}",
+        passed=True,
+        checker="port",
+        target=f"{host}:{port}",
         message="port is listening",
     )
 
 
 def _port_check_fail(host: str, port: int) -> VerifyResult:
     return VerifyResult(
-        passed=False, checker="port", target=f"{host}:{port}",
+        passed=False,
+        checker="port",
+        target=f"{host}:{port}",
         message="connection refused",
     )
 
@@ -53,6 +49,7 @@ def _port_check_fail(host: str, port: int) -> VerifyResult:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestDryRunVerifier:
     """Core verifier behaviour."""
@@ -271,9 +268,11 @@ class TestDryRunVerifier:
     def test_feedback_all_pass_returns_all_passed_message(self):
         """_build_feedback with no failures returns 'All checks passed.'"""
         v = DryRunVerifier()
-        feedback = v._build_feedback([
-            VerifyResult(passed=True, checker="t", target="t", message="ok"),
-        ])
+        feedback = v._build_feedback(
+            [
+                VerifyResult(passed=True, checker="t", target="t", message="ok"),
+            ]
+        )
         assert feedback == "All checks passed."
 
     def test_exception_check_target_in_results(self):

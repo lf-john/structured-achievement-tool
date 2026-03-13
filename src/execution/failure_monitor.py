@@ -69,9 +69,7 @@ class FailureMonitor:
     ):
         self.output_dir = output_dir
         self.rate_limit_seconds = rate_limit_seconds
-        self.patterns = [
-            re.compile(p) for p in (patterns or DEFAULT_FAILURE_PATTERNS)
-        ]
+        self.patterns = [re.compile(p) for p in (patterns or DEFAULT_FAILURE_PATTERNS)]
         self._last_debug_story: dict[str, float] = {}  # task_name -> timestamp
 
     # ------------------------------------------------------------------
@@ -114,16 +112,12 @@ class FailureMonitor:
             return None
 
         if self.is_rate_limited(context.task_name):
-            logger.info(
-                "Rate limited: skipping debug story for %s", context.task_name
-            )
+            logger.info("Rate limited: skipping debug story for %s", context.task_name)
             return None
 
         os.makedirs(self.output_dir, exist_ok=True)
 
-        timestamp_str = time.strftime(
-            "%Y%m%d_%H%M%S", time.localtime(context.timestamp)
-        )
+        timestamp_str = time.strftime("%Y%m%d_%H%M%S", time.localtime(context.timestamp))
         filename = f"debug_{context.task_name}_{timestamp_str}.md"
         filepath = os.path.join(self.output_dir, filename)
 
@@ -147,9 +141,7 @@ class FailureMonitor:
         stderr_truncated = _truncate(ctx.stderr, MAX_STDERR_LINES)
         stdout_truncated = _truncate(ctx.stdout, MAX_STDOUT_LINES)
         env_context = self.capture_env_context()
-        ts_human = time.strftime(
-            "%Y-%m-%d %H:%M:%S", time.localtime(ctx.timestamp)
-        )
+        ts_human = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ctx.timestamp))
 
         sections = [
             f"# Debug: {ctx.task_name}",
@@ -199,9 +191,7 @@ class FailureMonitor:
     # Context capture helpers
     # ------------------------------------------------------------------
 
-    def capture_log_tail(
-        self, log_file: str | None = None, lines: int = DEFAULT_LOG_TAIL_LINES
-    ) -> str:
+    def capture_log_tail(self, log_file: str | None = None, lines: int = DEFAULT_LOG_TAIL_LINES) -> str:
         """Read the last *lines* lines from *log_file*.
 
         Returns the tail content, or an informative message on failure.
@@ -226,10 +216,7 @@ class FailureMonitor:
         try:
             total, used, free = shutil.disk_usage("/")
             gb = 1 << 30
-            parts.append(
-                f"Disk: {used / gb:.1f}G used / {total / gb:.1f}G total "
-                f"({free / gb:.1f}G free)"
-            )
+            parts.append(f"Disk: {used / gb:.1f}G used / {total / gb:.1f}G total ({free / gb:.1f}G free)")
         except Exception:
             parts.append("Disk: (unavailable)")
 
@@ -240,10 +227,7 @@ class FailureMonitor:
             mem_total = _parse_meminfo(meminfo, "MemTotal")
             mem_avail = _parse_meminfo(meminfo, "MemAvailable")
             if mem_total and mem_avail:
-                parts.append(
-                    f"Memory: {mem_avail // 1024}M available / "
-                    f"{mem_total // 1024}M total"
-                )
+                parts.append(f"Memory: {mem_avail // 1024}M available / {mem_total // 1024}M total")
         except Exception:
             parts.append("Memory: (unavailable)")
 
