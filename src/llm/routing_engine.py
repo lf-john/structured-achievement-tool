@@ -22,11 +22,11 @@ logger = logging.getLogger(__name__)
 
 # Error categories for circuit breaker classification
 class ErrorCategory:
-    RATE_LIMIT = "rate_limit"     # 429 — existing handling
-    TIMEOUT = "timeout"           # Process timeout
-    SERVER_ERROR = "server_error" # 500, 502, 503
-    AUTH_ERROR = "auth_error"     # 401, 403
-    CONNECTION = "connection"     # Connection refused, DNS failure
+    RATE_LIMIT = "rate_limit"  # 429 — existing handling
+    TIMEOUT = "timeout"  # Process timeout
+    SERVER_ERROR = "server_error"  # 500, 502, 503
+    AUTH_ERROR = "auth_error"  # 401, 403
+    CONNECTION = "connection"  # Connection refused, DNS failure
     UNKNOWN = "unknown"
 
 
@@ -44,7 +44,7 @@ AGENT_COMPLEXITY: dict[str, int] = {
     "assessor": 6,
     "analyzer": 6,
     "mediator": 6,
-    "coder": 6,          # Default; Decompose agent sets 5-8 per story
+    "coder": 6,  # Default; Decompose agent sets 5-8 per story
     "test_writer": 5,
     "synthesizer": 5,
     "reporter": 5,
@@ -54,12 +54,13 @@ AGENT_COMPLEXITY: dict[str, int] = {
     "executor": 4,
     "router": 4,
     "gatherer": 4,
+    "critic": 7,
     "content_planner": 7,
     "content_writer": 6,
     "content_reviewer": 6,
     "verifier_lint": 3,
     "classifier": 3,
-    "basic_info": 2,      # 1-3, Decompose decides
+    "basic_info": 2,  # 1-3, Decompose decides
 }
 
 # Claude model names for Rule 1 identification
@@ -68,9 +69,17 @@ CLAUDE_MODELS = {"opus", "sonnet", "haiku"}
 # Agents that require agentic providers (filesystem read/write capabilities).
 # Ollama models are text-only and cannot be used for these agents.
 AGENTIC_AGENTS = {
-    "design", "architect", "planner", "coder", "test_writer",
-    "executor", "reproducer", "verifier_arch", "verifier_security",
-    "verifier_lint", "mediator",
+    "design",
+    "architect",
+    "planner",
+    "coder",
+    "test_writer",
+    "executor",
+    "reproducer",
+    "verifier_arch",
+    "verifier_security",
+    "verifier_lint",
+    "mediator",
 }
 
 
@@ -94,9 +103,9 @@ class RoutingEngine:
 
     # Circuit breaker cooldowns by provider class and error category
     CIRCUIT_BREAKER_THRESHOLD = 3  # Failures before circuit opens
-    OLLAMA_CIRCUIT_COOLDOWN = 60   # 1 minute (Ollama restarts fast)
-    CLOUD_CIRCUIT_COOLDOWN = 300   # 5 minutes
-    AUTH_CIRCUIT_COOLDOWN = 1800   # 30 minutes (key probably revoked)
+    OLLAMA_CIRCUIT_COOLDOWN = 60  # 1 minute (Ollama restarts fast)
+    CLOUD_CIRCUIT_COOLDOWN = 300  # 5 minutes
+    AUTH_CIRCUIT_COOLDOWN = 1800  # 30 minutes (key probably revoked)
 
     def __init__(self, config_path: str | None = None):
         self.config = {}
@@ -163,15 +172,17 @@ class RoutingEngine:
 
         # Non-Gemini cascade check
         recent_count = sum(
-            1 for name, ts in self._rate_limited.items()
+            1
+            for name, ts in self._rate_limited.items()
             if now - ts < self.PAUSE_ALL_WINDOW and not self._is_gemini(name)
         )
         if recent_count >= self.PAUSE_ALL_THRESHOLD and not self.is_paused:
             self._paused_until = now + self.PAUSE_ALL_DURATION
             logger.warning(
-                "Rate limit cascade: %d non-Gemini providers hit 429 within %ds. "
-                "Pausing ALL LLM calls for %ds.",
-                recent_count, self.PAUSE_ALL_WINDOW, self.PAUSE_ALL_DURATION,
+                "Rate limit cascade: %d non-Gemini providers hit 429 within %ds. Pausing ALL LLM calls for %ds.",
+                recent_count,
+                self.PAUSE_ALL_WINDOW,
+                self.PAUSE_ALL_DURATION,
             )
 
     def _is_rate_limited(self, provider_name: str) -> bool:
@@ -213,7 +224,9 @@ class RoutingEngine:
         """Mark a provider's health probe as failed — re-enter cooldown."""
         self._probe_pending.discard(provider_name)
         self._rate_limited[provider_name] = time.monotonic()
-        logger.warning(f"Provider {provider_name} health probe failed, re-entering {self.RATE_LIMIT_COOLDOWN}s cooldown")
+        logger.warning(
+            f"Provider {provider_name} health probe failed, re-entering {self.RATE_LIMIT_COOLDOWN}s cooldown"
+        )
 
     # --- Generalized Circuit Breaker (Enhancement #1 + #8) ---
 
@@ -224,9 +237,15 @@ class RoutingEngine:
         enters "open circuit" state with a cooldown based on provider class
         and error category. For Ollama, attempts a restart before opening.
         """
-        state = self._circuit_state.setdefault(provider_name, {
-            "failures": 0, "opened_at": 0.0, "cooldown": 0.0, "last_error": "",
-        })
+        state = self._circuit_state.setdefault(
+            provider_name,
+            {
+                "failures": 0,
+                "opened_at": 0.0,
+                "cooldown": 0.0,
+                "last_error": "",
+            },
+        )
         state["failures"] += 1
         state["last_error"] = error_category
 
@@ -286,7 +305,9 @@ class RoutingEngine:
         try:
             result = subprocess.run(
                 ["systemctl", "--user", "restart", "ollama"],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             if result.returncode == 0:
                 logger.info("Ollama service restarted via circuit breaker")
@@ -359,8 +380,8 @@ class RoutingEngine:
         if self.is_paused:
             remaining = self._paused_until - time.monotonic()
             logger.warning(
-                "LLM calls paused (rate limit cascade). %.0fs remaining. "
-                "Returning fallback.", remaining,
+                "LLM calls paused (rate limit cascade). %.0fs remaining. Returning fallback.",
+                remaining,
             )
             default = self.config.get("default_primary", "sonnet")
             return get_provider(default)
@@ -431,11 +452,11 @@ class RoutingEngine:
             circuit_open = 2 if self.is_circuit_open(p.name) else 0
             rate_limited = 1 if self._is_rate_limited(p.name) else 0
             return (
-                circuit_open,                    # Circuit-broken last
-                rate_limited,                    # Non-rate-limited first
-                0 if p.local else 1,             # Local first
+                circuit_open,  # Circuit-broken last
+                rate_limited,  # Non-rate-limited first
+                0 if p.local else 1,  # Local first
                 cost_order.get(p.cost_tier, 5),  # Cheapest first
-                -power,                           # Highest power first (within same tier)
+                -power,  # Highest power first (within same tier)
             )
 
         eligible.sort(key=sort_key)

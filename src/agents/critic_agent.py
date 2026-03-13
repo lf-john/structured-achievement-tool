@@ -146,7 +146,11 @@ class CriticAgent(BaseAgent):
     def response_model(self) -> type[BaseModel]:
         return CriticResponse
 
-    def get_provider(self) -> ProviderConfig:
+    def get_provider(
+        self,
+        story_complexity: int | None = None,
+        is_code_task: bool = False,
+    ) -> ProviderConfig:
         """Get the routed provider for this critic mode, with escalation offset."""
         if self.escalation > 0:
             return self.routing_engine.select_with_escalation(
@@ -154,7 +158,7 @@ class CriticAgent(BaseAgent):
                 attempt_number=(self.escalation // 5) + 1,
                 failure_is_persistent=True,
             )
-        return self.routing_engine.select(self.agent_name)
+        return self.routing_engine.select(self.agent_name, story_complexity=story_complexity)
 
     async def evaluate(
         self,

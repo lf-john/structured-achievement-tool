@@ -300,6 +300,11 @@ async def _execute_story_inner(
     story_id = story.get("id", "unknown")
     story_title = story.get("title", "Untitled")
 
+    # Unique run ID to prevent LangGraph checkpoint collisions across task files.
+    # Without this, different tasks that decompose to the same story ID (e.g. US-001)
+    # would resume from a previous run's completed checkpoint instead of starting fresh.
+    run_id = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+
     from langgraph.checkpoint.sqlite import SqliteSaver
 
     db_path = os.path.join(working_directory, ".memory", "langgraph_checkpoints.db")
@@ -341,7 +346,7 @@ async def _execute_story_inner(
 
             config = {
                 "configurable": {
-                    "thread_id": f"{task_id}_{story_id}_attempt_{attempt}",
+                    "thread_id": f"{task_id}_{story_id}_{run_id}_attempt_{attempt}",
                     "task_id": task_id,
                 },
                 "metadata": {

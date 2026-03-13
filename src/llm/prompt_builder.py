@@ -34,6 +34,9 @@ PHASE_TEMPLATES: dict[str, str] = {
     "REPRODUCE": "reproduce.md",
     "FIX": "code.md",  # Same template as CODE
     "GATHER": "gather.md",
+    "GATHER_WEB": "gather.md",
+    "GATHER_CODE": "gather.md",
+    "GATHER_DOCS": "gather.md",
     "ANALYZE": "analyze.md",
     "SYNTHESIZE": "synthesize.md",
     "REVIEW": "review.md",
